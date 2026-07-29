@@ -1,7 +1,7 @@
 # Pingdou Image-to-3MF Design
 
 Date: 2026-07-30
-Status: Approved in conversation; awaiting review of this written specification
+Status: Approved
 
 ## Objective
 
