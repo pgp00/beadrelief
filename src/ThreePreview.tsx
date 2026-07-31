@@ -1,11 +1,7 @@
 import * as THREE from 'three';
-import { getColor } from './palette';
-import type { BeadProject } from './types';
+import type { PrintableModel, PrintablePart } from './print/model';
 
-const { useEffect, useMemo, useRef, useState } = React;
-const BEAD_RADIUS = 0.31;
-const BEAD_HEIGHT = BEAD_RADIUS * 2;
-const LAYER_LIFT = BEAD_HEIGHT;
+const { useEffect, useRef, useState } = React;
 const PREVIEW_BACKGROUND = 0x242422;
 
 type PreviewRefs = {
@@ -13,7 +9,7 @@ type PreviewRefs = {
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
   root: THREE.Group;
-  beads: THREE.Group;
+  content: THREE.Group;
   frame: number;
   dragging: boolean;
   lastX: number;
@@ -21,14 +17,14 @@ type PreviewRefs = {
 };
 
 type Props = {
-  project: BeadProject;
+  model: PrintableModel;
   title: string;
   emptyLabel: string;
   closeLabel: string;
   expandLabel: string;
 };
 
-export default function ThreePreview({ project, title, emptyLabel, closeLabel, expandLabel }: Props) {
+export default function ThreePreview({ model, title, emptyLabel, closeLabel, expandLabel }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const modalHostRef = useRef<HTMLDivElement | null>(null);
   const refs = useRef<PreviewRefs | null>(null);
@@ -41,13 +37,7 @@ export default function ThreePreview({ project, title, emptyLabel, closeLabel, e
     targetY: 0,
   });
   const [expanded, setExpanded] = useState(false);
-  const beadCount = useMemo(
-    () =>
-      (project.layers ?? [])
-        .filter((layer) => layer.visible)
-        .reduce((sum, layer) => sum + (layer.cells ?? []).filter(Boolean).length, 0),
-    [project.layers],
-  );
+  const beadCount = model.gridSize.width * model.gridSize.height;
 
   useEffect(() => {
     const host = expanded ? modalHostRef.current : hostRef.current;
@@ -73,15 +63,20 @@ export default function ThreePreview({ project, title, emptyLabel, closeLabel, e
     const root = new THREE.Group();
     scene.add(root);
 
-    const beads = new THREE.Group();
-    root.add(beads);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x3a3a38, 2.2));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.4);
+    keyLight.position.set(6, 10, 8);
+    scene.add(keyLight);
+
+    const content = new THREE.Group();
+    root.add(content);
 
     const preview: PreviewRefs = {
       scene,
       camera,
       renderer,
       root,
-      beads,
+      content,
       frame: 0,
       dragging: false,
       lastX: 0,
@@ -158,7 +153,7 @@ export default function ThreePreview({ project, title, emptyLabel, closeLabel, e
       renderer.domElement.removeEventListener('pointercancel', pointerUp);
       renderer.domElement.removeEventListener('wheel', wheel);
       container.removeChild(renderer.domElement);
-      disposeGroup(beads);
+      disposeGroup(content);
       renderer.dispose();
       refs.current = null;
     };
@@ -168,54 +163,17 @@ export default function ThreePreview({ project, title, emptyLabel, closeLabel, e
     const preview = refs.current;
     if (!preview) return;
 
-    disposeGroup(preview.beads);
-    preview.beads.clear();
+    disposeGroup(preview.content);
+    preview.content.clear();
+    preview.content.add(createPreviewGroup(model));
 
-    const spacing = 0.72;
-    const byColor = new Map<string, Array<[number, number, number]>>();
-    const visibleLayers = (project.layers ?? []).filter((layer) => layer.visible);
-    visibleLayers.forEach((layer, layerIndex) => {
-      (layer.cells ?? []).forEach((colorId, index) => {
-        if (!colorId) return;
-        const x = index % project.width;
-        const y = Math.floor(index / project.width);
-        const items = byColor.get(colorId) ?? [];
-        items.push([x, y, layerIndex]);
-        byColor.set(colorId, items);
-      });
-    });
-
-    const beadGeometry = createBeadGeometry(project.settings.beadDisplayMode === 'pixel' ? 'square' : 'round');
-    const matrix = new THREE.Matrix4();
-    byColor.forEach((items, colorId) => {
-      const color = getColor(colorId);
-      if (!color) return;
-      const material = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(color.hex),
-        side: THREE.DoubleSide,
-        toneMapped: false,
-      });
-      const mesh = new THREE.InstancedMesh(beadGeometry, material, items.length);
-      items.forEach(([x, y, layerIndex], itemIndex) => {
-        matrix.makeTranslation(
-          (x - (project.width - 1) / 2) * spacing,
-          layerIndex * LAYER_LIFT,
-          (y - (project.height - 1) / 2) * spacing,
-        );
-        mesh.setMatrixAt(itemIndex, matrix);
-      });
-      mesh.instanceMatrix.needsUpdate = true;
-      preview.beads.add(mesh);
-    });
-    if (byColor.size === 0) beadGeometry.dispose();
-
-    const span = Math.max(project.width, project.height, 8) * spacing;
+    const span = Math.max(model.sizeMm.x, model.sizeMm.y, 20);
     controlsRef.current.minDistance = Math.max(3.5, span * 0.35);
     controlsRef.current.maxDistance = Math.max(12, span * 3.8);
     controlsRef.current.distance = clamp(span * 1.25, controlsRef.current.minDistance, controlsRef.current.maxDistance);
-    controlsRef.current.targetY = Math.max(0, ((visibleLayers.length - 1) * LAYER_LIFT) / 2);
+    controlsRef.current.targetY = model.sizeMm.z / 2;
     updateCamera(preview, controlsRef.current);
-  }, [project, expanded]);
+  }, [model, expanded]);
 
   return (
     <>
@@ -285,27 +243,29 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function createBeadGeometry(shapeMode: 'round' | 'square') {
-  if (shapeMode === 'square') {
-    const geometry = new THREE.BoxGeometry(BEAD_RADIUS * 2, BEAD_HEIGHT, BEAD_RADIUS * 2);
-    geometry.translate(0, 0, 0);
-    return geometry;
-  }
-
-  const shape = new THREE.Shape();
-  shape.absarc(0, 0, BEAD_RADIUS, 0, Math.PI * 2, false);
-
-  const geometry = new THREE.ExtrudeGeometry(shape, {
-    depth: BEAD_HEIGHT,
-    bevelEnabled: true,
-    bevelSegments: 2,
-    bevelSize: 0.02,
-    bevelThickness: 0.02,
-    curveSegments: 24,
-  });
-  geometry.center();
-  geometry.rotateX(Math.PI / 2);
+export function toBufferGeometry(part: PrintablePart): THREE.BufferGeometry {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(part.vertices, 3));
+  geometry.setIndex(new THREE.BufferAttribute(part.triangles, 1));
+  geometry.computeVertexNormals();
   return geometry;
+}
+
+export function createPreviewGroup(model: PrintableModel): THREE.Group {
+  const group = new THREE.Group();
+  group.rotation.x = -Math.PI / 2;
+  group.position.set(-model.sizeMm.x / 2, 0, model.sizeMm.y / 2);
+  for (const part of model.parts) {
+    const color = model.materials.find((material) => material.id === part.materialId);
+    if (!color) continue;
+    const mesh = new THREE.Mesh(
+      toBufferGeometry(part),
+      new THREE.MeshStandardMaterial({ color: color.hex, roughness: 0.72, metalness: 0 }),
+    );
+    mesh.name = part.name;
+    group.add(mesh);
+  }
+  return group;
 }
 
 function disposeGroup(group: THREE.Group) {

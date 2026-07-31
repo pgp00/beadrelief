@@ -4,6 +4,7 @@ import { downloadPrintPdf, downloadPrintPng, downloadProjectJson, downloadUsageW
 import type { PrintExportOptions } from './exporters';
 import { imageFileToBeads } from './imageToBeads';
 import { amsColorToPaletteColor } from './print/colors';
+import { buildPrintableModel, composePrintableGrid } from './print/model';
 import { basicPalette, colorDistance, completePalette, getColor, nearestPaletteColor } from './palette';
 import { composeVisibleCells, createLayer, createProject, loadDraft, normalizeProject, saveDraft, withCells, withLayers } from './project';
 import { findIsolatedBeads, summarizeUsage } from './usage';
@@ -1290,6 +1291,10 @@ export default function App() {
       cells: composeVisibleCells(displayLayers, project.width, project.height),
     };
   }, [activeLayer.id, layers, project]);
+  const printableModel = useMemo(
+    () => buildPrintableModel(composePrintableGrid(displayProject)),
+    [displayProject],
+  );
   const shapeLabel = {
     line: text.shapeLine,
     rectangle: text.shapeRectangle,
@@ -1531,7 +1536,7 @@ export default function App() {
             <small>{totalBeads} {language === 'zh' ? '颗' : 'beads'}</small>
           </div>
           <ThreePreview
-            project={displayProject}
+            model={printableModel}
             title={text.preview3d}
             emptyLabel={text.previewEmpty}
             closeLabel={text.close}
