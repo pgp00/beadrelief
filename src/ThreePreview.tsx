@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { PrintableModel, PrintablePart } from './print/model';
+import type { PrintableModel } from './print/model';
 
 const { useEffect, useRef, useState } = React;
 const PREVIEW_BACKGROUND = 0x242422;
@@ -243,7 +243,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-export function toBufferGeometry(part: PrintablePart): THREE.BufferGeometry {
+export function toBufferGeometry(part: { vertices: Float32Array; triangles: Uint32Array }): THREE.BufferGeometry {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(part.vertices, 3));
   geometry.setIndex(new THREE.BufferAttribute(part.triangles, 1));
@@ -263,6 +263,16 @@ export function createPreviewGroup(model: PrintableModel): THREE.Group {
       new THREE.MeshStandardMaterial({ color: color.hex, roughness: 0.72, metalness: 0 }),
     );
     mesh.name = part.name;
+    group.add(mesh);
+  }
+  for (const part of model.previewParts ?? []) {
+    const mesh = new THREE.Mesh(
+      toBufferGeometry(part),
+      new THREE.MeshStandardMaterial({ color: part.color, roughness: 0.72, metalness: 0 }),
+    );
+    mesh.name = part.name;
+    mesh.userData.previewOverlay = true;
+    mesh.renderOrder = 1;
     group.add(mesh);
   }
   return group;

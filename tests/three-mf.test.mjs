@@ -70,3 +70,18 @@ test("3MF contains one assembly, named parts, and four or fewer base materials",
   assert.equal(new TextDecoder().decode(archive.slice(0, 4)), "PK\u0003\u0004");
   assert.equal(new TextDecoder().decode(archive.slice(-22, -18)), "PK\u0005\u0006");
 });
+
+test("layered 3MF exports only physical material bands", async () => {
+  const { withStackTemplate } = await import("../generated/dist/src/project.js");
+  const { buildStackPalette } = await import("../generated/dist/src/print/stacking.js");
+  const project = withStackTemplate(createProject(4, 1), "rybw");
+  const palette = buildStackPalette(project.amsColors);
+  project.layers[0].cells = [palette[0].id, palette[4].id, palette[8].id, palette[12].id];
+  const model = buildPrintableModel(composePrintableGrid(project));
+  const xml = new TextDecoder().decode(readStoredEntries(createThreeMf(model)).get("3D/3dmodel.model"));
+  assert.equal((xml.match(/<base /g) ?? []).length, 4);
+  assert.equal((xml.match(/<component objectid=/g) ?? []).length, 4);
+  assert.doesNotMatch(xml, /Estimated_/);
+  assert.match(xml, /Base_and_Beads_Bambu_PLA_Basic_Blue/);
+  assert.match(xml, /Stack_Bambu_PLA_Basic_White/);
+});

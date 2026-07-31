@@ -27,3 +27,19 @@ test("3D preview meshes reuse the exact printable vertices, indices, and colors"
     assert.equal(mesh.material.color.getHexString(), material.hex.slice(1));
   });
 });
+
+test("layered preview adds estimated top colors without replacing print bands", async () => {
+  const { withStackTemplate } = await import("../generated/dist/src/project.js");
+  const { buildStackPalette } = await import("../generated/dist/src/print/stacking.js");
+  const project = withStackTemplate(createProject(2, 1), "rybw");
+  const palette = buildStackPalette(project.amsColors);
+  project.layers[0].cells = [palette[0].id, palette[12].id];
+  const model = buildPrintableModel(composePrintableGrid(project));
+  const group = createPreviewGroup(model);
+  assert.equal(group.children.length, model.parts.length + model.previewParts.length);
+  assert.equal(group.children.filter((mesh) => mesh.userData.previewOverlay).length, 2);
+  assert.deepEqual(
+    group.children.filter((mesh) => mesh.userData.previewOverlay).map((mesh) => `#${mesh.material.color.getHexString()}`),
+    model.previewParts.map((part) => part.color),
+  );
+});
