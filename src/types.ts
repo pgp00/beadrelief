@@ -59,10 +59,13 @@ export type BoardSettings = {
   showBoardIds: boolean;
 };
 
+export type PrintMode = 'solid' | 'layered';
+
 export type AmsColor = {
   id: string;
   name: string;
   hex: string;
+  tdMm: number;
 };
 
 export type PrintSettings = {
@@ -72,6 +75,7 @@ export type PrintSettings = {
   dimpleDiameterMm: number;
   dimpleDepthMm: number;
   baseColorId: string;
+  mode: PrintMode;
 };
 
 export type BeadProject = {

@@ -171,6 +171,7 @@ function normalizeAmsColors(colors: AmsColor[] | undefined): AmsColor[] {
       id: makeAmsColorId(index + 1, hex),
       name: color?.name?.trim() || fallback.name,
       hex,
+      tdMm: color?.tdMm ?? fallback.tdMm,
     };
   });
 }

@@ -1,5 +1,6 @@
 import type { BrandId, PaletteColor } from './types';
 import { oklabDistance, paletteColorFromAmsId } from './print/colors';
+import { paletteColorFromStackId } from './print/stacking';
 
 const rawColorsCsv = `
 A1,#FAF4C8
@@ -349,7 +350,7 @@ export function hexToRgb(hex: string): [number, number, number] {
 
 export function getColor(id: string | null): PaletteColor | undefined {
   if (!id) return undefined;
-  return paletteColorFromAmsId(id) ?? completePalette.find((color) => color.id === id);
+  return paletteColorFromAmsId(id) ?? paletteColorFromStackId(id) ?? completePalette.find((color) => color.id === id);
 }
 
 export function nearestPaletteColor(

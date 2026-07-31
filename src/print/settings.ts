@@ -7,4 +7,5 @@ export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
   dimpleDiameterMm: 1.2,
   dimpleDepthMm: 0.2,
   baseColorId: 'ams-1-1c1c1c',
+  mode: 'solid',
 };

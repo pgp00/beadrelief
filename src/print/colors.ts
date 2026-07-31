@@ -1,10 +1,10 @@
 import type { AmsColor, BeadProject, PaletteColor } from '../types';
 
 export const DEFAULT_AMS_COLORS: AmsColor[] = [
-  { id: 'ams-1-1c1c1c', name: 'Black', hex: '#1c1c1c' },
-  { id: 'ams-2-f4f1e8', name: 'White', hex: '#f4f1e8' },
-  { id: 'ams-3-ed2b2b', name: 'Red', hex: '#ed2b2b' },
-  { id: 'ams-4-2864dc', name: 'Blue', hex: '#2864dc' },
+  { id: 'ams-1-1c1c1c', name: 'Black', hex: '#1c1c1c', tdMm: 1 },
+  { id: 'ams-2-f4f1e8', name: 'White', hex: '#f4f1e8', tdMm: 1 },
+  { id: 'ams-3-ed2b2b', name: 'Red', hex: '#ed2b2b', tdMm: 1 },
+  { id: 'ams-4-2864dc', name: 'Blue', hex: '#2864dc', tdMm: 1 },
 ];
 
 export function normalizeHex(hex: string): string {
@@ -36,7 +36,7 @@ export function amsColorToPaletteColor(color: AmsColor): PaletteColor {
 
 export function paletteColorFromAmsId(id: string): PaletteColor | null {
   const match = /^ams-([1-4])-([0-9a-f]{6})$/.exec(id);
-  return match ? amsColorToPaletteColor({ id, name: `AMS ${match[1]}`, hex: `#${match[2]}` }) : null;
+  return match ? amsColorToPaletteColor({ id, name: `AMS ${match[1]}`, hex: `#${match[2]}`, tdMm: 1 }) : null;
 }
 
 function srgbToLinear(value: number): number {

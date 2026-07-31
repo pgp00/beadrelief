@@ -41,6 +41,14 @@ test("legacy projects receive safe AMS and print defaults", () => {
   const normalized = normalizeProject(legacy);
   assert.equal(normalized.amsColors.length, 4);
   assert.equal(normalized.printSettings.baseColorId, normalized.amsColors[0].id);
+  assert.equal(normalized.printSettings.mode, "solid");
+  assert.ok(normalized.amsColors.every((color) => color.tdMm === 1));
+});
+
+test("legacy AMS colors receive the default transmission distance", () => {
+  const legacy = createProject(1, 1);
+  legacy.amsColors = legacy.amsColors.map(({ tdMm, ...color }) => color);
+  assert.ok(normalizeProject(legacy).amsColors.every((color) => color.tdMm === 1));
 });
 
 test("project imports reject unsafe allocation shapes", () => {
