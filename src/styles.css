@@ -975,6 +975,112 @@ button:focus-visible {
   align-content: start;
 }
 
+.print-settings-card {
+  flex: 0 0 auto;
+  gap: 10px;
+}
+
+.ams-color-list {
+  display: grid;
+  gap: 6px;
+}
+
+.ams-color-row {
+  display: grid;
+  grid-template-columns: 54px 38px minmax(0, 1fr);
+  gap: 7px;
+  align-items: center;
+}
+
+.ams-color-row input[type="color"] {
+  width: 38px;
+  height: 34px;
+  padding: 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.ams-color-row input[type="text"],
+.print-number-grid input,
+.print-base-color select {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 5px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.ams-slot {
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+  font-weight: var(--weight-semibold);
+}
+
+.ams-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.ams-actions button {
+  min-width: 0;
+  padding-inline: 8px;
+  font-size: var(--font-size-small);
+}
+
+.print-number-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.print-number-grid label,
+.print-base-color {
+  display: grid;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: var(--font-size-caption);
+}
+
+.print-base-color {
+  grid-column: 1 / -1;
+}
+
+.print-size-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-muted);
+  font-size: var(--font-size-small);
+}
+
+.print-size-line span {
+  color: var(--text-muted);
+}
+
+.print-errors {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 8px 8px 8px 24px;
+  border: 1px solid #e6b7b2;
+  border-radius: 7px;
+  background: #fff0ee;
+  color: #8d2d26;
+  font-size: var(--font-size-small);
+}
+
+.print-export-button {
+  width: 100%;
+}
+
 .reference-card {
   flex: 0 0 auto;
   gap: 10px;
@@ -2347,6 +2453,14 @@ button:focus-visible {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.36), rgba(255, 255, 255, 0)),
     var(--panel);
+}
+
+.right-preview-card {
+  flex: 0 0 auto;
+}
+
+.right-preview-card .three-preview {
+  min-height: 210px;
 }
 
 .right-panel {

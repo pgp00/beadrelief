@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createProject, normalizeProject } from "../generated/dist/src/project.js";
+import { createProject, normalizeProject, withCells } from "../generated/dist/src/project.js";
 import { planImageConversion } from "../generated/dist/src/imageToBeads.js";
 import {
   DEFAULT_AMS_COLORS,
@@ -8,6 +8,7 @@ import {
   makeAmsColorId,
   nearestPaletteColorOklab,
   paletteColorFromAmsId,
+  replaceProjectColor,
 } from "../generated/dist/src/print/colors.js";
 
 test("AMS ids embed their slot and current color", () => {
@@ -57,4 +58,13 @@ test("image conversion caps source pixels and treats the requested size as the l
   });
   assert.throws(() => planImageConversion("image/gif", 10, 10, 8, 1, 1), /JPG, PNG, or WebP/);
   assert.throws(() => planImageConversion("image/webp", 10, 10, 8, 0, 1), /one and four/);
+});
+
+test("changing an AMS slot updates cells and the base reference", () => {
+  const project = withCells(createProject(2, 1), ["ams-1-1c1c1c", "ams-2-f4f1e8"]);
+  const updated = replaceProjectColor(project, "ams-1-1c1c1c", "ams-1-333333");
+  assert.deepEqual(updated.layers[0].cells, ["ams-1-333333", "ams-2-f4f1e8"]);
+  assert.deepEqual(updated.cells, ["ams-1-333333", "ams-2-f4f1e8"]);
+  assert.equal(updated.printSettings.baseColorId, "ams-1-333333");
+  assert.equal(project.layers[0].cells[0], "ams-1-1c1c1c");
 });

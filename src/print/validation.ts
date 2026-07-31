@@ -20,6 +20,7 @@ export function validatePrintableModel(model: PrintableModel): string[] {
   const errors: string[] = [];
   if (model.gridSize.width <= 0 || model.gridSize.height <= 0) errors.push('The printable grid is empty.');
   if (model.materials.length < 1 || model.materials.length > 4) errors.push('Use between one and four materials.');
+  if (model.materials.some((material) => !material.name.trim())) errors.push('Every material needs a name.');
   if (model.parts.length < 2) errors.push('The model needs a base and at least one bead part.');
   for (const [axis, value] of Object.entries(model.sizeMm)) {
     if (!Number.isFinite(value) || value <= 0) errors.push(`Model ${axis.toUpperCase()} must be positive.`);
@@ -34,11 +35,11 @@ export function validatePrintableModel(model: PrintableModel): string[] {
   ] as const) {
     if (!Number.isFinite(value) || value <= 0) errors.push(`${name} must be positive.`);
   }
-  if (!Number.isFinite(settings.dimpleDepthMm) || settings.dimpleDepthMm < 0 || settings.dimpleDepthMm > settings.beadHeightMm) {
-    errors.push('Dimple depth must be between zero and bead height.');
+  if (!Number.isFinite(settings.dimpleDepthMm) || settings.dimpleDepthMm < 0 || settings.dimpleDepthMm >= settings.beadHeightMm) {
+    errors.push('Dimple depth must be zero or less than bead height.');
   }
-  if (!Number.isFinite(settings.dimpleDiameterMm) || settings.dimpleDiameterMm < 0 || settings.dimpleDiameterMm > settings.cellPitchMm) {
-    errors.push('Dimple diameter must be between zero and cell pitch.');
+  if (!Number.isFinite(settings.dimpleDiameterMm) || settings.dimpleDiameterMm < 0 || settings.dimpleDiameterMm >= settings.cellPitchMm) {
+    errors.push('Dimple diameter must be zero or less than cell pitch.');
   }
 
   const materialIds = new Set(model.materials.map((material) => material.id));

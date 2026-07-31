@@ -45,14 +45,19 @@ export function appendFusedBead(
   const dimpleRadius = settings.dimpleDiameterMm / 2;
   const baseZ = settings.baseThicknessMm;
   const topZ = baseZ + settings.beadHeightMm;
+  const hasDimple = dimpleRadius > 0 && settings.dimpleDepthMm > 0;
   const ringSpecs: Array<[number, number]> = [
     [lowerRadius, baseZ],
     [topRadius, Math.min(topZ, baseZ + 0.2)],
     [topRadius, Math.max(baseZ, topZ - 0.1)],
     [bevelRadius, topZ],
-    [dimpleRadius, topZ],
-    [dimpleRadius, topZ - settings.dimpleDepthMm],
   ];
+  if (hasDimple) {
+    ringSpecs.push(
+      [dimpleRadius, topZ],
+      [dimpleRadius, topZ - settings.dimpleDepthMm],
+    );
+  }
   const rings = ringSpecs.map(([radius, z]) =>
     Array.from({ length: segments }, (_, index) => {
       const angle = (index / segments) * Math.PI * 2;
@@ -67,11 +72,13 @@ export function appendFusedBead(
     }
   }
 
-  const floorCenter = addVertex(target, centerX, centerY, topZ - settings.dimpleDepthMm);
+  const topCenterZ = hasDimple ? topZ - settings.dimpleDepthMm : topZ;
+  const floorCenter = addVertex(target, centerX, centerY, topCenterZ);
   const bottomCenter = addVertex(target, centerX, centerY, baseZ);
+  const topRing = rings[rings.length - 1];
   for (let index = 0; index < segments; index += 1) {
     const next = (index + 1) % segments;
-    target.triangles.push(floorCenter, rings[5][index], rings[5][next]);
+    target.triangles.push(floorCenter, topRing[index], topRing[next]);
     target.triangles.push(bottomCenter, rings[0][next], rings[0][index]);
   }
 }

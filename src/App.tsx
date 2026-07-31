@@ -1,11 +1,14 @@
 ﻿import WorkspaceCanvas from './WorkspaceCanvas';
 import ThreePreview from './ThreePreview';
+import PrintSettingsPanel from './PrintSettingsPanel';
 import { downloadPrintPdf, downloadPrintPng, downloadProjectJson, downloadUsageWorkbook } from './exporters';
 import type { PrintExportOptions } from './exporters';
 import { imageFileToBeads } from './imageToBeads';
 import { amsColorToPaletteColor } from './print/colors';
 import { buildPrintableModel, composePrintableGrid } from './print/model';
-import { basicPalette, colorDistance, completePalette, getColor, nearestPaletteColor } from './palette';
+import { downloadThreeMf } from './print/threeMf';
+import { validatePrintableModel } from './print/validation';
+import { colorDistance, getColor, nearestPaletteColor } from './palette';
 import { composeVisibleCells, createLayer, createProject, loadDraft, normalizeProject, saveDraft, withCells, withLayers } from './project';
 import { findIsolatedBeads, summarizeUsage } from './usage';
 import type { ArrowKind, BackgroundMode, BeadProject, ClipboardPattern, CopyMode, GenerationStyle, MirrorDirection, MoveMode, RemoveMode, RightClickAction, ShapeFillMode, ShapeKind, TextDirection, ToolId } from './types';
@@ -474,7 +477,6 @@ const sizePresets = [
 
 const defaultImportSettings = {
   width: 32,
-  maxColors: 4,
   generationStyle: 'cartoon' as GenerationStyle,
   backgroundMode: 'keep' as BackgroundMode,
   tolerance: 32,
@@ -493,7 +495,6 @@ const defaultAdjustments: AdjustmentSettings = {
 
 type HoverCell = { x: number; y: number; colorId: string | null };
 type DragTarget = { id: string; edge: 'before' | 'after' };
-type PaletteMode = 'basic' | 'complete';
 type FloatingHelp = { text: string; left: number; top: number };
 type ReferencePlacement = 'below' | 'above';
 type LayerEffect = 'invert' | 'grayscale' | 'blackWhite';
@@ -565,7 +566,6 @@ export default function App() {
   const [canvasWidth, setCanvasWidth] = useState(project.width);
   const [canvasHeight, setCanvasHeight] = useState(project.height);
   const [convertWidth, setConvertWidth] = useState(defaultImportSettings.width);
-  const [maxColors, setMaxColors] = useState(defaultImportSettings.maxColors);
   const [generationStyle, setGenerationStyle] = useState<GenerationStyle>(defaultImportSettings.generationStyle);
   const [backgroundMode, setBackgroundMode] = useState<BackgroundMode>(defaultImportSettings.backgroundMode);
   const [tolerance, setTolerance] = useState(defaultImportSettings.tolerance);
@@ -580,7 +580,6 @@ export default function App() {
   const [editingLayerName, setEditingLayerName] = useState('');
   const [draggingLayerId, setDraggingLayerId] = useState<string | null>(null);
   const [dragTarget, setDragTarget] = useState<DragTarget | null>(null);
-  const [paletteMode, setPaletteMode] = useState<PaletteMode>('basic');
   const [paletteGroup, setPaletteGroup] = useState('all');
   const [adjustments, setAdjustments] = useState<AdjustmentSettings>(defaultAdjustments);
   const [colorCleanupStrength, setColorCleanupStrength] = useState(2);
@@ -600,7 +599,7 @@ export default function App() {
     [isolatedBeadRefs, showIsolatedBeads],
   );
   const selectedColor = getColor(selectedColorId);
-  const activePalette = project.amsColors.map(amsColorToPaletteColor);
+  const activePalette = useMemo(() => project.amsColors.map(amsColorToPaletteColor), [project.amsColors]);
   const recentColors = recentColorIds.flatMap((id) => {
     const color = activePalette.find((item) => item.id === id);
     return color ? [color] : [];
@@ -755,7 +754,7 @@ export default function App() {
       void generateFromImage({ recordHistory: shouldCommit, automatic: true });
     }, 420);
     return () => window.clearTimeout(timer);
-  }, [pendingFile, convertWidth, maxColors, generationStyle, backgroundMode, tolerance, paletteMode]);
+  }, [pendingFile, convertWidth, generationStyle, backgroundMode, tolerance, project.amsColors]);
 
   function commitHistory() {
     setPast((items) => [...items.slice(-39), project]);
@@ -792,7 +791,6 @@ export default function App() {
 
   function resetImportSettings() {
     setConvertWidth(defaultImportSettings.width);
-    setMaxColors(defaultImportSettings.maxColors);
     setGenerationStyle(defaultImportSettings.generationStyle);
     setBackgroundMode(defaultImportSettings.backgroundMode);
     setTolerance(defaultImportSettings.tolerance);
@@ -1018,7 +1016,7 @@ export default function App() {
     try {
       const result = await imageFileToBeads(pendingFile, {
         width: convertWidth,
-        maxColors,
+        maxColors: project.amsColors.length,
         palette: activePalette,
         generationStyle,
         backgroundMode,
@@ -1028,8 +1026,8 @@ export default function App() {
       });
       if (requestId !== generationRequestRef.current) return;
       if (options.recordHistory) commitHistory();
-      const nextWidth = Math.max(sourceProject.width, result.width);
-      const nextHeight = Math.max(sourceProject.height, result.height);
+      const nextWidth = result.width;
+      const nextHeight = result.height;
       const nextLayers = sourceLayers.map((layer) => {
         if (layer.id === targetLayerId) {
           return {
@@ -1295,6 +1293,21 @@ export default function App() {
     () => buildPrintableModel(composePrintableGrid(displayProject)),
     [displayProject],
   );
+  const printErrors = useMemo(() => validatePrintableModel(printableModel), [printableModel]);
+
+  function exportThreeMf() {
+    try {
+      const stem = project.name
+        .trim()
+        .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, '-')
+        .replace(/\s+/g, '-')
+        .slice(0, 80) || 'pingdou';
+      downloadThreeMf(printableModel, `${stem}.3mf`);
+      setNotice(language === 'zh' ? '3MF 已导出，可在 Bambu Studio 中分配 AMS 槽位。' : '3MF exported. Assign AMS slots in Bambu Studio.');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : String(error));
+    }
+  }
   const shapeLabel = {
     line: text.shapeLine,
     rectangle: text.shapeRectangle,
@@ -1527,23 +1540,6 @@ export default function App() {
       </header>
 
       <aside className="left-panel">
-        <section className="left-card preview-card">
-          <div className="left-card-header">
-            <div>
-              <strong>{text.preview3d}</strong>
-              <span>{text.liveBoard}</span>
-            </div>
-            <small>{totalBeads} {language === 'zh' ? '颗' : 'beads'}</small>
-          </div>
-          <ThreePreview
-            model={printableModel}
-            title={text.preview3d}
-            emptyLabel={text.previewEmpty}
-            closeLabel={text.close}
-            expandLabel={text.expandPreview}
-          />
-        </section>
-
         <section className="left-card image-card">
           <div className="left-card-header">
             <div>
@@ -1570,16 +1566,6 @@ export default function App() {
                 <span className="help-dot image-help-dot" {...imageHelpProps(text.heightFromRatio)}>?</span>
               </span>
               <input aria-label="Output width" type="number" min={8} max={50} value={convertWidth} onChange={(event) => setConvertWidth(Number(event.target.value))} />
-            </label>
-            <label className="image-range-field">
-              <span>
-                <span className="field-label-with-help">
-                  {text.colors}
-                  <span className="help-dot image-help-dot" {...imageHelpProps(text.colorsHint)}>?</span>
-                </span>
-                <strong>{maxColors}</strong>
-              </span>
-              <input aria-label="Color limit" type="range" min={1} max={4} step={1} value={maxColors} onChange={(event) => setMaxColors(Number(event.target.value))} />
             </label>
             <label className="image-range-field">
               <span>
@@ -1613,6 +1599,15 @@ export default function App() {
             </select>
           </label>
         </section>
+
+        <PrintSettingsPanel
+          project={project}
+          model={printableModel}
+          errors={printErrors}
+          language={language}
+          onChange={updateProject}
+          onExport={exportThreeMf}
+        />
 
         <section className="left-card reference-card">
           <div className="left-card-header">
@@ -2200,6 +2195,23 @@ export default function App() {
           <span className="status-pill">{text.tools[tool].title}</span>
         </section>
 
+        <section className="left-card preview-card right-preview-card">
+          <div className="left-card-header">
+            <div>
+              <strong>{text.preview3d}</strong>
+              <span>{text.liveBoard}</span>
+            </div>
+            <small>{printableModel.gridSize.width * printableModel.gridSize.height} {language === 'zh' ? '格' : 'cells'}</small>
+          </div>
+          <ThreePreview
+            model={printableModel}
+            title={text.preview3d}
+            emptyLabel={text.previewEmpty}
+            closeLabel={text.close}
+            expandLabel={text.expandPreview}
+          />
+        </section>
+
         {rightTab === 'palette' && (
           <section className="panel-section panel-tab-body palette-section">
             <h2>{text.palette}</h2>
@@ -2230,13 +2242,6 @@ export default function App() {
                   </button>
                 ))}
               </div>
-            </div>
-            <div className="readonly-brand-field">
-              {text.brandCodes}
-              <select value={paletteMode} onChange={(event) => setPaletteMode(event.target.value as PaletteMode)}>
-                <option value="basic">{text.mardBasic}</option>
-                <option value="complete">{text.mardComplete}</option>
-              </select>
             </div>
             <div className="palette-filter" aria-label="Palette groups">
               {paletteGroups.map((group) => (

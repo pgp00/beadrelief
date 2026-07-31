@@ -5,7 +5,7 @@ import type { AmsColor, BeadLayer, BeadProject } from './types';
 
 export const autosaveKey = 'perler-beads-generator:draft';
 
-export function createProject(width = 52, height = 52, name = 'Untitled Pattern'): BeadProject {
+export function createProject(width = 32, height = 32, name = 'Untitled Pattern'): BeadProject {
   const now = new Date().toISOString();
   const cells = emptyCells(width, height);
   return {

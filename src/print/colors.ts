@@ -1,4 +1,4 @@
-import type { AmsColor, PaletteColor } from '../types';
+import type { AmsColor, BeadProject, PaletteColor } from '../types';
 
 export const DEFAULT_AMS_COLORS: AmsColor[] = [
   { id: 'ams-1-1c1c1c', name: 'Black', hex: '#1c1c1c' },
@@ -73,4 +73,19 @@ export function nearestPaletteColorOklab(hex: string, palette: PaletteColor[]): 
     },
     { color: palette[0], distance: Number.POSITIVE_INFINITY },
   ).color;
+}
+
+export function replaceProjectColor(project: BeadProject, from: string, to: string): BeadProject {
+  return {
+    ...project,
+    cells: project.cells.map((cell) => (cell === from ? to : cell)),
+    layers: project.layers.map((layer) => ({
+      ...layer,
+      cells: layer.cells.map((cell) => (cell === from ? to : cell)),
+    })),
+    printSettings: {
+      ...project.printSettings,
+      baseColorId: project.printSettings.baseColorId === from ? to : project.printSettings.baseColorId,
+    },
+  };
 }

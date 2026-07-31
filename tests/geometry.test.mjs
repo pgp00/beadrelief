@@ -17,3 +17,37 @@ test("the base and every fused bead shell are closed triangle meshes", () => {
   assert.deepEqual(validatePrintableModel(model), []);
   assert.match(validatePrintableModel({ ...model, sizeMm: { ...model.sizeMm, x: 251 } }).join("\n"), /250/);
 });
+
+test("zero-size dimples produce a flat top without degenerate triangles", () => {
+  const project = createProject(1, 1);
+  project.printSettings.dimpleDiameterMm = 0;
+  project.printSettings.dimpleDepthMm = 0;
+  const model = buildPrintableModel(composePrintableGrid(project));
+  for (const part of model.parts) {
+    assert.deepEqual(closedEdgeErrors(part), []);
+    for (let index = 0; index < part.triangles.length; index += 3) {
+      const points = [...part.triangles.slice(index, index + 3)].map((vertex) =>
+        part.vertices.slice(vertex * 3, vertex * 3 + 3),
+      );
+      const ab = points[1].map((value, axis) => value - points[0][axis]);
+      const ac = points[2].map((value, axis) => value - points[0][axis]);
+      const cross = [
+        ab[1] * ac[2] - ab[2] * ac[1],
+        ab[2] * ac[0] - ab[0] * ac[2],
+        ab[0] * ac[1] - ab[1] * ac[0],
+      ];
+      assert.ok(cross.some((value) => Math.abs(value) > 1e-8));
+    }
+  }
+});
+
+test("a dimple cannot consume the full bead height", () => {
+  const project = createProject(1, 1);
+  project.printSettings.dimpleDepthMm = project.printSettings.beadHeightMm;
+  const errors = validatePrintableModel(buildPrintableModel(composePrintableGrid(project)));
+  assert.match(errors.join("\n"), /less than bead height/);
+  project.printSettings.dimpleDepthMm = 0.2;
+  project.printSettings.dimpleDiameterMm = project.printSettings.cellPitchMm;
+  const diameterErrors = validatePrintableModel(buildPrintableModel(composePrintableGrid(project)));
+  assert.match(diameterErrors.join("\n"), /less than cell pitch/);
+});
