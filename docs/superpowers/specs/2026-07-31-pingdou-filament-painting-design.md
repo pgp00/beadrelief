@@ -1,7 +1,7 @@
 # Pingdou Filament-Painting Mode Design
 
 Date: 2026-07-31
-Status: Draft for user review
+Status: Approved
 
 ## Objective
 
@@ -69,7 +69,7 @@ Layered mode supports two to four filaments. For each filament the user can edit
 - display color;
 - TD in millimetres.
 
-The first filament's TD is stored for reordering or later use but does not affect the current preview because the base stack is treated as opaque; the UI labels that field accordingly.
+The first filament's TD is stored with the same filament record shape but does not affect the current preview because the base stack is treated as opaque; the UI labels that field accordingly.
 
 The existing list order is the stack order: AMS 1 is the bottom and AMS 4 is the top. No drag-and-drop ordering UI is added; users edit the four rows or apply a template. Bambu Studio can map the exported materials to whichever physical AMS slots are loaded.
 
@@ -80,7 +80,7 @@ Two templates seed names, display colors, order, and explicitly approximate TD v
 
 Templates are starting points, not calibrated claims. A short warning says to print a TD test and replace the estimates when color accuracy matters.
 
-The stack layer height is fixed at 0.08 mm in the first version. Each filament gets four layers, so the first filament prints 0.32 mm of bead relief before later colors begin. With four colors, bead relief ranges from 0.32 to 1.28 mm. Keeping one layer height prevents material boundaries from falling between slicer layers and removes a setting that would otherwise make calibrated TD values incomparable.
+The stack layer height is fixed at 0.08 mm in the first version. Each filament gets four layers, so the first filament prints 0.32 mm of bead relief before later colors begin. With four colors, bead relief ranges from 0.32 to 1.28 mm. Layered-mode base thickness must also be a multiple of 0.08 mm; the default 1.20 mm is valid. Keeping every Z boundary on the same layer grid prevents material changes from falling between slicer layers and removes a setting that would otherwise make calibrated TD values incomparable.
 
 In layered mode the centre dimple depth equals one stack layer. This keeps the depression visible without cutting through a thin top-color section. Solid mode keeps the existing independent dimple-depth setting.
 
@@ -190,7 +190,7 @@ The usage instructions tell the user to:
 
 1. import the 3MF and select the P2S 0.4 mm profile;
 2. map each named part to its corresponding AMS filament;
-3. use the same layer height shown by Pingdou;
+3. use a 0.16 mm initial layer and 0.08 mm remaining layers;
 4. slice with 100% infill for predictable optical density;
 5. confirm that the preview changes material only at the global band boundaries;
 6. print a small sample before relying on calibrated color.
@@ -204,6 +204,7 @@ Layered export rejects:
 - fewer than two or more than four physical filaments;
 - invalid display colors;
 - non-finite or non-positive TD values;
+- a base thickness that is not an integer multiple of 0.08 mm;
 - malformed or out-of-range stack cell IDs;
 - any Z interval containing more than one physical material;
 - non-closed meshes, invalid triangle indices, or dimensions beyond existing P2S limits.
@@ -230,7 +231,7 @@ Official Bambu Studio acceptance uses the installed stable P2S profile:
 
 1. import the fixed layered sample without a repair warning;
 2. confirm one assembled object and no more than four assignable material parts;
-3. slice at the exported layer height and 100% infill;
+3. slice with a 0.16 mm initial layer, 0.08 mm remaining layers, and 100% infill;
 4. inspect layer coloring to prove at most three global filament changes and no same-layer mixing;
 5. confirm model bounds remain inside 250 × 250 mm and the slice has no empty-layer or out-of-bed error.
 
@@ -259,4 +260,4 @@ The feature is complete only when:
 - one grouped standard 3MF contains at most four physical material assignments;
 - official Bambu Studio slices the fixed sample for P2S with at most three global filament changes and no same-layer mixing;
 - all automated checks pass from a clean install/build;
-- README instructions explain TD calibration, AMS mapping, layer height, 100% infill, and the limits of predicted color.
+- README instructions explain TD calibration, AMS mapping, 0.16/0.08 mm layer heights, 100% infill, and the limits of predicted color.
