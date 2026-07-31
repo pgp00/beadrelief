@@ -102,6 +102,11 @@ export type UsageRow = {
   packs: number;
 };
 
+export type FilamentLayerUsageRow = {
+  color: PaletteColor;
+  layerCells: number;
+};
+
 export type BackgroundMode = 'keep' | 'remove-white';
 export type GenerationStyle = 'cartoon' | 'realistic';
 

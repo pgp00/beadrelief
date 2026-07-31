@@ -1,7 +1,8 @@
-import { paletteVersion } from './palette';
-import { DEFAULT_AMS_COLORS, makeAmsColorId, normalizeHex } from './print/colors';
+import { getColor, paletteVersion } from './palette';
+import { DEFAULT_AMS_COLORS, amsColorToPaletteColor, makeAmsColorId, nearestPaletteColorOklab, normalizeHex } from './print/colors';
 import { DEFAULT_PRINT_SETTINGS } from './print/settings';
-import type { AmsColor, BeadLayer, BeadProject } from './types';
+import { STACK_TEMPLATES, buildStackPalette, parseStackColorId, type StackTemplateId } from './print/stacking';
+import type { AmsColor, BeadLayer, BeadProject, PaletteColor, PrintMode } from './types';
 
 export const autosaveKey = 'perler-beads-generator:draft';
 export const MAX_PROJECT_DIMENSION = 50;
@@ -109,11 +110,61 @@ export function composeVisibleCells(layers: BeadLayer[], width: number, height: 
   return result;
 }
 
+export function withPrintMode(project: BeadProject, mode: PrintMode): BeadProject {
+  if (mode === 'layered' && project.amsColors.length < 2) throw new Error('Layered mode needs two to four filaments.');
+  const palette = mode === 'layered'
+    ? buildStackPalette(project.amsColors)
+    : project.amsColors.map(amsColorToPaletteColor);
+  return remapPrintCells(project, project.amsColors, mode, palette);
+}
+
+export function withLayeredMaterials(project: BeadProject, materials: AmsColor[]): BeadProject {
+  const nextMaterials = materials.map((material) => ({ ...material }));
+  return remapPrintCells(project, nextMaterials, 'layered', buildStackPalette(nextMaterials));
+}
+
+export function withStackTemplate(project: BeadProject, id: StackTemplateId): BeadProject {
+  return withLayeredMaterials(project, STACK_TEMPLATES[id].map((material) => ({ ...material })));
+}
+
+function remapPrintCells(
+  project: BeadProject,
+  materials: AmsColor[],
+  mode: PrintMode,
+  palette: PaletteColor[],
+): BeadProject {
+  const byLevel = new Map(palette.flatMap((color) => {
+    const parsed = parseStackColorId(color.id);
+    return parsed ? [[parsed.stopLevel, color.id] as const] : [];
+  }));
+  const remap = (id: string | null): string | null => {
+    if (!id) return null;
+    const parsed = parseStackColorId(id);
+    if (mode === 'layered' && parsed && byLevel.has(parsed.stopLevel)) return byLevel.get(parsed.stopLevel) ?? null;
+    const source = getColor(id);
+    return source ? nearestPaletteColorOklab(source.hex, palette).id : palette[0].id;
+  };
+  const layers = project.layers.map((layer) => ({ ...layer, cells: layer.cells.map(remap) }));
+  return {
+    ...project,
+    amsColors: materials,
+    printSettings: {
+      ...project.printSettings,
+      mode,
+      baseColorId: materials[0].id,
+    },
+    layers,
+    cells: composeVisibleCells(layers, project.width, project.height),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 export function normalizeProject(project: BeadProject): BeadProject {
   const width = isSafeDimension(project.width) ? project.width : 32;
   const height = isSafeDimension(project.height) ? project.height : 32;
   const fallback = createProject(width, height, project.name);
   const amsColors = normalizeAmsColors(project.amsColors);
+  const mode = project.printSettings?.mode === 'layered' && amsColors.length >= 2 ? 'layered' : 'solid';
   const requestedBase = project.printSettings?.baseColorId;
   const requestedSlot = Number(/^ams-([1-4])-/.exec(requestedBase ?? '')?.[1]);
   const baseColorId =
@@ -150,6 +201,7 @@ export function normalizeProject(project: BeadProject): BeadProject {
       ...DEFAULT_PRINT_SETTINGS,
       ...project.printSettings,
       baseColorId,
+      mode,
     },
     layers,
     activeLayerId: layers.some((layer) => layer.id === project.activeLayerId) ? project.activeLayerId : layers[0].id,
@@ -171,7 +223,7 @@ function normalizeAmsColors(colors: AmsColor[] | undefined): AmsColor[] {
       id: makeAmsColorId(index + 1, hex),
       name: color?.name?.trim() || fallback.name,
       hex,
-      tdMm: color?.tdMm ?? fallback.tdMm,
+      tdMm: Number.isFinite(color?.tdMm) && color.tdMm > 0 && color.tdMm <= 100 ? color.tdMm : fallback.tdMm,
     };
   });
 }
