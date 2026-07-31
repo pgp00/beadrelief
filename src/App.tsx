@@ -903,7 +903,7 @@ export default function App() {
     updateProject(next);
   }
 
-  function startBlank(width = 52, height = 52) {
+  function startBlank(width = 32, height = 32) {
     soloVisibilitySnapshotRef.current = null;
     setProject(createProject(width, height));
     setPast([]);
@@ -1423,7 +1423,7 @@ export default function App() {
 
           <div className="topbar-command-zone">
             <div className="topbar-actions project-actions">
-              <button className="project-action-button primary-action" onClick={() => startBlank(52, 52)}>{text.new}</button>
+              <button className="project-action-button primary-action" onClick={() => startBlank()}>{text.new}</button>
               <button className="project-action-button" onClick={clearCanvas}>{text.clear}</button>
               <span className="project-action-divider" aria-hidden="true" />
               <button className="project-action-button history-action" onClick={undo} disabled={past.length === 0}>{text.undo}</button>
