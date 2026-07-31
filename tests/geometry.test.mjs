@@ -80,3 +80,19 @@ test("export validation rejects zero-area triangles", () => {
   model.parts[1].triangles[1] = model.parts[1].triangles[0];
   assert.match(validatePrintableModel(model).join("\n"), /degenerate triangle/);
 });
+
+test("every layered material band is closed and only touches its neighbors", async () => {
+  const { withStackTemplate } = await import("../generated/dist/src/project.js");
+  const { buildStackPalette } = await import("../generated/dist/src/print/stacking.js");
+  const project = withStackTemplate(createProject(4, 1), "rybw");
+  const palette = buildStackPalette(project.amsColors);
+  project.layers[0].cells = [palette[0].id, palette[4].id, palette[8].id, palette[12].id];
+  const model = buildPrintableModel(composePrintableGrid(project));
+  model.parts.forEach((part) => assert.deepEqual(closedEdgeErrors(part), []));
+  assert.deepEqual(validatePrintableModel(model), []);
+  for (let index = 1; index < model.parts.length; index += 1) {
+    assert.equal(meshBounds(model.parts[index - 1]).max[2], meshBounds(model.parts[index]).min[2]);
+  }
+  project.printSettings.baseThicknessMm = 1.21;
+  assert.match(validatePrintableModel(buildPrintableModel(composePrintableGrid(project))).join("\n"), /multiple of 0.08 mm/);
+});

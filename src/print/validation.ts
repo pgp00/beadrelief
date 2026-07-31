@@ -1,4 +1,5 @@
 import type { PrintableModel, PrintablePart } from './model';
+import { STACK_LAYER_HEIGHT_MM } from './stacking';
 
 export function closedEdgeErrors(part: PrintablePart): string[] {
   const counts = new Map<string, number>();
@@ -17,11 +18,15 @@ export function closedEdgeErrors(part: PrintablePart): string[] {
 }
 
 export function validatePrintableModel(model: PrintableModel, checkTopology = true): string[] {
-  const errors: string[] = [];
+  const errors = [...model.inputErrors];
   if (model.gridSize.width <= 0 || model.gridSize.height <= 0) errors.push('The printable grid is empty.');
   if (model.materials.length < 1 || model.materials.length > 4) errors.push('Use between one and four materials.');
   if (model.materials.some((material) => !material.name.trim())) errors.push('Every material needs a name.');
-  if (model.parts.length < 2) errors.push('The model needs a base and at least one bead part.');
+  if (model.parts.length < (model.mode === 'layered' ? 1 : 2)) {
+    errors.push(model.mode === 'layered'
+      ? 'The layered model needs a combined base/bead part.'
+      : 'The model needs a base and at least one bead part.');
+  }
   for (const [axis, value] of Object.entries(model.sizeMm)) {
     if (!Number.isFinite(value) || value <= 0) errors.push(`Model ${axis.toUpperCase()} must be positive.`);
   }
@@ -40,6 +45,30 @@ export function validatePrintableModel(model: PrintableModel, checkTopology = tr
   }
   if (!Number.isFinite(settings.dimpleDiameterMm) || settings.dimpleDiameterMm < 0 || settings.dimpleDiameterMm >= settings.cellPitchMm - 0.1) {
     errors.push('Dimple diameter must be zero or at least 0.1 mm less than cell pitch.');
+  }
+
+  if (model.mode === 'layered') {
+    if (model.materials.length < 2 || model.materials.length > 4) {
+      errors.push('Layered mode needs two to four filaments.');
+    }
+    if (model.materials.some((material) => !Number.isFinite(material.tdMm) || material.tdMm <= 0 || material.tdMm > 100)) {
+      errors.push('Every layered filament TD must be between 0.01 and 100 mm.');
+    }
+    const baseLayers = model.settings.baseThicknessMm / STACK_LAYER_HEIGHT_MM;
+    if (Math.abs(baseLayers - Math.round(baseLayers)) >= 1e-6) {
+      errors.push('Layered base thickness must be a multiple of 0.08 mm.');
+    }
+    const spans = model.parts.map((part) => {
+      const z = Array.from({ length: part.vertices.length / 3 }, (_, index) => part.vertices[index * 3 + 2]);
+      return { name: part.name, min: Math.min(...z), max: Math.max(...z) };
+    });
+    for (let left = 0; left < spans.length; left += 1) {
+      for (let right = left + 1; right < spans.length; right += 1) {
+        if (Math.min(spans[left].max, spans[right].max) - Math.max(spans[left].min, spans[right].min) > 1e-6) {
+          errors.push(`${spans[left].name} and ${spans[right].name} overlap in Z.`);
+        }
+      }
+    }
   }
 
   const materialIds = new Set(model.materials.map((material) => material.id));
