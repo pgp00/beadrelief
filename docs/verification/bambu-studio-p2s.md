@@ -1,0 +1,23 @@
+# Bambu Studio P2S Compatibility Check
+
+- Date: 2026-07-31
+- macOS version: 26.5.1 (25F80)
+- Bambu Studio version: 02.07.01.62
+- Download source: https://github.com/bambulab/BambuStudio/releases/download/v02.07.01.62/Bambu_Studio_mac-v02.07.01.62-20260616174358.dmg
+- Download SHA-256: `1e54c25aefc5249d56b63711cf773bed56f14430aafcc34340cd4894aef15896`
+- Printer profile: Bambu Lab P2S, 0.4 mm nozzle
+- Process profile: 0.20 mm Standard @BBL P2S
+- Sample: `samples/pingdou-p2s-sample.3mf`
+- Sample SHA-256: `f36d35befb5b86c72e1df72727f4be8b680d67d9a2a4f50ec92290d5cd14da30`
+- Imported structure: one assembly with five independently assignable parts
+- 3MF part names: `Base`, `Beads_Black`, `Beads_White`, `Beads_Red`, `Beads_Blue`
+- Bambu Studio labels: `Pingdou`, `Pingdou_2`, `Pingdou_3`, `Pingdou_4`, `Pingdou_5`
+- Material mapping: Base/Black→1, White→2, Red→3, Blue→4
+- Imported dimensions: 20 × 20 × 2 mm
+- Imported volume: 720.619 mm³
+- Imported triangles: 4620
+- Repair warning: none
+- Slice result: pass
+- Slice height check: layer 6 is a continuous 1.20 mm base; layer 10 reaches 2.00 mm and shows all four bead colors with shallow closed center dimples
+- Slice totals: 32m0s, 12 filament changes, 2.61 m / 7.91 g including purge tower and purged filament
+- Notes: Bambu Studio displayed its standard third-party 3MF warning and imported one project filament initially. Adding three project filaments and assigning the five parts produced the expected four-color preview. It also replaced the standard child-object names with sequential `Pingdou` labels in its UI; the archive retains the five descriptive names. No account, printer connection, upload, or print command was used.
