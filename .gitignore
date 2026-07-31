@@ -1,1 +1,46 @@
+# Dependencies
 .worktrees/
+node_modules/
+
+# Generated artifacts
+dist/
+generated/*
+!generated/.gitkeep
+
+# Local npm configuration and caches
+.npmrc
+.npm-cache/
+.npm/
+
+# Logs
+*.log
+*.err
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# TypeScript / Vite caches
+*.tsbuildinfo
+.vite/
+.cache/
+coverage/
+playwright-report/
+test-results/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local screenshots and smoke-test artifacts
+release-smoke*.png
+*_release_smoke.png
+*.local
+*.local.*
