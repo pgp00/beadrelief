@@ -59,6 +59,21 @@ export type BoardSettings = {
   showBoardIds: boolean;
 };
 
+export type AmsColor = {
+  id: string;
+  name: string;
+  hex: string;
+};
+
+export type PrintSettings = {
+  cellPitchMm: number;
+  baseThicknessMm: number;
+  beadHeightMm: number;
+  dimpleDiameterMm: number;
+  dimpleDepthMm: number;
+  baseColorId: string;
+};
+
 export type BeadProject = {
   version: string;
   name: string;
@@ -71,6 +86,8 @@ export type BeadProject = {
   activeLayerId: string;
   settings: ProjectSettings;
   boardSettings: BoardSettings;
+  amsColors: AmsColor[];
+  printSettings: PrintSettings;
   createdAt: string;
   updatedAt: string;
 };

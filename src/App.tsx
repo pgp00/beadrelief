@@ -3,6 +3,7 @@ import ThreePreview from './ThreePreview';
 import { downloadPrintPdf, downloadPrintPng, downloadProjectJson, downloadUsageWorkbook } from './exporters';
 import type { PrintExportOptions } from './exporters';
 import { imageFileToBeads } from './imageToBeads';
+import { amsColorToPaletteColor } from './print/colors';
 import { basicPalette, colorDistance, completePalette, getColor, nearestPaletteColor } from './palette';
 import { composeVisibleCells, createLayer, createProject, loadDraft, normalizeProject, saveDraft, withCells, withLayers } from './project';
 import { findIsolatedBeads, summarizeUsage } from './usage';
@@ -471,16 +472,16 @@ const sizePresets = [
 ];
 
 const defaultImportSettings = {
-  width: 52,
-  maxColors: 24,
+  width: 32,
+  maxColors: 4,
   generationStyle: 'cartoon' as GenerationStyle,
   backgroundMode: 'keep' as BackgroundMode,
   tolerance: 32,
   speckleReduction: 0,
 };
 
-const defaultColorId = 'mard-h7';
-const defaultRecentColorIds = ['mard-h7', 'mard-h2'];
+const defaultColorId = 'ams-1-1c1c1c';
+const defaultRecentColorIds = ['ams-1-1c1c1c', 'ams-2-f4f1e8'];
 const defaultAdjustments: AdjustmentSettings = {
   brightness: 0,
   contrast: 0,
@@ -598,7 +599,7 @@ export default function App() {
     [isolatedBeadRefs, showIsolatedBeads],
   );
   const selectedColor = getColor(selectedColorId);
-  const activePalette = paletteMode === 'basic' ? basicPalette : completePalette;
+  const activePalette = project.amsColors.map(amsColorToPaletteColor);
   const recentColors = recentColorIds.flatMap((id) => {
     const color = activePalette.find((item) => item.id === id);
     return color ? [color] : [];
@@ -1563,7 +1564,7 @@ export default function App() {
                 {text.width}
                 <span className="help-dot image-help-dot" {...imageHelpProps(text.heightFromRatio)}>?</span>
               </span>
-              <input aria-label="Output width" type="number" min={8} max={180} value={convertWidth} onChange={(event) => setConvertWidth(Number(event.target.value))} />
+              <input aria-label="Output width" type="number" min={8} max={50} value={convertWidth} onChange={(event) => setConvertWidth(Number(event.target.value))} />
             </label>
             <label className="image-range-field">
               <span>
@@ -1573,7 +1574,7 @@ export default function App() {
                 </span>
                 <strong>{maxColors}</strong>
               </span>
-              <input aria-label="Color limit" type="range" min={6} max={48} step={1} value={maxColors} onChange={(event) => setMaxColors(Number(event.target.value))} />
+              <input aria-label="Color limit" type="range" min={1} max={4} step={1} value={maxColors} onChange={(event) => setMaxColors(Number(event.target.value))} />
             </label>
             <label className="image-range-field">
               <span>

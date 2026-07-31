@@ -38,12 +38,50 @@ const styleProfiles: Record<GenerationStyle, StyleProfile> = {
   },
 };
 
+export function planImageConversion(
+  mimeType: string,
+  naturalWidth: number,
+  naturalHeight: number,
+  requestedLongSide: number,
+  paletteLength: number,
+  requestedMaxColors: number,
+): { width: number; height: number; sourceWidth: number; sourceHeight: number; maxColors: number } {
+  assertSupportedImageType(mimeType);
+  if (!Number.isFinite(naturalWidth) || !Number.isFinite(naturalHeight) || naturalWidth <= 0 || naturalHeight <= 0) {
+    throw new Error('Could not read image dimensions.');
+  }
+  if (paletteLength < 1 || paletteLength > 4) throw new Error('Choose between one and four AMS colors.');
+  const longSide = Math.min(50, Math.max(8, Math.round(requestedLongSide)));
+  const imageLongSide = Math.max(naturalWidth, naturalHeight);
+  const sourceScale = Math.min(1, 4096 / imageLongSide);
+  return {
+    width: Math.max(1, Math.round((naturalWidth / imageLongSide) * longSide)),
+    height: Math.max(1, Math.round((naturalHeight / imageLongSide) * longSide)),
+    sourceWidth: Math.max(1, Math.round(naturalWidth * sourceScale)),
+    sourceHeight: Math.max(1, Math.round(naturalHeight * sourceScale)),
+    maxColors: Math.min(paletteLength, Math.max(1, Math.round(requestedMaxColors))),
+  };
+}
+
+function assertSupportedImageType(mimeType: string): void {
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) {
+    throw new Error('Use a JPG, PNG, or WebP image.');
+  }
+}
+
 export async function imageFileToBeads(file: File, options: ConvertOptions): Promise<ConvertResult> {
+  assertSupportedImageType(file.type);
   const image = await loadImage(file);
-  const width = Math.max(1, Math.round(options.width));
-  const height = Math.max(1, Math.round((image.naturalHeight / image.naturalWidth) * width));
-  const sourceWidth = Math.max(1, image.naturalWidth);
-  const sourceHeight = Math.max(1, image.naturalHeight);
+  const activePalette = options.palette ?? palette;
+  const plan = planImageConversion(
+    file.type,
+    image.naturalWidth,
+    image.naturalHeight,
+    options.width,
+    activePalette.length,
+    options.maxColors,
+  );
+  const { width, height, sourceWidth, sourceHeight, maxColors } = plan;
   const canvas = document.createElement('canvas');
   canvas.width = sourceWidth;
   canvas.height = sourceHeight;
@@ -52,14 +90,14 @@ export async function imageFileToBeads(file: File, options: ConvertOptions): Pro
   context.imageSmoothingEnabled = true;
   context.drawImage(image, 0, 0, sourceWidth, sourceHeight);
   const data = context.getImageData(0, 0, sourceWidth, sourceHeight).data;
-  const activePalette = options.palette ?? palette;
+  const effectiveOptions = { ...options, maxColors };
   const profile = styleProfiles[options.generationStyle ?? 'cartoon'];
   const requestedSpeckleStrength = options.speckleReduction ?? 0;
   const speckleStrength = requestedSpeckleStrength > 0 ? clampStrength(requestedSpeckleStrength + profile.postStrengthBias) : 0;
   const backgroundColor = estimateBackgroundColor(data, sourceWidth, sourceHeight);
-  const sampledCells = sampleGridCells(data, sourceWidth, sourceHeight, width, height, options, backgroundColor, profile, speckleStrength);
-  const ranked = rankPaletteColors(sampledCells, options, activePalette, profile);
-  const candidates = selectCandidateColors(ranked, Math.max(2, options.maxColors), activePalette, speckleStrength, profile);
+  const sampledCells = sampleGridCells(data, sourceWidth, sourceHeight, width, height, effectiveOptions, backgroundColor, profile, speckleStrength);
+  const ranked = rankPaletteColors(sampledCells, effectiveOptions, activePalette, profile);
+  const candidates = selectCandidateColors(ranked, maxColors, activePalette, speckleStrength, profile);
   const cells = sampledCells.map((cell) => chooseCellColor(cell, candidates, profile));
 
   const mergedCells = mergeSimilarColors(cells, speckleStrength, candidates);

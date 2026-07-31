@@ -1,4 +1,5 @@
 import type { BrandId, PaletteColor } from './types';
+import { oklabDistance, paletteColorFromAmsId } from './print/colors';
 
 const rawColorsCsv = `
 A1,#FAF4C8
@@ -348,7 +349,7 @@ export function hexToRgb(hex: string): [number, number, number] {
 
 export function getColor(id: string | null): PaletteColor | undefined {
   if (!id) return undefined;
-  return completePalette.find((color) => color.id === id);
+  return paletteColorFromAmsId(id) ?? completePalette.find((color) => color.id === id);
 }
 
 export function nearestPaletteColor(
@@ -368,11 +369,7 @@ export function nearestPaletteColor(
 }
 
 export function colorDistance(a: [number, number, number], b: [number, number, number]): number {
-  const redMean = (a[0] + b[0]) / 2;
-  const r = a[0] - b[0];
-  const g = a[1] - b[1];
-  const blue = a[2] - b[2];
-  return Math.sqrt((2 + redMean / 256) * r * r + 4 * g * g + (2 + (255 - redMean) / 256) * blue * blue);
+  return oklabDistance(a, b);
 }
 
 export function mappedCode(color: PaletteColor, brand: BrandId): string {

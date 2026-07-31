@@ -1,5 +1,7 @@
 import { paletteVersion } from './palette';
-import type { BeadLayer, BeadProject } from './types';
+import { DEFAULT_AMS_COLORS, makeAmsColorId, normalizeHex } from './print/colors';
+import { DEFAULT_PRINT_SETTINGS } from './print/settings';
+import type { AmsColor, BeadLayer, BeadProject } from './types';
 
 export const autosaveKey = 'perler-beads-generator:draft';
 
@@ -43,6 +45,8 @@ export function createProject(width = 52, height = 52, name = 'Untitled Pattern'
       boardHeight: 52,
       showBoardIds: true,
     },
+    amsColors: DEFAULT_AMS_COLORS.map((color) => ({ ...color })),
+    printSettings: { ...DEFAULT_PRINT_SETTINGS },
     createdAt: now,
     updatedAt: now,
   };
@@ -106,6 +110,13 @@ export function normalizeProject(project: BeadProject): BeadProject {
   const width = Number.isFinite(project.width) ? project.width : 29;
   const height = Number.isFinite(project.height) ? project.height : 29;
   const fallback = createProject(width, height, project.name);
+  const amsColors = normalizeAmsColors(project.amsColors);
+  const requestedBase = project.printSettings?.baseColorId;
+  const requestedSlot = Number(/^ams-([1-4])-/.exec(requestedBase ?? '')?.[1]);
+  const baseColorId =
+    amsColors.find((color) => color.id === requestedBase)?.id ??
+    amsColors[requestedSlot - 1]?.id ??
+    amsColors[0].id;
   const settings = {
     ...fallback.settings,
     ...project.settings,
@@ -131,10 +142,34 @@ export function normalizeProject(project: BeadProject): BeadProject {
     activeBrand: 'MARD',
     settings,
     boardSettings: { ...fallback.boardSettings, ...project.boardSettings },
+    amsColors,
+    printSettings: {
+      ...DEFAULT_PRINT_SETTINGS,
+      ...project.printSettings,
+      baseColorId,
+    },
     layers,
     activeLayerId: layers.some((layer) => layer.id === project.activeLayerId) ? project.activeLayerId : layers[0].id,
     cells: composeVisibleCells(layers, width, height),
   };
+}
+
+function normalizeAmsColors(colors: AmsColor[] | undefined): AmsColor[] {
+  const source = colors?.length ? colors.slice(0, 4) : DEFAULT_AMS_COLORS;
+  return source.map((color, index) => {
+    const fallback = DEFAULT_AMS_COLORS[index] ?? DEFAULT_AMS_COLORS[0];
+    let hex: string;
+    try {
+      hex = normalizeHex(color?.hex ?? fallback.hex);
+    } catch {
+      hex = fallback.hex;
+    }
+    return {
+      id: makeAmsColorId(index + 1, hex),
+      name: color?.name?.trim() || fallback.name,
+      hex,
+    };
+  });
 }
 
 function normalizeLayers(project: BeadProject, width: number, height: number): BeadLayer[] {
