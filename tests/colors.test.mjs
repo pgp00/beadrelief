@@ -47,10 +47,11 @@ test("project imports reject unsafe allocation shapes", () => {
   const project = createProject(1, 1);
   assert.equal(typeof projectApi.isSafeProjectImport, "function");
   assert.equal(projectApi.isSafeProjectImport({ ...project, width: 1.5 }, 100), false);
-  assert.equal(projectApi.isSafeProjectImport({ ...project, width: 181 }, 100), false);
+  assert.equal(projectApi.isSafeProjectImport({ ...project, width: 51 }, 100), false);
   assert.equal(projectApi.isSafeProjectImport({ ...project, layers: Array.from({ length: 65 }, () => project.layers[0]) }, 100), false);
   assert.equal(projectApi.isSafeProjectImport(project, projectApi.MAX_PROJECT_FILE_BYTES + 1), false);
   assert.equal(normalizeProject({ ...project, width: 1.5 }).width, 32);
+  assert.equal(normalizeProject({ ...project, width: 51 }).width, 32);
 });
 
 test("image conversion caps source pixels and treats the requested size as the long side", () => {

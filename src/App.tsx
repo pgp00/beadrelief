@@ -9,7 +9,7 @@ import { buildPrintableModel, composePrintableGrid } from './print/model';
 import { downloadThreeMf } from './print/threeMf';
 import { validatePrintableModel } from './print/validation';
 import { colorDistance, getColor, nearestPaletteColor } from './palette';
-import { MAX_PROJECT_FILE_BYTES, composeVisibleCells, createLayer, createProject, isSafeProjectImport, loadDraft, normalizeProject, saveDraft, withCells, withLayers } from './project';
+import { MAX_PROJECT_DIMENSION, MAX_PROJECT_FILE_BYTES, composeVisibleCells, createLayer, createProject, isSafeProjectImport, loadDraft, normalizeProject, saveDraft, withCells, withLayers } from './project';
 import { findIsolatedBeads, summarizeUsage } from './usage';
 import type { ArrowKind, BackgroundMode, BeadProject, ClipboardPattern, CopyMode, GenerationStyle, MirrorDirection, MoveMode, RemoveMode, RightClickAction, ShapeFillMode, ShapeKind, TextDirection, ToolId } from './types';
 
@@ -469,10 +469,10 @@ function formatBrushSize(value: number): string {
 }
 
 const sizePresets = [
-  { label: '52 * 52', width: 52, height: 52 },
-  { label: '78 * 78', width: 78, height: 78 },
-  { label: '104 * 104', width: 104, height: 104 },
-  { label: '156 * 156', width: 156, height: 156 },
+  { label: '16 * 16', width: 16, height: 16 },
+  { label: '24 * 24', width: 24, height: 24 },
+  { label: '32 * 32', width: 32, height: 32 },
+  { label: '50 * 50', width: 50, height: 50 },
 ];
 
 const defaultImportSettings = {
@@ -939,8 +939,8 @@ export default function App() {
   }
 
   function resizeCanvas() {
-    const width = clampInteger(canvasWidth, 8, 180);
-    const height = clampInteger(canvasHeight, 8, 180);
+    const width = clampInteger(canvasWidth, 8, MAX_PROJECT_DIMENSION);
+    const height = clampInteger(canvasHeight, 8, MAX_PROJECT_DIMENSION);
     if (width === project.width && height === project.height) return;
 
     commitHistory();
@@ -1408,9 +1408,9 @@ export default function App() {
           <div className="topbar-params canvas-params" aria-label="Canvas controls">
             <span className="topbar-control-label">{text.board}</span>
             <div className="topbar-dimension-group">
-              <input aria-label="Canvas width" type="number" min={8} max={180} value={canvasWidth} onChange={(event) => setCanvasWidth(Number(event.target.value))} />
+              <input aria-label="Canvas width" type="number" min={8} max={MAX_PROJECT_DIMENSION} value={canvasWidth} onChange={(event) => setCanvasWidth(Number(event.target.value))} />
               <span className="size-times">×</span>
-              <input aria-label="Canvas height" type="number" min={8} max={180} value={canvasHeight} onChange={(event) => setCanvasHeight(Number(event.target.value))} />
+              <input aria-label="Canvas height" type="number" min={8} max={MAX_PROJECT_DIMENSION} value={canvasHeight} onChange={(event) => setCanvasHeight(Number(event.target.value))} />
             </div>
             <select className="canvas-preset-select" aria-label="Canvas preset" value={selectedSizePreset || ''} onChange={(event) => applyPreset(event.target.value)}>
               <option value="" disabled hidden>{text.commonSizes}</option>
