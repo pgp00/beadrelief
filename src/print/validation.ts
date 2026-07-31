@@ -16,7 +16,7 @@ export function closedEdgeErrors(part: PrintablePart): string[] {
     .map(([edge, count]) => `${edge}=${count}`);
 }
 
-export function validatePrintableModel(model: PrintableModel): string[] {
+export function validatePrintableModel(model: PrintableModel, checkTopology = true): string[] {
   const errors: string[] = [];
   if (model.gridSize.width <= 0 || model.gridSize.height <= 0) errors.push('The printable grid is empty.');
   if (model.materials.length < 1 || model.materials.length > 4) errors.push('Use between one and four materials.');
@@ -38,8 +38,8 @@ export function validatePrintableModel(model: PrintableModel): string[] {
   if (!Number.isFinite(settings.dimpleDepthMm) || settings.dimpleDepthMm < 0 || settings.dimpleDepthMm >= settings.beadHeightMm) {
     errors.push('Dimple depth must be zero or less than bead height.');
   }
-  if (!Number.isFinite(settings.dimpleDiameterMm) || settings.dimpleDiameterMm < 0 || settings.dimpleDiameterMm >= settings.cellPitchMm) {
-    errors.push('Dimple diameter must be zero or less than cell pitch.');
+  if (!Number.isFinite(settings.dimpleDiameterMm) || settings.dimpleDiameterMm < 0 || settings.dimpleDiameterMm >= settings.cellPitchMm - 0.1) {
+    errors.push('Dimple diameter must be zero or at least 0.1 mm less than cell pitch.');
   }
 
   const materialIds = new Set(model.materials.map((material) => material.id));
@@ -58,8 +58,32 @@ export function validatePrintableModel(model: PrintableModel): string[] {
       errors.push(`${part.name} has an invalid triangle index.`);
       continue;
     }
-    const openEdges = closedEdgeErrors(part);
-    if (openEdges.length) errors.push(`${part.name} is not closed (${openEdges.length} edges).`);
+    if (checkTopology) {
+      const degenerateTriangles = countDegenerateTriangles(part);
+      if (degenerateTriangles) errors.push(`${part.name} has ${degenerateTriangles} degenerate triangle(s).`);
+      const openEdges = closedEdgeErrors(part);
+      if (openEdges.length) errors.push(`${part.name} is not closed (${openEdges.length} edges).`);
+    }
   }
   return errors;
+}
+
+function countDegenerateTriangles(part: PrintablePart): number {
+  let count = 0;
+  for (let index = 0; index < part.triangles.length; index += 3) {
+    const a = part.triangles[index] * 3;
+    const b = part.triangles[index + 1] * 3;
+    const c = part.triangles[index + 2] * 3;
+    const abx = part.vertices[b] - part.vertices[a];
+    const aby = part.vertices[b + 1] - part.vertices[a + 1];
+    const abz = part.vertices[b + 2] - part.vertices[a + 2];
+    const acx = part.vertices[c] - part.vertices[a];
+    const acy = part.vertices[c + 1] - part.vertices[a + 1];
+    const acz = part.vertices[c + 2] - part.vertices[a + 2];
+    const x = aby * acz - abz * acy;
+    const y = abz * acx - abx * acz;
+    const z = abx * acy - aby * acx;
+    if (x * x + y * y + z * z <= 1e-16) count += 1;
+  }
+  return count;
 }

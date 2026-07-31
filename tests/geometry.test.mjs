@@ -51,3 +51,32 @@ test("a dimple cannot consume the full bead height", () => {
   const diameterErrors = validatePrintableModel(buildPrintableModel(composePrintableGrid(project)));
   assert.match(diameterErrors.join("\n"), /less than cell pitch/);
 });
+
+test("the largest selectable dimple does not collapse the top rings", () => {
+  const project = createProject(1, 1);
+  project.printSettings.dimpleDiameterMm = 4.9;
+  const errors = validatePrintableModel(buildPrintableModel(composePrintableGrid(project)));
+  assert.match(errors.join("\n"), /dimple diameter/i);
+});
+
+test("minimum relief keeps bead rings in ascending Z order", () => {
+  const project = createProject(1, 1);
+  project.printSettings.beadHeightMm = 0.2;
+  project.printSettings.dimpleDepthMm = 0.1;
+  const bead = buildPrintableModel(composePrintableGrid(project)).parts[1];
+  const ringZ = [0, 1, 2, 3].map((ring) => bead.vertices[ring * 24 * 3 + 2]);
+  assert.deepEqual(ringZ, [...ringZ].sort((a, b) => a - b));
+});
+
+test("interactive validation can skip the export-only topology scan", () => {
+  const model = buildPrintableModel(composePrintableGrid(createProject(1, 1)));
+  model.parts[1].triangles = model.parts[1].triangles.slice(3);
+  assert.match(validatePrintableModel(model).join("\n"), /not closed/);
+  assert.doesNotMatch(validatePrintableModel(model, false).join("\n"), /not closed/);
+});
+
+test("export validation rejects zero-area triangles", () => {
+  const model = buildPrintableModel(composePrintableGrid(createProject(1, 1)));
+  model.parts[1].triangles[1] = model.parts[1].triangles[0];
+  assert.match(validatePrintableModel(model).join("\n"), /degenerate triangle/);
+});

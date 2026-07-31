@@ -4,6 +4,9 @@ import { DEFAULT_PRINT_SETTINGS } from './print/settings';
 import type { AmsColor, BeadLayer, BeadProject } from './types';
 
 export const autosaveKey = 'perler-beads-generator:draft';
+export const MAX_PROJECT_DIMENSION = 180;
+export const MAX_PROJECT_LAYERS = 64;
+export const MAX_PROJECT_FILE_BYTES = 20 * 1024 * 1024;
 
 export function createProject(width = 32, height = 32, name = 'Untitled Pattern'): BeadProject {
   const now = new Date().toISOString();
@@ -107,8 +110,8 @@ export function composeVisibleCells(layers: BeadLayer[], width: number, height: 
 }
 
 export function normalizeProject(project: BeadProject): BeadProject {
-  const width = Number.isFinite(project.width) ? project.width : 29;
-  const height = Number.isFinite(project.height) ? project.height : 29;
+  const width = isSafeDimension(project.width) ? project.width : 32;
+  const height = isSafeDimension(project.height) ? project.height : 32;
   const fallback = createProject(width, height, project.name);
   const amsColors = normalizeAmsColors(project.amsColors);
   const requestedBase = project.printSettings?.baseColorId;
@@ -175,11 +178,27 @@ function normalizeAmsColors(colors: AmsColor[] | undefined): AmsColor[] {
 function normalizeLayers(project: BeadProject, width: number, height: number): BeadLayer[] {
   const legacyCells = normalizeCells(project.cells, width, height);
   const sourceLayers = project.layers?.length ? project.layers : createProject(width, height).layers;
-  return sourceLayers.map((layer, index) => ({
+  return sourceLayers.slice(0, MAX_PROJECT_LAYERS).map((layer, index) => ({
     ...layer,
     customName: Boolean(layer.customName),
     cells: normalizeCells(layer.cells ?? (index === 0 ? legacyCells : []), width, height),
   }));
+}
+
+export function isSafeProjectImport(project: unknown, fileBytes: number): project is BeadProject {
+  if (!project || typeof project !== 'object' || fileBytes < 0 || fileBytes > MAX_PROJECT_FILE_BYTES) return false;
+  const candidate = project as Partial<BeadProject>;
+  return isSafeDimension(candidate.width)
+    && isSafeDimension(candidate.height)
+    && Array.isArray(candidate.cells)
+    && (!candidate.layers || (Array.isArray(candidate.layers) && candidate.layers.length <= MAX_PROJECT_LAYERS));
+}
+
+function isSafeDimension(value: unknown): value is number {
+  return typeof value === 'number'
+    && Number.isSafeInteger(value)
+    && value >= 1
+    && value <= MAX_PROJECT_DIMENSION;
 }
 
 function normalizeCells(cells: Array<string | null> | undefined, width: number, height: number): Array<string | null> {

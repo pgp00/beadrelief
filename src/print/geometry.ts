@@ -48,8 +48,8 @@ export function appendFusedBead(
   const hasDimple = dimpleRadius > 0 && settings.dimpleDepthMm > 0;
   const ringSpecs: Array<[number, number]> = [
     [lowerRadius, baseZ],
-    [topRadius, Math.min(topZ, baseZ + 0.2)],
-    [topRadius, Math.max(baseZ, topZ - 0.1)],
+    [topRadius, baseZ + Math.min(0.2, settings.beadHeightMm * 0.25)],
+    [topRadius, topZ - Math.min(0.1, settings.beadHeightMm * 0.25)],
     [bevelRadius, topZ],
   ];
   if (hasDimple) {

@@ -8,6 +8,7 @@ type Props = {
   errors: string[];
   language: 'zh' | 'en';
   onChange: (project: BeadProject) => void;
+  onBeforeRemoveColor: () => void;
   onExport: () => void;
 };
 
@@ -26,7 +27,7 @@ const numberFields: Array<{
   { key: 'dimpleDepthMm', zh: '中心凹点深度', en: 'Dimple depth', min: 0, max: 2, step: 0.1 },
 ];
 
-export default function PrintSettingsPanel({ project, model, errors, language, onChange, onExport }: Props) {
+export default function PrintSettingsPanel({ project, model, errors, language, onChange, onBeforeRemoveColor, onExport }: Props) {
   const zh = language === 'zh';
 
   function updateColor(index: number, change: { name?: string; hex?: string }) {
@@ -51,6 +52,7 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
     const removed = project.amsColors[project.amsColors.length - 1];
     if (!removed) return;
     const next = replaceProjectColor(project, removed.id, project.amsColors[0].id);
+    onBeforeRemoveColor();
     onChange({ ...next, amsColors: next.amsColors.slice(0, -1) });
   }
 
@@ -106,7 +108,7 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
               type="number"
               min={field.min}
               max={field.key === 'dimpleDiameterMm'
-                ? Math.max(0, project.printSettings.cellPitchMm - field.step)
+                ? Math.max(0, project.printSettings.cellPitchMm - field.step * 2)
                 : field.key === 'dimpleDepthMm'
                   ? Math.max(0, project.printSettings.beadHeightMm - field.step)
                   : field.max}

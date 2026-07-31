@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createProject } from "../generated/dist/src/project.js";
-import { composePrintableGrid, buildPrintableModel } from "../generated/dist/src/print/model.js";
+import { composePrintableGrid, buildPrintableModel, meshBounds } from "../generated/dist/src/print/model.js";
 import { createThreeMf } from "../generated/dist/src/print/threeMf.js";
 
 function readStoredEntries(archive) {
@@ -48,6 +48,25 @@ test("3MF contains one assembly, named parts, and four or fewer base materials",
   assert.equal((xml.match(/<component objectid=/g) ?? []).length, 5);
   assert.equal((xml.match(/<item objectid=/g) ?? []).length, 1);
   assert.equal((xml.match(/pid="1" pindex="[0-3]"/g) ?? []).length, 5);
+  const recovered = [...xml.matchAll(
+    /<object id="\d+" name="([^"]+)" type="model" pid="1" pindex="(\d+)">\s*<mesh>([\s\S]*?)<\/mesh>\s*<\/object>/g,
+  )].map((match) => {
+    const vertices = [...match[3].matchAll(/<vertex x="([^"]+)" y="([^"]+)" z="([^"]+)"\/>/g)]
+      .map((vertex) => vertex.slice(1).map(Number));
+    return {
+      name: match[1],
+      materialId: model.materials[Number(match[2])].id,
+      bounds: {
+        min: [0, 1, 2].map((axis) => Math.min(...vertices.map((vertex) => vertex[axis]))),
+        max: [0, 1, 2].map((axis) => Math.max(...vertices.map((vertex) => vertex[axis]))),
+      },
+    };
+  });
+  assert.deepEqual(recovered, model.parts.map((part) => ({
+    name: part.name,
+    materialId: part.materialId,
+    bounds: meshBounds(part),
+  })));
   assert.equal(new TextDecoder().decode(archive.slice(0, 4)), "PK\u0003\u0004");
   assert.equal(new TextDecoder().decode(archive.slice(-22, -18)), "PK\u0005\u0006");
 });

@@ -9,7 +9,7 @@ import { buildPrintableModel, composePrintableGrid } from './print/model';
 import { downloadThreeMf } from './print/threeMf';
 import { validatePrintableModel } from './print/validation';
 import { colorDistance, getColor, nearestPaletteColor } from './palette';
-import { composeVisibleCells, createLayer, createProject, loadDraft, normalizeProject, saveDraft, withCells, withLayers } from './project';
+import { MAX_PROJECT_FILE_BYTES, composeVisibleCells, createLayer, createProject, isSafeProjectImport, loadDraft, normalizeProject, saveDraft, withCells, withLayers } from './project';
 import { findIsolatedBeads, summarizeUsage } from './usage';
 import type { ArrowKind, BackgroundMode, BeadProject, ClipboardPattern, CopyMode, GenerationStyle, MirrorDirection, MoveMode, RemoveMode, RightClickAction, ShapeFillMode, ShapeKind, TextDirection, ToolId } from './types';
 
@@ -75,7 +75,7 @@ const ui: Record<Language, any> = {
         ready: '已选择',
         noImage: '未选择图片',
         uploadImage: '上传图片',
-        width: '宽度',
+        width: '最长边格数',
         colors: '色数上限',
         colorsHint: '生成时使用的拼豆颜色数量上限；数值越低越简洁，越高越细腻。',
         generationStyle: '生成风格',
@@ -163,7 +163,7 @@ const ui: Record<Language, any> = {
         close: '关闭',
         expandPreview: '放大 3D 预览',
         workspaceReady: '工作区已就绪。',
-        heightFromRatio: '高度将按图片比例计算。',
+        heightFromRatio: '另一边将按图片比例计算。',
         status: (width: number, height: number, beads: number, colors: number) => `${width} * ${height} - ${beads} 颗 - ${colors} 色`,
         panelStatus: (width: number, height: number, colors: number, beads: number, boards: number) => `${width} * ${height} - ${colors} 色 - ${beads} 颗 - ${boards} 块板`,
         isolatedBeads: (count: number) => (count > 0 ? `${count} 颗拼豆无相邻，熨烫时留意。` : '没有无相邻拼豆。'),
@@ -288,7 +288,7 @@ const ui: Record<Language, any> = {
         ready: 'Ready',
         noImage: 'No image',
         uploadImage: 'Upload image',
-        width: 'Width',
+        width: 'Long side',
         colors: 'Color limit',
         colorsHint: 'Maximum bead colors used in generation; lower is simpler, higher keeps more detail.',
         generationStyle: 'Style',
@@ -376,7 +376,7 @@ const ui: Record<Language, any> = {
         close: 'Close',
         expandPreview: 'Expand 3D preview',
         workspaceReady: 'Workspace ready.',
-        heightFromRatio: 'Height is calculated from the image ratio.',
+        heightFromRatio: 'The other side is calculated from the image ratio.',
         status: (width: number, height: number, beads: number, colors: number) => `${width} * ${height} - ${beads} beads - ${colors} colors`,
         panelStatus: (width: number, height: number, colors: number, beads: number, boards: number) => `${width} * ${height} - ${colors} colors - ${beads} beads - ${boards} boards`,
         isolatedBeads: (count: number) => (count > 0 ? `${count} beads have no neighbors; watch when fusing.` : 'No beads without neighbors.'),
@@ -1063,6 +1063,7 @@ export default function App() {
   }
 
   async function importJson(file: File) {
+    if (file.size > MAX_PROJECT_FILE_BYTES) throw new Error(text.invalidRecord);
     let imported: BeadProject;
     try {
       const text = await file.text();
@@ -1070,7 +1071,7 @@ export default function App() {
     } catch {
       throw new Error(text.unreadableRecord);
     }
-    if (!imported.width || !imported.height || !Array.isArray(imported.cells)) {
+    if (!isSafeProjectImport(imported, file.size)) {
       throw new Error(text.invalidRecord);
     }
     soloVisibilitySnapshotRef.current = null;
@@ -1293,7 +1294,7 @@ export default function App() {
     () => buildPrintableModel(composePrintableGrid(displayProject)),
     [displayProject],
   );
-  const printErrors = useMemo(() => validatePrintableModel(printableModel), [printableModel]);
+  const printErrors = useMemo(() => validatePrintableModel(printableModel, false), [printableModel]);
 
   function exportThreeMf() {
     try {
@@ -1565,7 +1566,7 @@ export default function App() {
                 {text.width}
                 <span className="help-dot image-help-dot" {...imageHelpProps(text.heightFromRatio)}>?</span>
               </span>
-              <input aria-label="Output width" type="number" min={8} max={50} value={convertWidth} onChange={(event) => setConvertWidth(Number(event.target.value))} />
+              <input aria-label="Output long side" type="number" min={8} max={50} value={convertWidth} onChange={(event) => setConvertWidth(Number(event.target.value))} />
             </label>
             <label className="image-range-field">
               <span>
@@ -1606,6 +1607,7 @@ export default function App() {
           errors={printErrors}
           language={language}
           onChange={updateProject}
+          onBeforeRemoveColor={commitHistory}
           onExport={exportThreeMf}
         />
 

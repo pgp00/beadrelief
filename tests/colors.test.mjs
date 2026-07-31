@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createProject, normalizeProject, withCells } from "../generated/dist/src/project.js";
+import * as projectApi from "../generated/dist/src/project.js";
 import { planImageConversion } from "../generated/dist/src/imageToBeads.js";
 import {
   DEFAULT_AMS_COLORS,
@@ -10,6 +10,8 @@ import {
   paletteColorFromAmsId,
   replaceProjectColor,
 } from "../generated/dist/src/print/colors.js";
+
+const { createProject, normalizeProject, withCells } = projectApi;
 
 test("AMS ids embed their slot and current color", () => {
   assert.equal(makeAmsColorId(2, "#FF8040"), "ams-2-ff8040");
@@ -39,6 +41,16 @@ test("legacy projects receive safe AMS and print defaults", () => {
   const normalized = normalizeProject(legacy);
   assert.equal(normalized.amsColors.length, 4);
   assert.equal(normalized.printSettings.baseColorId, normalized.amsColors[0].id);
+});
+
+test("project imports reject unsafe allocation shapes", () => {
+  const project = createProject(1, 1);
+  assert.equal(typeof projectApi.isSafeProjectImport, "function");
+  assert.equal(projectApi.isSafeProjectImport({ ...project, width: 1.5 }, 100), false);
+  assert.equal(projectApi.isSafeProjectImport({ ...project, width: 181 }, 100), false);
+  assert.equal(projectApi.isSafeProjectImport({ ...project, layers: Array.from({ length: 65 }, () => project.layers[0]) }, 100), false);
+  assert.equal(projectApi.isSafeProjectImport(project, projectApi.MAX_PROJECT_FILE_BYTES + 1), false);
+  assert.equal(normalizeProject({ ...project, width: 1.5 }).width, 32);
 });
 
 test("image conversion caps source pixels and treats the requested size as the long side", () => {
