@@ -16,7 +16,7 @@ fs.copyFileSync(path.join(root, 'node_modules', 'three', 'build', 'three.core.js
 for (const filePath of walk(outSrc)) {
   if (!filePath.endsWith('.js')) continue;
   let source = fs.readFileSync(filePath, 'utf8');
-  source = source.replace(/from "(\.\/[^"]+)"|from '(\.\/[^']+)'/g, (match, doublePath, singlePath) => {
+  source = source.replace(/from "(\.\.?\/[^"]+)"|from '(\.\.?\/[^']+)'/g, (match, doublePath, singlePath) => {
     const importPath = doublePath || singlePath;
     if (/\.(js|json|css)$/.test(importPath)) return match;
     const quote = doublePath ? '"' : "'";
