@@ -4,9 +4,9 @@ import type { AmsColor, BeadProject, PrintMode, PrintSettings } from '../types';
 import { amsColorToPaletteColor, nearestPaletteColorOklab } from './colors';
 import {
   appendFusedBead,
+  appendFusedBeadBase,
   appendFusedBeadSection,
   appendFusedBeadTop,
-  appendMesh,
   createBaseMesh,
   type MutableMesh,
 } from './geometry';
@@ -189,9 +189,11 @@ function buildLayeredPrintableModel(grid: LayeredPrintableGrid): PrintableModel 
     const bandStart = materialIndex * STACK_LAYERS_PER_FILAMENT;
     const bandEnd = (materialIndex + 1) * STACK_LAYERS_PER_FILAMENT;
     const mesh: MutableMesh = { vertices: [], triangles: [] };
-    if (materialIndex === 0) appendMesh(mesh, createBaseMesh(widthMm, heightMm, grid.settings.baseThicknessMm));
+    if (materialIndex === 0) {
+      appendFusedBeadBase(mesh, grid.width, grid.height, grid.settings, grid.stopLevels.map((level) => level <= bandEnd));
+    }
     grid.stopLevels.forEach((stopLevel, cellIndex) => {
-      if (stopLevel <= bandStart) return;
+      if (materialIndex === 0 || stopLevel <= bandStart) return;
       const x = (cellIndex % grid.width + 0.5) * grid.settings.cellPitchMm;
       const row = Math.floor(cellIndex / grid.width);
       const y = (grid.height - row - 0.5) * grid.settings.cellPitchMm;

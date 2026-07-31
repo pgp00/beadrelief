@@ -59,8 +59,13 @@ export function validatePrintableModel(model: PrintableModel, checkTopology = tr
       errors.push('Layered base thickness must be a multiple of 0.08 mm.');
     }
     const spans = model.parts.map((part) => {
-      const z = Array.from({ length: part.vertices.length / 3 }, (_, index) => part.vertices[index * 3 + 2]);
-      return { name: part.name, min: Math.min(...z), max: Math.max(...z) };
+      let min = Infinity;
+      let max = -Infinity;
+      for (let index = 2; index < part.vertices.length; index += 3) {
+        min = Math.min(min, part.vertices[index]);
+        max = Math.max(max, part.vertices[index]);
+      }
+      return { name: part.name, min, max };
     });
     for (let left = 0; left < spans.length; left += 1) {
       for (let right = left + 1; right < spans.length; right += 1) {

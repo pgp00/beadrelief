@@ -79,6 +79,78 @@ export function appendFusedBeadSection(
   exposedTop: boolean,
   segments = 24,
 ): void {
+  appendClosedRings(target, centerX, centerY, beadSectionSpecs(settings, bottomZ, topZ, firstBand, exposedTop), segments);
+}
+
+export function appendFusedBeadBase(
+  target: MutableMesh,
+  width: number,
+  height: number,
+  settings: PrintSettings,
+  exposedTops: boolean[],
+  segments = 24,
+): void {
+  const pitch = settings.cellPitchMm;
+  const widthMm = width * pitch;
+  const heightMm = height * pitch;
+  const halfPitch = pitch / 2;
+  const topVertices = new Map<string, { index: number; x: number; y: number }>();
+  const topVertex = (x: number, y: number) => {
+    const snappedX = Math.abs(x) < 1e-9 ? 0 : Math.abs(x - widthMm) < 1e-9 ? widthMm : x;
+    const snappedY = Math.abs(y) < 1e-9 ? 0 : Math.abs(y - heightMm) < 1e-9 ? heightMm : y;
+    const key = `${snappedX.toFixed(9)}:${snappedY.toFixed(9)}`;
+    const existing = topVertices.get(key);
+    if (existing) return existing.index;
+    const vertex = { index: addVertex(target, snappedX, snappedY, settings.baseThicknessMm), x: snappedX, y: snappedY };
+    topVertices.set(key, vertex);
+    return vertex.index;
+  };
+  const firstBandTop = settings.baseThicknessMm + STACK_LAYER_HEIGHT_MM * 4;
+
+  for (let cellIndex = 0; cellIndex < width * height; cellIndex += 1) {
+    const centerX = (cellIndex % width + 0.5) * pitch;
+    const row = Math.floor(cellIndex / width);
+    const centerY = (height - row - 0.5) * pitch;
+    const specs = beadSectionSpecs(
+      settings,
+      settings.baseThicknessMm,
+      firstBandTop,
+      true,
+      exposedTops[cellIndex] ?? false,
+    );
+    const bottomRing = createRings(target, centerX, centerY, [specs[0]], segments, 0)[0];
+    const squareRing = Array.from({ length: segments }, (_, index) => {
+      const angle = (index / segments) * Math.PI * 2;
+      const cosine = Math.cos(angle);
+      const sine = Math.sin(angle);
+      const scale = halfPitch / Math.max(Math.abs(cosine), Math.abs(sine));
+      return topVertex(centerX + cosine * scale, centerY + sine * scale);
+    });
+    connectRingPair(target, squareRing, bottomRing);
+    const upperRings = createRings(target, centerX, centerY, specs.slice(1), segments, 0);
+    appendClosedRingSet(target, [bottomRing, ...upperRings], specs, false, centerX, centerY);
+  }
+
+  const perimeter = [...topVertices.values()]
+    .filter(({ x, y }) => x === 0 || x === widthMm || y === 0 || y === heightMm)
+    .sort((a, b) => Math.atan2(a.y - heightMm / 2, a.x - widthMm / 2)
+      - Math.atan2(b.y - heightMm / 2, b.x - widthMm / 2));
+  const bottom = perimeter.map(({ x, y }) => addVertex(target, x, y, 0));
+  const bottomCenter = addVertex(target, widthMm / 2, heightMm / 2, 0);
+  for (let index = 0; index < perimeter.length; index += 1) {
+    const next = (index + 1) % perimeter.length;
+    addQuad(target, perimeter[index].index, bottom[index], bottom[next], perimeter[next].index);
+    target.triangles.push(bottomCenter, bottom[next], bottom[index]);
+  }
+}
+
+function beadSectionSpecs(
+  settings: PrintSettings,
+  bottomZ: number,
+  topZ: number,
+  firstBand: boolean,
+  exposedTop: boolean,
+): Array<[number, number]> {
   const topRadius = settings.cellPitchMm / 2;
   const lowerRadius = topRadius - 0.15;
   const bevelRadius = topRadius - 0.05;
@@ -100,7 +172,7 @@ export function appendFusedBeadSection(
   } else {
     pushDistinct(topRadius, topZ);
   }
-  appendClosedRings(target, centerX, centerY, rings, segments);
+  return rings;
 }
 
 export function appendFusedBeadTop(
@@ -131,12 +203,30 @@ function appendClosedRings(
   segments: number,
 ): void {
   const rings = createRings(target, centerX, centerY, specs, segments, 0);
+  appendClosedRingSet(target, rings, specs, true, centerX, centerY);
+}
+
+function appendClosedRingSet(
+  target: MutableMesh,
+  rings: number[][],
+  specs: Array<[number, number]>,
+  capBottom: boolean,
+  centerX: number,
+  centerY: number,
+): void {
   connectRings(target, rings);
-  const bottomCenter = addVertex(target, centerX, centerY, specs[0][1]);
-  const topCenter = addVertex(target, centerX, centerY, specs[specs.length - 1][1]);
-  for (let index = 0; index < segments; index += 1) {
-    const next = (index + 1) % segments;
-    target.triangles.push(bottomCenter, rings[0][next], rings[0][index]);
+  const last = specs.length - 1;
+  if (Math.abs(specs[0][1] - specs[last][1]) < 1e-9 && Math.abs(specs[0][0] - specs[last][0]) > 1e-9) {
+    connectRingPair(target, rings[last], rings[0]);
+    return;
+  }
+  const bottomCenter = capBottom
+    ? addVertex(target, centerX, centerY, specs[0][1])
+    : -1;
+  const topCenter = addVertex(target, centerX, centerY, specs[last][1]);
+  for (let index = 0; index < rings[0].length; index += 1) {
+    const next = (index + 1) % rings[0].length;
+    if (capBottom) target.triangles.push(bottomCenter, rings[0][next], rings[0][index]);
     target.triangles.push(topCenter, rings[rings.length - 1][index], rings[rings.length - 1][next]);
   }
 }
@@ -174,10 +264,14 @@ function createRings(
 
 function connectRings(target: MutableMesh, rings: number[][]): void {
   for (let ring = 0; ring < rings.length - 1; ring += 1) {
-    for (let index = 0; index < rings[ring].length; index += 1) {
-      const next = (index + 1) % rings[ring].length;
-      addQuad(target, rings[ring][index], rings[ring][next], rings[ring + 1][next], rings[ring + 1][index]);
-    }
+    connectRingPair(target, rings[ring], rings[ring + 1]);
+  }
+}
+
+function connectRingPair(target: MutableMesh, first: number[], second: number[]): void {
+  for (let index = 0; index < first.length; index += 1) {
+    const next = (index + 1) % first.length;
+    addQuad(target, first[index], first[next], second[next], second[index]);
   }
 }
 

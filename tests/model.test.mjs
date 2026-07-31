@@ -55,3 +55,18 @@ test("layered cells become four disjoint material bands", () => {
   assert.deepEqual(model.sizeMm, { x: 20, y: 5, z: 2.48 });
   assert.deepEqual(model.layered, { layerHeightMm: 0.08, perceivedColorCount: 4, swapCount: 3 });
 });
+
+test("malformed layered stack IDs are reported by model validation", () => {
+  const project = withStackTemplate(createProject(1, 1), "rybw");
+  project.layers[0].cells = ["stack-bad"];
+  const model = buildPrintableModel(composePrintableGrid(project));
+  assert.match(validatePrintableModel(model).join("\n"), /invalid layered stop color/);
+});
+
+test("the largest layered grid validates without spread argument overflow", () => {
+  const project = withStackTemplate(createProject(50, 50), "rybw");
+  const palette = buildStackPalette(project.amsColors);
+  project.layers[0].cells.fill(palette[12].id);
+  const model = buildPrintableModel(composePrintableGrid(project));
+  assert.deepEqual(validatePrintableModel(model, false), []);
+});
