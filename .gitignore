@@ -1,5 +1,6 @@
 # Dependencies
 .worktrees/
+.superpowers/
 node_modules/
 
 # Generated artifacts
