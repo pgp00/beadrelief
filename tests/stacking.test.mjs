@@ -8,6 +8,7 @@ import {
   transmissionAtThickness,
 } from "../generated/dist/src/print/stacking.js";
 import { getColor } from "../generated/dist/src/palette.js";
+import { nearestPaletteColorOklab } from "../generated/dist/src/print/colors.js";
 import { composePrintableGrid } from "../generated/dist/src/print/model.js";
 import { createLayer, createProject, normalizeProject, withLayeredMaterials, withLayers, withPrintMode, withStackTemplate } from "../generated/dist/src/project.js";
 import { summarizeLayeredUsage } from "../generated/dist/src/usage.js";
@@ -75,6 +76,20 @@ test("layered project normalization clamps stops after materials are removed", (
   const maximum = buildStackPalette(normalized.amsColors).at(-1);
   assert.equal(normalized.layers[0].cells[0], maximum.id);
   assert.equal(parseStackColorId(normalized.layers[0].cells[0]).stopLevel, 8);
+  assert.deepEqual(normalized.cells, normalized.layers[0].cells);
+});
+
+test("layered project normalization migrates known non-stack colors to the nearest stack color", () => {
+  const project = withStackTemplate(createProject(1, 1), "rybw");
+  const sourceId = project.amsColors[3].id;
+  project.layers[0].cells = [sourceId];
+  project.cells = [sourceId];
+  const palette = buildStackPalette(project.amsColors);
+  const expected = nearestPaletteColorOklab(getColor(sourceId).hex, palette).id;
+
+  const normalized = normalizeProject(project);
+  assert.notEqual(expected, palette[0].id);
+  assert.equal(normalized.layers[0].cells[0], expected);
   assert.deepEqual(normalized.cells, normalized.layers[0].cells);
 });
 

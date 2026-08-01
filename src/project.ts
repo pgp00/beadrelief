@@ -143,7 +143,6 @@ function remapPrintCells(
     if (mode === 'layered' && parsed) {
       return byLevel.get(Math.min(parsed.stopLevel, materials.length * STACK_LAYERS_PER_FILAMENT)) ?? palette[0].id;
     }
-    if (mode === 'layered' && project.printSettings.mode === 'layered') return palette[0].id;
     const source = getColor(id);
     return source ? nearestPaletteColorOklab(source.hex, palette).id : palette[0].id;
   };

@@ -17,7 +17,7 @@ import {
 
 const { createProject, normalizeProject, withCells } = projectApi;
 globalThis.React = React;
-const { autoGenerationPaletteKey, beginAutoGenerationEffect } = await import("../generated/dist/src/App.js");
+const { autoGenerationPaletteKey, beginAutoGenerationEffect, pendingGenerationAction } = await import("../generated/dist/src/App.js");
 
 function findElements(element, predicate, found = []) {
   if (!element || typeof element !== "object") return found;
@@ -146,6 +146,12 @@ test("automatic image generation invalidates immediately and consumes suppressio
   assert.equal(request.current, 9);
   assert.equal(suppression.current, false);
   assert.equal(beginAutoGenerationEffect(request, suppression), true);
+});
+
+test("pending image generation restarts unless history restoration suppresses it", () => {
+  assert.equal(pendingGenerationAction(false, false), "none");
+  assert.equal(pendingGenerationAction(true, false), "restart");
+  assert.equal(pendingGenerationAction(true, true), "cancel");
 });
 
 test("layered print controls select modes, templates, and TD without losing stack stops", () => {

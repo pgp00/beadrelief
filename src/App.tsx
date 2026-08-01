@@ -31,6 +31,10 @@ export function beginAutoGenerationEffect(request: { current: number }, suppress
   return shouldGenerate;
 }
 
+export function pendingGenerationAction(pending: boolean, suppressed: boolean): 'none' | 'restart' | 'cancel' {
+  return !pending ? 'none' : suppressed ? 'cancel' : 'restart';
+}
+
 const languageKey = 'perler-beads-generator:language';
 
 const ui: Record<Language, any> = {
@@ -528,6 +532,7 @@ export default function App() {
   const jsonInputRef = useRef<HTMLInputElement | null>(null);
   const autoGenerateShouldCommitRef = useRef(false);
   const generationRequestRef = useRef(0);
+  const autoGenerationPendingRef = useRef(false);
   const suppressAutoGenerationRef = useRef(false);
   const generateFromImageRef = useRef(generateFromImage);
   const adjustmentSessionRef = useRef<{ layerId: string | null; baseCells: Array<string | null> }>({ layerId: null, baseCells: [] });
@@ -588,6 +593,7 @@ export default function App() {
   const [generationStyle, setGenerationStyle] = useState<GenerationStyle>(defaultImportSettings.generationStyle);
   const [backgroundMode, setBackgroundMode] = useState<BackgroundMode>(defaultImportSettings.backgroundMode);
   const [tolerance, setTolerance] = useState(defaultImportSettings.tolerance);
+  const [autoGenerationRestartToken, setAutoGenerationRestartToken] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
   const [notice, setNotice] = useState(text.workspaceReady);
   const [floatingHelp, setFloatingHelp] = useState<FloatingHelp | null>(null);
@@ -777,16 +783,20 @@ export default function App() {
   useEffect(() => {
     const shouldGenerate = beginAutoGenerationEffect(generationRequestRef, suppressAutoGenerationRef);
     setIsGenerating(false);
-    if (!shouldGenerate || !pendingFile) return;
+    if (!shouldGenerate || !pendingFile) {
+      autoGenerationPendingRef.current = false;
+      autoGenerateShouldCommitRef.current = false;
+      return;
+    }
+    autoGenerationPendingRef.current = true;
     const effectRequestId = generationRequestRef.current;
     const timer = window.setTimeout(() => {
       if (effectRequestId !== generationRequestRef.current) return;
       const shouldCommit = autoGenerateShouldCommitRef.current;
-      autoGenerateShouldCommitRef.current = false;
       void generateFromImageRef.current({ recordHistory: shouldCommit, automatic: true });
     }, 420);
     return () => window.clearTimeout(timer);
-  }, [pendingFile, convertWidth, generationStyle, backgroundMode, tolerance, autoGenerationKey]);
+  }, [pendingFile, convertWidth, generationStyle, backgroundMode, tolerance, autoGenerationKey, autoGenerationRestartToken]);
 
   function commitHistory() {
     setPast((items) => [...items.slice(-39), project]);
@@ -798,8 +808,10 @@ export default function App() {
   }
 
   function invalidateGeneration() {
+    const action = pendingGenerationAction(autoGenerationPendingRef.current, suppressAutoGenerationRef.current);
     generationRequestRef.current += 1;
     setIsGenerating(false);
+    if (action !== 'none') setAutoGenerationRestartToken((current) => current + 1);
   }
 
   function updatePrintProject(next: BeadProject) {
@@ -932,8 +944,9 @@ export default function App() {
   function undo() {
     const previous = past[past.length - 1];
     if (!previous) return;
+    suppressAutoGenerationRef.current = autoGenerationPendingRef.current
+      || autoGenerationPaletteKey(previous.printSettings.mode, previous.amsColors) !== autoGenerationKey;
     invalidateGeneration();
-    suppressAutoGenerationRef.current = autoGenerationPaletteKey(previous.printSettings.mode, previous.amsColors) !== autoGenerationKey;
     setPast((items) => items.slice(0, -1));
     setFuture((items) => [...items, project]);
     updateProject(previous);
@@ -942,8 +955,9 @@ export default function App() {
   function redo() {
     const next = future[future.length - 1];
     if (!next) return;
+    suppressAutoGenerationRef.current = autoGenerationPendingRef.current
+      || autoGenerationPaletteKey(next.printSettings.mode, next.amsColors) !== autoGenerationKey;
     invalidateGeneration();
-    suppressAutoGenerationRef.current = autoGenerationPaletteKey(next.printSettings.mode, next.amsColors) !== autoGenerationKey;
     setFuture((items) => items.slice(0, -1));
     setPast((items) => [...items, project]);
     updateProject(next);
@@ -1071,7 +1085,10 @@ export default function App() {
         speckleReduction: defaultImportSettings.speckleReduction,
       });
       if (requestId !== generationRequestRef.current) return;
-      if (options.recordHistory) commitHistory();
+      if (options.recordHistory) {
+        autoGenerateShouldCommitRef.current = false;
+        commitHistory();
+      }
       const nextWidth = result.width;
       const nextHeight = result.height;
       const nextLayers = sourceLayers.map((layer) => {
@@ -1104,7 +1121,10 @@ export default function App() {
       if (requestId !== generationRequestRef.current) return;
       setNotice(error instanceof Error ? error.message : 'Could not generate this image.');
     } finally {
-      if (requestId === generationRequestRef.current) setIsGenerating(false);
+      if (requestId === generationRequestRef.current) {
+        autoGenerationPendingRef.current = false;
+        setIsGenerating(false);
+      }
     }
   }
 
