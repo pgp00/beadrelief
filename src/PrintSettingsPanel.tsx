@@ -148,6 +148,7 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
                 <span>TD (mm)</span>
                 <input
                   type="number"
+                  aria-label={`AMS ${index + 1} TD (mm)`}
                   min="0.01"
                   max="100"
                   step="0.01"
@@ -157,6 +158,11 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
                     tdMm: Math.min(100, Math.max(0.01, Number(event.target.value) || 0.01)),
                   })}
                 />
+                {index === 0 && (
+                  <small className="ams-td-base-hint">
+                    {zh ? '按不透光处理；忽略 TD。' : 'Treated as opaque; TD ignored.'}
+                  </small>
+                )}
               </label>
             )}
           </div>

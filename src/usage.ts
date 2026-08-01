@@ -1,6 +1,7 @@
 import { getColor } from './palette';
 import { amsColorToPaletteColor } from './print/colors';
-import { STACK_LAYERS_PER_FILAMENT, parseStackColorId } from './print/stacking';
+import { composePrintableGrid } from './print/model';
+import { STACK_LAYERS_PER_FILAMENT } from './print/stacking';
 import type { BeadProject, FilamentLayerUsageRow, UsageRow } from './types';
 
 export function summarizeUsage(project: BeadProject): UsageRow[] {
@@ -29,14 +30,16 @@ export function summarizeUsage(project: BeadProject): UsageRow[] {
 
 export function summarizeLayeredUsage(project: BeadProject): FilamentLayerUsageRow[] {
   const totals = project.amsColors.map(() => 0);
-  for (const layer of (project.layers ?? []).filter((item) => item.includeInUsage)) {
-    for (const id of layer.cells) {
-      if (!id) continue;
-      const stopLevel = parseStackColorId(id)?.stopLevel ?? STACK_LAYERS_PER_FILAMENT;
-      totals.forEach((_, materialIndex) => {
-        const bandStart = materialIndex * STACK_LAYERS_PER_FILAMENT;
-        totals[materialIndex] += Math.max(0, Math.min(STACK_LAYERS_PER_FILAMENT, stopLevel - bandStart));
-      });
+  const layers = (project.layers ?? []).filter((layer) => layer.includeInUsage);
+  if (layers.length > 0) {
+    const grid = composePrintableGrid({ ...project, layers: layers.map((layer) => ({ ...layer, visible: true })) });
+    if (grid.mode === 'layered') {
+      for (const stopLevel of grid.stopLevels) {
+        totals.forEach((_, materialIndex) => {
+          const bandStart = materialIndex * STACK_LAYERS_PER_FILAMENT;
+          totals[materialIndex] += Math.max(0, Math.min(STACK_LAYERS_PER_FILAMENT, stopLevel - bandStart));
+        });
+      }
     }
   }
   return project.amsColors.map((material, index) => ({

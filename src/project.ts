@@ -1,7 +1,7 @@
 import { getColor, paletteVersion } from './palette';
 import { DEFAULT_AMS_COLORS, amsColorToPaletteColor, makeAmsColorId, nearestPaletteColorOklab, normalizeHex } from './print/colors';
 import { DEFAULT_PRINT_SETTINGS } from './print/settings';
-import { STACK_TEMPLATES, buildStackPalette, parseStackColorId, type StackTemplateId } from './print/stacking';
+import { STACK_LAYERS_PER_FILAMENT, STACK_TEMPLATES, buildStackPalette, parseStackColorId, type StackTemplateId } from './print/stacking';
 import type { AmsColor, BeadLayer, BeadProject, PaletteColor, PrintMode } from './types';
 
 export const autosaveKey = 'perler-beads-generator:draft';
@@ -140,7 +140,10 @@ function remapPrintCells(
   const remap = (id: string | null): string | null => {
     if (!id) return null;
     const parsed = parseStackColorId(id);
-    if (mode === 'layered' && parsed && byLevel.has(parsed.stopLevel)) return byLevel.get(parsed.stopLevel) ?? null;
+    if (mode === 'layered' && parsed) {
+      return byLevel.get(Math.min(parsed.stopLevel, materials.length * STACK_LAYERS_PER_FILAMENT)) ?? palette[0].id;
+    }
+    if (mode === 'layered' && project.printSettings.mode === 'layered') return palette[0].id;
     const source = getColor(id);
     return source ? nearestPaletteColorOklab(source.hex, palette).id : palette[0].id;
   };
@@ -188,7 +191,7 @@ export function normalizeProject(project: BeadProject): BeadProject {
     width,
     height,
   );
-  return {
+  const normalized: BeadProject = {
     ...fallback,
     ...project,
     width,
@@ -207,6 +210,9 @@ export function normalizeProject(project: BeadProject): BeadProject {
     activeLayerId: layers.some((layer) => layer.id === project.activeLayerId) ? project.activeLayerId : layers[0].id,
     cells: composeVisibleCells(layers, width, height),
   };
+  return mode === 'layered'
+    ? remapPrintCells(normalized, amsColors, mode, buildStackPalette(amsColors))
+    : normalized;
 }
 
 function normalizeAmsColors(colors: AmsColor[] | undefined): AmsColor[] {
@@ -254,9 +260,9 @@ function isSafeDimension(value: unknown): value is number {
     && value <= MAX_PROJECT_DIMENSION;
 }
 
-function normalizeCells(cells: Array<string | null> | undefined, width: number, height: number): Array<string | null> {
+function normalizeCells(cells: ReadonlyArray<unknown> | undefined, width: number, height: number): Array<string | null> {
   const length = width * height;
-  const next = Array.from({ length }, (_, index) => cells?.[index] ?? null);
+  const next = Array.from({ length }, (_, index) => typeof cells?.[index] === 'string' ? cells[index] : null);
   return next;
 }
 

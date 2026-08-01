@@ -18,6 +18,19 @@ const { useEffect, useMemo, useRef, useState } = React;
 
 type Language = 'zh' | 'en';
 
+export function autoGenerationPaletteKey(mode: BeadProject['printSettings']['mode'], colors: BeadProject['amsColors']): string {
+  return mode === 'layered'
+    ? 'layered'
+    : `solid:${JSON.stringify(colors.map(({ id, name, hex, tdMm }) => [id, name, hex, tdMm]))}`;
+}
+
+export function beginAutoGenerationEffect(request: { current: number }, suppression: { current: boolean }): boolean {
+  request.current += 1;
+  const shouldGenerate = !suppression.current;
+  suppression.current = false;
+  return shouldGenerate;
+}
+
 const languageKey = 'perler-beads-generator:language';
 
 const ui: Record<Language, any> = {
@@ -137,17 +150,7 @@ const ui: Record<Language, any> = {
         countCurrentLayer: '当前图层',
         packUnit: '包',
         noUsage: '暂无用量',
-        printMode: '打印颜色模式',
-        solidMode: '普通四色',
-        layeredMode: 'AMS 叠色',
-        layeredEstimate: '预计成色 · 0.08 mm/层 · 每种耗材 4 层',
-        stackOrder: '从底到顶',
-        tdLabel: 'TD (mm)',
-        tdBaseHint: '底色按不透光处理',
-        stackTemplate: '示例配色',
-        templateWarning: '示例 TD 仅供预览；打印前请用你的耗材校准。',
         layerCells: '层格',
-        globalSwaps: '全局换料',
         brandCodes: '色号品牌',
         view: '视图',
         beadShape: '豆子形状',
@@ -361,17 +364,7 @@ const ui: Record<Language, any> = {
         countCurrentLayer: 'Current layer',
         packUnit: 'packs',
         noUsage: 'No usage yet',
-        printMode: 'Print color mode',
-        solidMode: 'Solid colors',
-        layeredMode: 'AMS layered',
-        layeredEstimate: 'Estimated color · 0.08 mm/layer · 4 layers per filament',
-        stackOrder: 'Bottom to top',
-        tdLabel: 'TD (mm)',
-        tdBaseHint: 'Base treated as opaque',
-        stackTemplate: 'Starter palette',
-        templateWarning: 'Template TD values are estimates; calibrate your filament before printing.',
         layerCells: 'layer-cells',
-        globalSwaps: 'global swaps',
         brandCodes: 'Brand codes',
         view: 'View',
         beadShape: 'Bead shape',
@@ -535,11 +528,14 @@ export default function App() {
   const jsonInputRef = useRef<HTMLInputElement | null>(null);
   const autoGenerateShouldCommitRef = useRef(false);
   const generationRequestRef = useRef(0);
+  const suppressAutoGenerationRef = useRef(false);
+  const generateFromImageRef = useRef(generateFromImage);
   const adjustmentSessionRef = useRef<{ layerId: string | null; baseCells: Array<string | null> }>({ layerId: null, baseCells: [] });
   const soloVisibilitySnapshotRef = useRef<Record<string, boolean> | null>(null);
   const [language, setLanguage] = useState<Language>(() => (localStorage.getItem(languageKey) === 'en' ? 'en' : 'zh'));
   const text = ui[language];
   const [project, setProject] = useState<BeadProject>(() => loadDraft() ?? createProject());
+  const autoGenerationKey = autoGenerationPaletteKey(project.printSettings.mode, project.amsColors);
   const [selectedColorId, setSelectedColorId] = useState(defaultColorId);
   const [recentColorIds, setRecentColorIds] = useState(defaultRecentColorIds);
   const [tool, setTool] = useState<ToolId>('pencil');
@@ -722,6 +718,8 @@ export default function App() {
     return states.join(' - ');
   }
 
+  generateFromImageRef.current = generateFromImage;
+
   useEffect(() => {
     saveDraft(project);
   }, [project]);
@@ -777,14 +775,18 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!pendingFile) return;
+    const shouldGenerate = beginAutoGenerationEffect(generationRequestRef, suppressAutoGenerationRef);
+    setIsGenerating(false);
+    if (!shouldGenerate || !pendingFile) return;
+    const effectRequestId = generationRequestRef.current;
     const timer = window.setTimeout(() => {
+      if (effectRequestId !== generationRequestRef.current) return;
       const shouldCommit = autoGenerateShouldCommitRef.current;
       autoGenerateShouldCommitRef.current = false;
-      void generateFromImage({ recordHistory: shouldCommit, automatic: true });
+      void generateFromImageRef.current({ recordHistory: shouldCommit, automatic: true });
     }, 420);
     return () => window.clearTimeout(timer);
-  }, [pendingFile, convertWidth, generationStyle, backgroundMode, tolerance, project.amsColors, project.printSettings.mode]);
+  }, [pendingFile, convertWidth, generationStyle, backgroundMode, tolerance, autoGenerationKey]);
 
   function commitHistory() {
     setPast((items) => [...items.slice(-39), project]);
@@ -793,6 +795,16 @@ export default function App() {
 
   function updateProject(next: BeadProject) {
     setProject({ ...next, updatedAt: new Date().toISOString() });
+  }
+
+  function invalidateGeneration() {
+    generationRequestRef.current += 1;
+    setIsGenerating(false);
+  }
+
+  function updatePrintProject(next: BeadProject) {
+    invalidateGeneration();
+    updateProject(next);
   }
 
   function selectColor(colorId: string, options: { updateRecent?: boolean } = {}) {
@@ -920,6 +932,8 @@ export default function App() {
   function undo() {
     const previous = past[past.length - 1];
     if (!previous) return;
+    invalidateGeneration();
+    suppressAutoGenerationRef.current = autoGenerationPaletteKey(previous.printSettings.mode, previous.amsColors) !== autoGenerationKey;
     setPast((items) => items.slice(0, -1));
     setFuture((items) => [...items, project]);
     updateProject(previous);
@@ -928,6 +942,8 @@ export default function App() {
   function redo() {
     const next = future[future.length - 1];
     if (!next) return;
+    invalidateGeneration();
+    suppressAutoGenerationRef.current = autoGenerationPaletteKey(next.printSettings.mode, next.amsColors) !== autoGenerationKey;
     setFuture((items) => items.slice(0, -1));
     setPast((items) => [...items, project]);
     updateProject(next);
@@ -1636,7 +1652,7 @@ export default function App() {
           model={printableModel}
           errors={printErrors}
           language={language}
-          onChange={updateProject}
+          onChange={updatePrintProject}
           onCommit={commitHistory}
           onExport={exportThreeMf}
         />

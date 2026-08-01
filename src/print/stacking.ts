@@ -45,7 +45,8 @@ export function makeStackColorId(stopLevel: number, hex: string): string {
 export function parseStackColorId(id: string): { stopLevel: number; hex: string } | null {
   const match = /^stack-(\d{2})-([0-9a-f]{6})$/.exec(id);
   if (!match) return null;
-  return { stopLevel: Number(match[1]), hex: `#${match[2]}` };
+  const stopLevel = Number(match[1]);
+  return stopLevel >= STACK_LAYERS_PER_FILAMENT ? { stopLevel, hex: `#${match[2]}` } : null;
 }
 
 export function paletteColorFromStackId(id: string): PaletteColor | null {

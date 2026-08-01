@@ -17,6 +17,7 @@ import {
 
 const { createProject, normalizeProject, withCells } = projectApi;
 globalThis.React = React;
+const { autoGenerationPaletteKey, beginAutoGenerationEffect } = await import("../generated/dist/src/App.js");
 
 function findElements(element, predicate, found = []) {
   if (!element || typeof element !== "object") return found;
@@ -28,12 +29,12 @@ function findElements(element, predicate, found = []) {
   return found;
 }
 
-function renderPrintSettings(project, onChange, onCommit) {
+function renderPrintSettings(project, onChange, onCommit, language = "en") {
   return PrintSettingsPanel({
     project,
     model: buildPrintableModel(composePrintableGrid(project)),
     errors: [],
-    language: "en",
+    language,
     onChange,
     onCommit,
     onExport() {},
@@ -125,6 +126,28 @@ test("changing an AMS slot updates cells and the base reference", () => {
   assert.equal(project.layers[0].cells[0], "ams-1-1c1c1c");
 });
 
+test("automatic image generation keys ignore layered material edits only", () => {
+  const project = createProject(1, 1);
+  const edited = project.amsColors.map((color, index) => index === 1
+    ? { ...color, id: makeAmsColorId(2, "#123456"), name: "Edited", hex: "#123456", tdMm: 2 }
+    : color);
+  assert.notEqual(autoGenerationPaletteKey("solid", project.amsColors), autoGenerationPaletteKey("solid", edited));
+  assert.equal(autoGenerationPaletteKey("layered", project.amsColors), autoGenerationPaletteKey("layered", edited));
+  assert.notEqual(autoGenerationPaletteKey("solid", project.amsColors), autoGenerationPaletteKey("layered", project.amsColors));
+});
+
+test("automatic image generation invalidates immediately and consumes suppression once", () => {
+  const request = { current: 7 };
+  const suppression = { current: false };
+  assert.equal(beginAutoGenerationEffect(request, suppression), true);
+  assert.equal(request.current, 8);
+  suppression.current = true;
+  assert.equal(beginAutoGenerationEffect(request, suppression), false);
+  assert.equal(request.current, 9);
+  assert.equal(suppression.current, false);
+  assert.equal(beginAutoGenerationEffect(request, suppression), true);
+});
+
 test("layered print controls select modes, templates, and TD without losing stack stops", () => {
   const initial = createProject(1, 1);
   const solid = withCells(initial, [initial.amsColors[1].id]);
@@ -148,6 +171,11 @@ test("layered print controls select modes, templates, and TD without losing stac
   assert.equal(tdInputs.length, 4);
   assert.equal(tdInputs[0].props.disabled, true);
   assert.ok(tdInputs.slice(1).every((input) => !input.props.disabled));
+  assert.deepEqual(tdInputs.map((input) => input.props["aria-label"]), ["AMS 1 TD (mm)", "AMS 2 TD (mm)", "AMS 3 TD (mm)", "AMS 4 TD (mm)"]);
+  const opaqueHint = findElements(layeredTree, (element) => element.type === "small" && element.props.className === "ams-td-base-hint");
+  assert.equal(opaqueHint[0]?.props.children, "Treated as opaque; TD ignored.");
+  const zhHint = findElements(renderPrintSettings(layered, onChange, onCommit, "zh"), (element) => element.type === "small" && element.props.className === "ams-td-base-hint");
+  assert.equal(zhHint[0]?.props.children, "按不透光处理；忽略 TD。");
   assert.equal(templates.length, 2);
   templates.find((button) => button.props.children === "RYBW").props.onClick();
   const templated = changes.at(-1);

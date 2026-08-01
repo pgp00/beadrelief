@@ -33,12 +33,6 @@ export function createBaseMesh(widthMm: number, heightMm: number, thicknessMm: n
   return { vertices, triangles };
 }
 
-export function appendMesh(target: MutableMesh, source: MeshData): void {
-  const offset = target.vertices.length / 3;
-  target.vertices.push(...source.vertices);
-  target.triangles.push(...[...source.triangles].map((index) => index + offset));
-}
-
 export function appendFusedBead(
   target: MutableMesh,
   centerX: number,
