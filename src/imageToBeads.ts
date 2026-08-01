@@ -50,7 +50,7 @@ export function planImageConversion(
   if (!Number.isFinite(naturalWidth) || !Number.isFinite(naturalHeight) || naturalWidth <= 0 || naturalHeight <= 0) {
     throw new Error('Could not read image dimensions.');
   }
-  if (paletteLength < 1 || paletteLength > 4) throw new Error('Choose between one and four AMS colors.');
+  if (paletteLength < 1 || paletteLength > 16) throw new Error('Choose between one and sixteen printable colors.');
   const longSide = Math.min(50, Math.max(8, Math.round(requestedLongSide)));
   const imageLongSide = Math.max(naturalWidth, naturalHeight);
   const sourceScale = Math.min(1, 4096 / imageLongSide);

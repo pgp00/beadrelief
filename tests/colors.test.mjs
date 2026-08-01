@@ -77,8 +77,16 @@ test("image conversion caps source pixels and treats the requested size as the l
     sourceHeight: 2000,
     maxColors: 1,
   });
+  assert.deepEqual(planImageConversion("image/png", 1200, 800, 32, 13, 13), {
+    width: 32,
+    height: 21,
+    sourceWidth: 1200,
+    sourceHeight: 800,
+    maxColors: 13,
+  });
   assert.throws(() => planImageConversion("image/gif", 10, 10, 8, 1, 1), /JPG, PNG, or WebP/);
-  assert.throws(() => planImageConversion("image/webp", 10, 10, 8, 0, 1), /one and four/);
+  assert.throws(() => planImageConversion("image/webp", 10, 10, 8, 0, 1), /one and sixteen/);
+  assert.throws(() => planImageConversion("image/png", 10, 10, 8, 17, 17), /sixteen/);
 });
 
 test("changing an AMS slot updates cells and the base reference", () => {

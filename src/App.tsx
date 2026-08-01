@@ -6,11 +6,12 @@ import type { PrintExportOptions } from './exporters';
 import { imageFileToBeads } from './imageToBeads';
 import { amsColorToPaletteColor } from './print/colors';
 import { buildPrintableModel, composePrintableGrid } from './print/model';
+import { buildStackPalette } from './print/stacking';
 import { downloadThreeMf } from './print/threeMf';
 import { validatePrintableModel } from './print/validation';
 import { colorDistance, getColor, nearestPaletteColor } from './palette';
 import { MAX_PROJECT_DIMENSION, MAX_PROJECT_FILE_BYTES, composeVisibleCells, createLayer, createProject, isSafeProjectImport, loadDraft, normalizeProject, saveDraft, withCells, withLayers } from './project';
-import { findIsolatedBeads, summarizeUsage } from './usage';
+import { findIsolatedBeads, summarizeLayeredUsage, summarizeUsage } from './usage';
 import type { ArrowKind, BackgroundMode, BeadProject, ClipboardPattern, CopyMode, GenerationStyle, MirrorDirection, MoveMode, RemoveMode, RightClickAction, ShapeFillMode, ShapeKind, TextDirection, ToolId } from './types';
 
 const { useEffect, useMemo, useRef, useState } = React;
@@ -136,6 +137,17 @@ const ui: Record<Language, any> = {
         countCurrentLayer: '当前图层',
         packUnit: '包',
         noUsage: '暂无用量',
+        printMode: '打印颜色模式',
+        solidMode: '普通四色',
+        layeredMode: 'AMS 叠色',
+        layeredEstimate: '预计成色 · 0.08 mm/层 · 每种耗材 4 层',
+        stackOrder: '从底到顶',
+        tdLabel: 'TD (mm)',
+        tdBaseHint: '底色按不透光处理',
+        stackTemplate: '示例配色',
+        templateWarning: '示例 TD 仅供预览；打印前请用你的耗材校准。',
+        layerCells: '层格',
+        globalSwaps: '全局换料',
         brandCodes: '色号品牌',
         view: '视图',
         beadShape: '豆子形状',
@@ -349,6 +361,17 @@ const ui: Record<Language, any> = {
         countCurrentLayer: 'Current layer',
         packUnit: 'packs',
         noUsage: 'No usage yet',
+        printMode: 'Print color mode',
+        solidMode: 'Solid colors',
+        layeredMode: 'AMS layered',
+        layeredEstimate: 'Estimated color · 0.08 mm/layer · 4 layers per filament',
+        stackOrder: 'Bottom to top',
+        tdLabel: 'TD (mm)',
+        tdBaseHint: 'Base treated as opaque',
+        stackTemplate: 'Starter palette',
+        templateWarning: 'Template TD values are estimates; calibrate your filament before printing.',
+        layerCells: 'layer-cells',
+        globalSwaps: 'global swaps',
         brandCodes: 'Brand codes',
         view: 'View',
         beadShape: 'Bead shape',
@@ -587,6 +610,9 @@ export default function App() {
   const [past, setPast] = useState<BeadProject[]>([]);
   const [future, setFuture] = useState<BeadProject[]>([]);
   const usage = useMemo(() => summarizeUsage(project), [project]);
+  const layeredUsage = useMemo(() => (
+    project.printSettings.mode === 'layered' ? summarizeLayeredUsage(project) : []
+  ), [project]);
   const totalBeads = usage.reduce((sum, row) => sum + row.count, 0);
   const totalPacks = usage.reduce((sum, row) => sum + row.packs, 0);
   const boardCount =
@@ -599,7 +625,11 @@ export default function App() {
     [isolatedBeadRefs, showIsolatedBeads],
   );
   const selectedColor = getColor(selectedColorId);
-  const activePalette = useMemo(() => project.amsColors.map(amsColorToPaletteColor), [project.amsColors]);
+  const solidPalette = useMemo(() => project.amsColors.map(amsColorToPaletteColor), [project.amsColors]);
+  const stackPalette = useMemo(() => (
+    project.printSettings.mode === 'layered' ? buildStackPalette(project.amsColors) : []
+  ), [project.amsColors, project.printSettings.mode]);
+  const activePalette = project.printSettings.mode === 'layered' ? stackPalette : solidPalette;
   const recentColors = recentColorIds.flatMap((id) => {
     const color = activePalette.find((item) => item.id === id);
     return color ? [color] : [];
@@ -754,7 +784,7 @@ export default function App() {
       void generateFromImage({ recordHistory: shouldCommit, automatic: true });
     }, 420);
     return () => window.clearTimeout(timer);
-  }, [pendingFile, convertWidth, generationStyle, backgroundMode, tolerance, project.amsColors]);
+  }, [pendingFile, convertWidth, generationStyle, backgroundMode, tolerance, project.amsColors, project.printSettings.mode]);
 
   function commitHistory() {
     setPast((items) => [...items.slice(-39), project]);
@@ -1016,7 +1046,7 @@ export default function App() {
     try {
       const result = await imageFileToBeads(pendingFile, {
         width: convertWidth,
-        maxColors: project.amsColors.length,
+        maxColors: activePalette.length,
         palette: activePalette,
         generationStyle,
         backgroundMode,
@@ -1607,7 +1637,7 @@ export default function App() {
           errors={printErrors}
           language={language}
           onChange={updateProject}
-          onBeforeRemoveColor={commitHistory}
+          onCommit={commitHistory}
           onExport={exportThreeMf}
         />
 
@@ -2462,47 +2492,38 @@ export default function App() {
           <section className="panel-section panel-tab-body usage-section">
             <h2>{text.usage}</h2>
             <div className="usage-overview">
+              <div><span>{text.totalBeadsLabel}</span><strong>{totalBeads}</strong></div>
               <div>
-                <span>{text.totalBeadsLabel}</span>
-                <strong>{totalBeads}</strong>
+                <span>{project.printSettings.mode === 'layered' ? (language === 'zh' ? '耗材' : 'Filaments') : text.colorTypes}</span>
+                <strong>{project.printSettings.mode === 'layered' ? project.amsColors.length : usage.length}</strong>
               </div>
               <div>
-                <span>{text.colorTypes}</span>
-                <strong>{usage.length}</strong>
-              </div>
-              <div>
-                <span>{text.estimatedPacks}</span>
-                <strong>{totalPacks}</strong>
+                <span>{project.printSettings.mode === 'layered' ? text.layerCells : text.estimatedPacks}</span>
+                <strong>{project.printSettings.mode === 'layered'
+                  ? layeredUsage.reduce((sum, row) => sum + row.layerCells, 0)
+                  : totalPacks}</strong>
               </div>
             </div>
-            <label className="usage-pack-setting">
-              <span>{text.beadsPerPack}</span>
-              <div className="usage-pack-control">
-                <div className="usage-pack-stepper">
-                  <button
-                    type="button"
-                    onClick={() => stepBeadsPerPack(-1)}
-                  >
-                    -
-                  </button>
-                  <input
-                    type="number"
-                    min={1}
-                    max={10000}
-                    step={500}
-                    value={project.settings.beadsPerPack}
-                    onChange={(event) => setBeadsPerPack(Number(event.target.value))}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => stepBeadsPerPack(1)}
-                  >
-                    +
-                  </button>
+            {project.printSettings.mode === 'solid' && (
+              <label className="usage-pack-setting">
+                <span>{text.beadsPerPack}</span>
+                <div className="usage-pack-control">
+                  <div className="usage-pack-stepper">
+                    <button type="button" onClick={() => stepBeadsPerPack(-1)}>-</button>
+                    <input
+                      type="number"
+                      min={1}
+                      max={10000}
+                      step={500}
+                      value={project.settings.beadsPerPack}
+                      onChange={(event) => setBeadsPerPack(Number(event.target.value))}
+                    />
+                    <button type="button" onClick={() => stepBeadsPerPack(1)}>+</button>
+                  </div>
+                  <small>{text.perPackUnit}</small>
                 </div>
-                <small>{text.perPackUnit}</small>
-              </div>
-            </label>
+              </label>
+            )}
             <div className="usage-summary-card">
               <div className="usage-summary-head">
                 <strong>{text.countedLayerTitle}</strong>
@@ -2563,24 +2584,38 @@ export default function App() {
               )}
             </div>
             <div className="usage-list">
-              {usage.map((row) => (
-                <button
-                  key={row.color.id}
-                  onMouseEnter={() => setHighlightedColorId(row.color.id)}
-                  onMouseLeave={() => setHighlightedColorId(null)}
-                >
-                  <span className="usage-chip" style={{ backgroundColor: row.color.hex }} />
-                  <span className="usage-color-info">
-                    <strong>{displayCode(row.color)}</strong>
-                    <small>{displayName(row.color)}</small>
-                  </span>
-                  <span className="usage-count">
-                    <strong>{row.count}</strong>
-                    <small>{row.packs} {text.packUnit}</small>
-                  </span>
-                </button>
-              ))}
-              {usage.length === 0 && <div className="usage-empty">{text.noUsage}</div>}
+              {project.printSettings.mode === 'layered'
+                ? layeredUsage.map((row) => (
+                  <div className="usage-row" key={row.color.id}>
+                    <span className="usage-chip" style={{ backgroundColor: row.color.hex }} />
+                    <span className="usage-color-info">
+                      <strong>{row.color.primaryCode}</strong>
+                      <small>{row.color.name}</small>
+                    </span>
+                    <span className="usage-count">
+                      <strong>{row.layerCells}</strong>
+                      <small>{text.layerCells}</small>
+                    </span>
+                  </div>
+                ))
+                : usage.map((row) => (
+                  <button
+                    key={row.color.id}
+                    onMouseEnter={() => setHighlightedColorId(row.color.id)}
+                    onMouseLeave={() => setHighlightedColorId(null)}
+                  >
+                    <span className="usage-chip" style={{ backgroundColor: row.color.hex }} />
+                    <span className="usage-color-info">
+                      <strong>{displayCode(row.color)}</strong>
+                      <small>{displayName(row.color)}</small>
+                    </span>
+                    <span className="usage-count">
+                      <strong>{row.count}</strong>
+                      <small>{row.packs} {text.packUnit}</small>
+                    </span>
+                  </button>
+                ))}
+              {usage.length === 0 && project.printSettings.mode === 'solid' && <div className="usage-empty">{text.noUsage}</div>}
             </div>
           </section>
         )}
