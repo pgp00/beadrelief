@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import React from "react";
 import * as projectApi from "../generated/dist/src/project.js";
 import { planImageConversion } from "../generated/dist/src/imageToBeads.js";
+import PrintSettingsPanel from "../generated/dist/src/PrintSettingsPanel.js";
+import { buildPrintableModel, composePrintableGrid } from "../generated/dist/src/print/model.js";
+import { buildStackPalette, parseStackColorId } from "../generated/dist/src/print/stacking.js";
 import {
   DEFAULT_AMS_COLORS,
   amsColorToPaletteColor,
@@ -12,6 +16,29 @@ import {
 } from "../generated/dist/src/print/colors.js";
 
 const { createProject, normalizeProject, withCells } = projectApi;
+globalThis.React = React;
+
+function findElements(element, predicate, found = []) {
+  if (!element || typeof element !== "object") return found;
+  if (predicate(element)) found.push(element);
+  const children = element.props?.children;
+  for (const child of Array.isArray(children) ? children : [children]) {
+    findElements(child, predicate, found);
+  }
+  return found;
+}
+
+function renderPrintSettings(project, onChange, onCommit) {
+  return PrintSettingsPanel({
+    project,
+    model: buildPrintableModel(composePrintableGrid(project)),
+    errors: [],
+    language: "en",
+    onChange,
+    onCommit,
+    onExport() {},
+  });
+}
 
 test("AMS ids embed their slot and current color", () => {
   assert.equal(makeAmsColorId(2, "#FF8040"), "ams-2-ff8040");
@@ -96,4 +123,46 @@ test("changing an AMS slot updates cells and the base reference", () => {
   assert.deepEqual(updated.cells, ["ams-1-333333", "ams-2-f4f1e8"]);
   assert.equal(updated.printSettings.baseColorId, "ams-1-333333");
   assert.equal(project.layers[0].cells[0], "ams-1-1c1c1c");
+});
+
+test("layered print controls select modes, templates, and TD without losing stack stops", () => {
+  const initial = createProject(1, 1);
+  const solid = withCells(initial, [initial.amsColors[1].id]);
+  const changes = [];
+  let commits = 0;
+  const onChange = (project) => changes.push(project);
+  const onCommit = () => { commits += 1; };
+
+  const solidInputs = findElements(renderPrintSettings(solid, onChange, onCommit), (element) => element.type === "input" && element.props.type === "radio");
+  assert.equal(solidInputs.find((input) => input.props.checked)?.props.disabled, undefined);
+  const layeredInput = solidInputs.find((input) => !input.props.checked);
+  assert.ok(layeredInput);
+  layeredInput.props.onChange();
+  const layered = changes.at(-1);
+  assert.equal(commits, 1);
+  assert.equal(layered.printSettings.mode, "layered");
+
+  const layeredTree = renderPrintSettings(layered, onChange, onCommit);
+  const templates = findElements(layeredTree, (element) => element.type === "button" && ["CMYW", "RYBW"].includes(element.props.children));
+  const tdInputs = findElements(layeredTree, (element) => element.type === "input" && element.props.type === "number" && Number(element.props.min) === 0.01);
+  assert.equal(tdInputs.length, 4);
+  assert.equal(tdInputs[0].props.disabled, true);
+  assert.ok(tdInputs.slice(1).every((input) => !input.props.disabled));
+  assert.equal(templates.length, 2);
+  templates.find((button) => button.props.children === "RYBW").props.onClick();
+  const templated = changes.at(-1);
+  const palette = buildStackPalette(templated.amsColors);
+  assert.deepEqual(palette.map((color) => color.primaryCode), Array.from({ length: 13 }, (_, index) => `L${index + 4}`));
+
+  const selectedStop = withCells(templated, [palette[4].id]);
+  const tdInput = findElements(renderPrintSettings(selectedStop, onChange, onCommit), (element) => element.type === "input" && element.props.type === "number" && Number(element.props.min) === 0.01)[1];
+  tdInput.props.onChange({ target: { value: "1.5" } });
+  const recalibrated = changes.at(-1);
+  assert.equal(commits, 2);
+  assert.equal(parseStackColorId(recalibrated.layers[0].cells[0]).stopLevel, 8);
+  assert.notEqual(recalibrated.layers[0].cells[0], selectedStop.layers[0].cells[0]);
+
+  const solidInput = findElements(renderPrintSettings(recalibrated, onChange, onCommit), (element) => element.type === "input" && element.props.type === "radio" && element.props.checked === false)[0];
+  solidInput.props.onChange();
+  assert.equal(changes.at(-1).printSettings.mode, "solid");
 });
