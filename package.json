@@ -9,8 +9,8 @@
     "build": "tsc && node scripts/clean-dist.cjs && tsc -p tsconfig.build.json && node scripts/post-build.cjs && node scripts/write-html.cjs",
     "preview": "node scripts/dev-server.cjs",
     "test": "npm run build && node --test tests/*.test.mjs",
-    "sample": "npm run build && node scripts/generate-sample.mjs",
-    "verify": "npm run build && node --test tests/*.test.mjs && node scripts/generate-sample.mjs"
+    "sample": "npm run build && node scripts/generate-sample.mjs && node scripts/generate-layered-sample.mjs",
+    "verify": "npm run build && node --test tests/*.test.mjs && node scripts/generate-sample.mjs && node scripts/generate-layered-sample.mjs"
   },
   "dependencies": {
     "@types/three": "^0.184.1",

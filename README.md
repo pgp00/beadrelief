@@ -49,13 +49,29 @@ http://127.0.0.1:5174/
 5. `Base` 可以与其中一种拼豆颜色共用同一个 AMS 槽，因此最多只需要 4 种材料。
 6. 切片并检查颜色预览；应用不会登录、上传或直接发送打印任务。
 
-仓库内的固定验收样品是 [`samples/pingdou-p2s-sample.3mf`](samples/pingdou-p2s-sample.3mf)：5 个零件、4 种材料、20 × 20 × 2 mm。
+## AMS 叠色模式
+
+叠色模式使用固定 0.08 mm 层高和从底到顶的一种全局耗材顺序。四卷耗材生成 13 个可编辑预计色，但最多只发生 3 次全局换料；它不是 Bambu Studio Mixed Filament，也不能覆盖任意 CMYK 色域。
+
+1. 选择“AMS 叠色”，再选择 CMYW、RYBW 示例或填写自己的四卷 PLA。
+2. 按从底到顶设置颜色；AMS 1 同时打印底板。填写每卷耗材的 TD，示例值只用于初始预览。
+3. 重新导入原图以获得完整的 13 色量化；调好图案后导出 3MF。
+4. 在 Bambu Studio 中选择 P2S 0.4 mm、首层 0.16 mm、其余层 0.08 mm 和 100% 填充，将四个命名分件映射到对应 AMS 槽。
+5. 切片预览应只在材料带边界换料。颜色受实际耗材、温度和 TD 校准影响，请先打印小样。
+
+仓库内的固定验收样品：
+
+| 文件 | 分件 | 材料 | 尺寸 |
+| --- | ---: | ---: | --- |
+| [`samples/pingdou-p2s-sample.3mf`](samples/pingdou-p2s-sample.3mf) | 5 | 4 | 20 × 20 × 2 mm |
+| [`samples/pingdou-p2s-layered-sample.3mf`](samples/pingdou-p2s-layered-sample.3mf) | 4 | 4 | 20 × 20 × 2.48 mm |
 
 ## 验证
 
 ```bash
 npm run verify
 unzip -t samples/pingdou-p2s-sample.3mf
+unzip -t samples/pingdou-p2s-layered-sample.3mf
 ```
 
 `npm run verify` 会构建应用、运行 Node 原生测试并重新生成固定 3MF 样品。
