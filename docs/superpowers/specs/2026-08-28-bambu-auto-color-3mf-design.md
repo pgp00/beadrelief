@@ -1,7 +1,7 @@
 # Bambu Auto-Color 3MF Design
 
 Date: 2026-08-28  
-Status: Approved in conversation; awaiting written-spec review
+Status: Approved
 
 ## Objective
 
