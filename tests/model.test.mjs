@@ -25,7 +25,7 @@ test("visible cells become a base plus one part per used color", () => {
     first.id, second.id,
   ]);
   assert.deepEqual(model.parts.map((part) => part.name), ["Base", `Beads_${first.name}`, `Beads_${second.name}`]);
-  assert.deepEqual(model.materials.map((material) => material.id), [first.id, second.id]);
+  assert.deepEqual(model.materials.map((material) => material.id), project.amsColors.map((material) => material.id));
   assert.deepEqual(model.sizeMm, { x: 10, y: 10, z: 2 });
 });
 
