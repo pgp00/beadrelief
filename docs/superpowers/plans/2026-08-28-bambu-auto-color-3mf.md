@@ -320,6 +320,8 @@ git commit -m "feat: embed Bambu color assignments in 3mf"
 ### Task 3: Update export feedback and deterministic samples
 
 **Files:**
+- Modify: `README.md`
+- Modify: `README.zh-CN.md`
 - Modify: `src/App.tsx`
 - Modify: `scripts/generate-sample.mjs`
 - Modify: `tests/colors.test.mjs`
@@ -400,7 +402,7 @@ Run:
 shasum -a 256 samples/pingdou-heart-source.png samples/pingdou-heart-project.json samples/pingdou-heart-p2s.3mf samples/pingdou-p2s-sample.3mf samples/pingdou-p2s-layered-sample.3mf
 ```
 
-Replace the corresponding old hashes in `docs/verification/bambu-studio-p2s.md` and `docs/release-v0.1.0.md` with the command output. Change statements that say part assignment is always manual to: project-filament colors and part assignments are included; physical AMS mapping must be confirmed before printing. Do not add a slice or physical-print pass claim.
+Replace the corresponding old hashes in `docs/verification/bambu-studio-p2s.md` and `docs/release-v0.1.0.md` with the command output. In those files plus `README.md` and `README.zh-CN.md`, change statements that say part assignment is always manual to: project-filament colors and part assignments are included; physical AMS mapping must be confirmed before printing. Keep the three-step Bambu handoff accurate in both languages. Do not add a slice or physical-print pass claim.
 
 - [ ] **Step 6: Run focused and full verification**
 
@@ -408,6 +410,7 @@ Run:
 
 ```bash
 node --test tests/colors.test.mjs tests/three-mf.test.mjs tests/task-5-ui.test.mjs
+git add samples/pingdou-p2s-sample.3mf samples/pingdou-p2s-layered-sample.3mf samples/pingdou-heart-project.json samples/pingdou-heart-p2s.3mf
 npm run verify
 git diff --exit-code -- samples
 git diff --check
@@ -418,7 +421,7 @@ Expected: focused tests and the full suite pass; a second generator run leaves a
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/App.tsx scripts/generate-sample.mjs tests/colors.test.mjs tests/three-mf.test.mjs tests/task-5-ui.test.mjs samples/pingdou-p2s-sample.3mf samples/pingdou-p2s-layered-sample.3mf samples/pingdou-heart-project.json samples/pingdou-heart-p2s.3mf docs/verification/bambu-studio-p2s.md docs/release-v0.1.0.md
+git add README.md README.zh-CN.md src/App.tsx scripts/generate-sample.mjs tests/colors.test.mjs tests/three-mf.test.mjs tests/task-5-ui.test.mjs samples/pingdou-p2s-sample.3mf samples/pingdou-p2s-layered-sample.3mf samples/pingdou-heart-project.json samples/pingdou-heart-p2s.3mf docs/verification/bambu-studio-p2s.md docs/release-v0.1.0.md
 git diff --cached --name-only
 git commit -m "feat: ship auto-colored Bambu 3mf samples"
 ```
