@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { createProject } from "../generated/dist/src/project.js";
 import { composePrintableGrid, buildPrintableModel, meshBounds } from "../generated/dist/src/print/model.js";
 import { createThreeMf } from "../generated/dist/src/print/threeMf.js";
@@ -84,4 +85,20 @@ test("layered 3MF exports only physical material bands", async () => {
   assert.doesNotMatch(xml, /Estimated_/);
   assert.match(xml, /Base_and_Beads_Bambu_PLA_Basic_Blue/);
   assert.match(xml, /Stack_Bambu_PLA_Basic_White/);
+});
+
+test("heart sample keeps its deterministic 10 by 10 three-color footprint", async () => {
+  const project = JSON.parse(await readFile("samples/pingdou-heart-project.json", "utf8"));
+  assert.deepEqual(
+    [project.width, project.height, project.printSettings.cellPitchMm],
+    [10, 10, 2.5],
+  );
+  assert.equal(project.printSettings.mode, "solid");
+  assert.equal(project.amsColors.length, 3);
+  assert.equal(project.printSettings.baseColorId, "ams-2-f4f1e8");
+  assert.deepEqual(buildPrintableModel(composePrintableGrid(project)).sizeMm, {
+    x: 25,
+    y: 25,
+    z: 2,
+  });
 });
