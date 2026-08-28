@@ -30,6 +30,9 @@ export function validatePrintableModel(model: PrintableModel, checkTopology = tr
   }
   if (model.materials.length < 1 || model.materials.length > 4) errors.push('Use between one and four materials.');
   if (model.materials.some((material) => !material.name.trim())) errors.push('Every material needs a name.');
+  if (model.materials.some((material) => !/^#[0-9a-f]{6}$/i.test(material.hex))) {
+    errors.push('Every material needs a six-digit hex color.');
+  }
   if (model.parts.length < (model.mode === 'layered' ? 1 : 2)) {
     errors.push(model.mode === 'layered'
       ? 'The layered model needs a combined base/bead part.'

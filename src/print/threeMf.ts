@@ -11,6 +11,8 @@ export function createThreeMfEntries(model: PrintableModel): ZipEntry[] {
     { name: '[Content_Types].xml', data: encoder.encode(contentTypesXml()) },
     { name: '_rels/.rels', data: encoder.encode(relationshipsXml()) },
     { name: '3D/3dmodel.model', data: encoder.encode(modelXml(model)) },
+    { name: 'Metadata/project_settings.config', data: encoder.encode(projectSettingsJson(model)) },
+    { name: 'Metadata/model_settings.config', data: encoder.encode(modelSettingsXml(model)) },
   ];
 }
 
@@ -59,7 +61,9 @@ function modelXml(model: PrintableModel): string {
     `          <component objectid="${objectStartId + index}"/>`,
   ).join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>
-<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:BambuStudio="http://schemas.bambulab.com/package/2021">
+  <metadata name="Application">Pingdou-0.1.0</metadata>
+  <metadata name="BambuStudio:3mfVersion">1</metadata>
   <resources>
     <basematerials id="1">
 ${materials}
@@ -75,6 +79,32 @@ ${components}
     <item objectid="${assemblyId}"/>
   </build>
 </model>`;
+}
+
+function projectSettingsJson(model: PrintableModel): string {
+  return `${JSON.stringify({
+    filament_colour: model.materials.map((material) => material.hex.toUpperCase()),
+    filament_type: model.materials.map(() => 'PLA'),
+  }, null, 4)}\n`;
+}
+
+function modelSettingsXml(model: PrintableModel): string {
+  const objectId = 2 + model.parts.length;
+  const parts = model.parts.map((part, index) => {
+    const materialIndex = model.materials.findIndex((material) => material.id === part.materialId);
+    if (materialIndex < 0) throw new Error(`${part.name} references a missing material.`);
+    return `    <part id="${index + 1}" subtype="normal_part">
+      <metadata key="name" value="${escapeXml(part.name)}"/>
+      <metadata key="extruder" value="${materialIndex + 1}"/>
+    </part>`;
+  }).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<config>
+  <object id="${objectId}">
+    <metadata key="name" value="${escapeXml(model.name)}"/>
+${parts}
+  </object>
+</config>`;
 }
 
 function meshObjectXml(part: PrintablePart, id: number, materialIndex: number): string {

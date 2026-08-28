@@ -134,8 +134,7 @@ function buildSolidPrintableModel(grid: SolidPrintableGrid): PrintableModel {
   const widthMm = grid.width * grid.settings.cellPitchMm;
   const heightMm = grid.height * grid.settings.cellPitchMm;
   const base = createBaseMesh(widthMm, heightMm, grid.settings.baseThicknessMm);
-  const usedIds = new Set([grid.settings.baseColorId, ...grid.cells]);
-  const materials = grid.materials.filter((material) => usedIds.has(material.id));
+  const materials = grid.materials.map((material) => ({ ...material }));
   const parts: PrintablePart[] = [{
     name: 'Base',
     materialId: grid.settings.baseColorId,

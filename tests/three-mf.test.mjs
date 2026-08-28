@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createProject } from "../generated/dist/src/project.js";
+import { DEFAULT_AMS_COLORS } from "../generated/dist/src/print/colors.js";
 import { composePrintableGrid, buildPrintableModel, meshBounds } from "../generated/dist/src/print/model.js";
 import { createThreeMf } from "../generated/dist/src/print/threeMf.js";
 
@@ -27,18 +28,32 @@ function readStoredEntries(archive) {
 
 test("3MF contains one assembly, named parts, and four or fewer base materials", () => {
   const project = createProject(2, 2);
-  project.layers[0].cells = [
-    "ams-1-1c1c1c", "ams-2-f4f1e8",
-    "ams-3-ed2b2b", "ams-4-2864dc",
-  ];
+  project.amsColors = DEFAULT_AMS_COLORS.map((material) => ({ ...material }));
+  project.layers[0].cells = project.amsColors.map((material) => material.id);
   const model = buildPrintableModel(composePrintableGrid(project));
   const archive = createThreeMf(model);
   assert.deepEqual(archive, createThreeMf(model));
   const entries = readStoredEntries(archive);
   assert.deepEqual([...entries.keys()], [
-    "[Content_Types].xml", "_rels/.rels", "3D/3dmodel.model",
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "3D/3dmodel.model",
+    "Metadata/project_settings.config",
+    "Metadata/model_settings.config",
   ]);
   const decoder = new TextDecoder();
+  const projectSettings = JSON.parse(decoder.decode(entries.get("Metadata/project_settings.config")));
+  assert.deepEqual(projectSettings.filament_colour, model.materials.map((material) => material.hex.toUpperCase()));
+  assert.deepEqual(projectSettings.filament_type, model.materials.map(() => "PLA"));
+  const modelSettings = decoder.decode(entries.get("Metadata/model_settings.config"));
+  model.parts.forEach((part, index) => {
+    const materialIndex = model.materials.findIndex((material) => material.id === part.materialId);
+    assert.notEqual(materialIndex, -1);
+    assert.match(
+      modelSettings,
+      new RegExp(`<part id="${index + 1}"[\\s\\S]*?key="extruder" value="${materialIndex + 1}"`),
+    );
+  });
   const relationships = decoder.decode(entries.get("_rels/.rels"));
   assert.match(relationships, /Target="\/3D\/3dmodel\.model"/);
   const xml = decoder.decode(entries.get("3D/3dmodel.model"));
@@ -72,6 +87,18 @@ test("3MF contains one assembly, named parts, and four or fewer base materials",
   assert.equal(new TextDecoder().decode(archive.slice(-22, -18)), "PK\u0005\u0006");
 });
 
+test("3MF rejects missing material references and malformed material colors", () => {
+  const project = createProject(1, 1);
+  project.layers[0].cells = [project.amsColors[1].id];
+  const model = buildPrintableModel(composePrintableGrid(project));
+  model.parts[0].materialId = "missing";
+  assert.throws(() => createThreeMf(model), /references a missing material/);
+
+  model.parts[0].materialId = model.materials[0].id;
+  model.materials[0].hex = "white";
+  assert.throws(() => createThreeMf(model), /six-digit hex color/);
+});
+
 test("layered 3MF exports only physical material bands", async () => {
   const { withStackTemplate } = await import("../generated/dist/src/project.js");
   const { buildStackPalette } = await import("../generated/dist/src/print/stacking.js");
@@ -79,9 +106,13 @@ test("layered 3MF exports only physical material bands", async () => {
   const palette = buildStackPalette(project.amsColors);
   project.layers[0].cells = [palette[0].id, palette[4].id, palette[8].id, palette[12].id];
   const model = buildPrintableModel(composePrintableGrid(project));
-  const xml = new TextDecoder().decode(readStoredEntries(createThreeMf(model)).get("3D/3dmodel.model"));
+  const entries = readStoredEntries(createThreeMf(model));
+  const decoder = new TextDecoder();
+  const xml = decoder.decode(entries.get("3D/3dmodel.model"));
+  const modelSettings = decoder.decode(entries.get("Metadata/model_settings.config"));
   assert.equal((xml.match(/<base /g) ?? []).length, 4);
   assert.equal((xml.match(/<component objectid=/g) ?? []).length, 4);
+  assert.equal((modelSettings.match(/<part id="/g) ?? []).length, model.parts.length);
   assert.doesNotMatch(xml, /Estimated_/);
   assert.match(xml, /Base_and_Beads_Bambu_PLA_Basic_Blue/);
   assert.match(xml, /Stack_Bambu_PLA_Basic_White/);
