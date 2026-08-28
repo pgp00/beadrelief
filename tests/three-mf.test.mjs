@@ -166,7 +166,13 @@ test("heart sample keeps its deterministic 10 by 10 three-color footprint", asyn
   );
   assert.equal(project.printSettings.mode, "solid");
   assert.equal(project.amsColors.length, 3);
-  assert.equal(project.printSettings.baseColorId, "ams-2-f4f1e8");
+  assert.deepEqual(
+    project.amsColors.map(({ name, hex }) => [name, hex]),
+    [["White", "#f4f1e8"], ["Black", "#1c1c1c"], ["Red", "#ed2b2b"]],
+  );
+  const [white, black, red] = project.amsColors;
+  assert.equal(project.printSettings.baseColorId, white.id);
+  assert.deepEqual(new Set(project.cells.filter(Boolean)), new Set([white.id, black.id, red.id]));
   assert.deepEqual(buildPrintableModel(composePrintableGrid(project)).sizeMm, {
     x: 25,
     y: 25,

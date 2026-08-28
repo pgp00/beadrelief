@@ -1,15 +1,18 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { createProject } from "../generated/dist/src/project.js";
+import { DEFAULT_AMS_COLORS } from "../generated/dist/src/print/colors.js";
 import { composePrintableGrid, buildPrintableModel } from "../generated/dist/src/print/model.js";
 import { createThreeMf } from "../generated/dist/src/print/threeMf.js";
 import { validatePrintableModel } from "../generated/dist/src/print/validation.js";
 
 const project = createProject(4, 4, "pingdou-p2s-sample");
+project.amsColors.push({ ...DEFAULT_AMS_COLORS[3] });
+const [white, black, red, blue] = project.amsColors;
 project.layers[0].cells = [
-  "ams-1-1c1c1c", "ams-1-1c1c1c", "ams-2-f4f1e8", "ams-2-f4f1e8",
-  "ams-1-1c1c1c", "ams-3-ed2b2b", "ams-3-ed2b2b", "ams-2-f4f1e8",
-  "ams-4-2864dc", "ams-3-ed2b2b", "ams-3-ed2b2b", "ams-4-2864dc",
-  "ams-4-2864dc", "ams-4-2864dc", "ams-1-1c1c1c", "ams-2-f4f1e8",
+  black.id, black.id, white.id, white.id,
+  black.id, red.id, red.id, white.id,
+  blue.id, red.id, red.id, blue.id,
+  blue.id, blue.id, black.id, white.id,
 ];
 
 const model = buildPrintableModel(composePrintableGrid(project));
@@ -43,17 +46,17 @@ if (heartRows.length !== 10 || heartRows.some((row) => row.length !== 10 || /[^.
 }
 
 const heartProject = createProject(10, 10, "pingdou-heart");
-heartProject.amsColors = heartProject.amsColors.slice(0, 3);
+const [heartWhite, heartBlack, heartRed] = heartProject.amsColors;
 heartProject.printSettings = {
   ...heartProject.printSettings,
   cellPitchMm: 2.5,
-  baseColorId: "ams-2-f4f1e8",
+  baseColorId: heartProject.amsColors[0].id,
   mode: "solid",
 };
 const heartCells = heartRows.flatMap((row) => [...row].map((cell) => ({
-  ".": "ams-2-f4f1e8",
-  "#": "ams-1-1c1c1c",
-  R: "ams-3-ed2b2b",
+  ".": heartWhite.id,
+  "#": heartBlack.id,
+  R: heartRed.id,
 }[cell])));
 heartProject.cells = heartCells;
 heartProject.layers[0].cells = heartCells;

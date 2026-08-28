@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import React from "react";
 import { createProject } from "../generated/dist/src/project.js";
 
@@ -7,7 +8,13 @@ globalThis.React = React;
 const { ui } = await import("../generated/dist/src/i18n.js");
 const { imageLaunchState, loadHeartSample } = await import("../generated/dist/src/App.js");
 
-test("first-use launch copy and state stay localized", () => {
+test("first-use launch and export copy stay localized", async () => {
+  const source = await readFile("src/App.tsx", "utf8");
+  assert.match(source, /Bambu colors included/);
+  assert.match(source, /已包含 Bambu 颜色分配/);
+  assert.match(source, /confirm.*AMS/i);
+  assert.match(source, /确认.*AMS/);
+
   assert.deepEqual(
     [ui.en.trySample, ui.en.uploadYourImage, ui.en.exportThreeMf],
     ["Try the sample", "Upload your image", "Export 3MF"],

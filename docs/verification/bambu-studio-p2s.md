@@ -6,17 +6,19 @@
 - Source PNG: `samples/pingdou-heart-source.png`
 - Source PNG SHA-256: `e6f8cc9cde3bebb2bce12cf8ef96dfa403c9d658702a6d4a2a9c04eeffa41d44`
 - Editable project: `samples/pingdou-heart-project.json`
-- Editable project SHA-256: `60adcce884dd146b0e8574d05ef4d9d1a722cb125d65eb900cb96902726aca20`
+- Editable project SHA-256: `4d67c502a30d4a02614e791dd7777f10dcfdd2b4c97fd4cdde27ea71c4e9d3d5`
 - Release 3MF: `samples/pingdou-heart-p2s.3mf`
-- Release 3MF SHA-256: `8152531195e23e555d8073a6a4f9c8221e536aa1a7de999e0618f81945253579`
+- Release 3MF SHA-256: `8565e9aa27a34a895a2f5c58fe9dbe09471585f3ad320fe53092900effab7ce8`
 - Artifact dimensions: 10 × 10 cells, 25 × 25 × 2 mm
 - Materials: white, black, and red
 - Target software: Bambu Studio `02.08.02.61`
 - Target printer/nozzle: Bambu Lab P2S, 0.4 mm
 - Process profile and layer height: pending maintainer GUI slice
-- Filament slot assignments: pending maintainer GUI confirmation
+- Project-filament colors and part assignments: embedded in the release 3MF; pending maintainer GUI confirmation
+- Physical AMS slot mapping: pending maintainer GUI confirmation
 - Import result: pending maintainer GUI confirmation
-- Assignment result: pending maintainer GUI confirmation
+- Project-filament assignment result: embedded in the release 3MF; pending maintainer GUI confirmation
+- Physical AMS assignment result: pending maintainer GUI confirmation
 - Slice result: pending maintainer GUI confirmation
 - Estimated print time: pending; must be below 30 minutes
 - Actual wall-clock print time: pending; must be below 30 minutes
@@ -35,7 +37,7 @@ The three image files above are intentionally not linked from the public README 
 - Printer profile: Bambu Lab P2S, 0.4 mm nozzle
 - Process profile: 0.20 mm Standard @BBL P2S
 - Sample: `samples/pingdou-p2s-sample.3mf`
-- Sample SHA-256: `d325903b031b7cb40f34b452e280c94c1ed674b9586bfcba1f41486e80d5aa55`
+- Sample SHA-256: `b2cbd16dc3953efbec34dd01358dff59fa7e3a9b89397188b234b65ce45cd9dd`
 - Imported structure: one assembly with five independently assignable parts
 - 3MF part names: `Base`, `Beads_Black`, `Beads_White`, `Beads_Red`, `Beads_Blue`
 - Bambu Studio labels: `Pingdou`, `Pingdou_2`, `Pingdou_3`, `Pingdou_4`, `Pingdou_5`
@@ -47,20 +49,20 @@ The three image files above are intentionally not linked from the public README 
 - Slice result: pass
 - Slice height check: layer 6 is a continuous 1.20 mm base; layer 10 reaches 2.00 mm and shows all four bead colors with shallow closed center dimples
 - Slice totals: 32m0s, 12 filament changes, 2.61 m / 7.91 g including purge tower and purged filament
-- Notes: Bambu Studio displayed its standard third-party 3MF warning and imported one project filament initially. Adding three project filaments and assigning the five parts produced the expected four-color preview. It also replaced the standard child-object names with sequential `Pingdou` labels in its UI; the archive retains the five descriptive names. No account, printer connection, upload, or print command was used.
+- Notes: Bambu Studio displayed its standard third-party 3MF warning. This earlier compatibility run configured the pre-auto-color archive with four project filaments and five part mappings, producing the expected four-color preview. It also replaced the standard child-object names with sequential `Pingdou` labels in its UI; the archive retains the five descriptive names. No account, printer connection, upload, or print command was used.
 
 ## Layered fixture — Phase A CLI evidence
 
 - Sample: `samples/pingdou-p2s-layered-sample.3mf`
 - Generator: `scripts/generate-layered-sample.mjs`
-- CLI verification: `npm run verify` passed: 34 Node tests, then both sample generators completed.
+- CLI verification: `npm run verify` passed: 56 Node tests, then both sample generators completed.
 - Archive integrity: `unzip -t` reported `No errors detected` for both fixed samples.
 - Solid sample SHA-256 before generator run: `f36d35befb5b86c72e1df72727f4be8b680d67d9a2a4f50ec92290d5cd14da30`
-- Solid sample SHA-256 after generator run and current fixture: `d325903b031b7cb40f34b452e280c94c1ed674b9586bfcba1f41486e80d5aa55`.
-- Layered sample SHA-256: `74c9e2d9775deea9dee7258081cd70fd05f59920068783fa4a9eab5b3e4fa736`
+- Solid sample SHA-256 after generator run and current fixture: `b2cbd16dc3953efbec34dd01358dff59fa7e3a9b89397188b234b65ce45cd9dd`.
+- Layered sample SHA-256: `bb548f44fcfc8c01c86cbb35e58f665137e29e7c819117ad551614ac72dfff5f`
 - XML structure: 4 base materials, 4 assembly components, physical-part bounds `0 × 0 × 0` to `20 × 20 × 2.48 mm`, and no `Estimated_*` geometry.
 
-The generated fixtures are deterministic. The solid fixture changed only because the Task 3 manifold topology correction changed cap-center vertex order and cap-triangle winding; archive entries, size, and model dimensions are unchanged. The layered fixture uses four RYBW physical materials in bottom-to-top AMS order. Its exported model excludes `Estimated_*` preview geometry; those estimated colors are preview-only and are not Bambu Studio Mixed Filament metadata.
+The generated fixtures are deterministic. The solid fixture was regenerated with the white/black/red slot order and embedded Bambu project-filament metadata; its dimensions remain unchanged. The layered fixture uses four RYBW physical materials in bottom-to-top AMS order. Its exported model excludes `Estimated_*` preview geometry; those estimated colors are preview-only and are not Bambu Studio Mixed Filament metadata.
 
 ## Layered fixture — Bambu Studio acceptance
 

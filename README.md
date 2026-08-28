@@ -9,7 +9,7 @@ Turn any image into an editable, multicolor 3MF bead relief — locally in your 
 
 - **Local by design:** source images and generated files stay in your browser.
 - **Editable before export:** fix individual cells after image conversion.
-- **Grouped 3MF output:** export parts that can be assigned in Bambu Studio.
+- **Grouped 3MF output:** export parts with Bambu project-filament colors and assignments included.
 
 ## 60-second quick start
 
@@ -21,7 +21,7 @@ Turn any image into an editable, multicolor 3MF bead relief — locally in your 
 ## Bambu Studio in 3 steps
 
 1. Import the exported `.3mf` into Bambu Studio.
-2. Select the Bambu Lab P2S and `0.4 mm` nozzle, then manually assign filament slots to the parts.
+2. Select the Bambu Lab P2S and `0.4 mm` nozzle, then review the included project-filament colors and part assignments; confirm their mapping to the physical AMS slots before printing.
 3. Slice and inspect the color preview before printing.
 
 ## Heart sample
@@ -34,7 +34,7 @@ Use the same small heart through the full editable-project path:
 
 ## P2S release verification
 
-The heart sample is not yet verified in a real Bambu Studio GUI session, and no physical-print photograph is available. Import, filament assignment, layer/profile settings, estimated time, slice result, and wall-clock print time remain pending measured evidence. See the [verification record](docs/verification/bambu-studio-p2s.md) for the artifact hashes and release-gate status.
+The heart sample is not yet verified in a real Bambu Studio GUI session, and no physical-print photograph is available. Import, project-filament color and part-assignment behavior, physical AMS mapping, layer/profile settings, estimated time, slice result, and wall-clock print time remain pending measured evidence. See the [verification record](docs/verification/bambu-studio-p2s.md) for the artifact hashes and release-gate status.
 
 Target setup: Bambu Studio `v02.08.02.61`, Bambu Lab P2S, `0.4 mm` nozzle.
 
@@ -56,7 +56,7 @@ Open http://127.0.0.1:5174/ in your browser.
 - Solid mode exports one grouped relief; layered mode uses one global bottom-to-top filament order and is not Bambu Studio Mixed Filament metadata.
 - A project uses up to four materials.
 - 3MF export is limited to 32 × 32 cells.
-- Filament assignment in Bambu Studio is manual.
+- Exported project-filament colors and part assignments are included; confirm the physical AMS slot mapping in Bambu Studio before printing.
 
 ## Privacy
 
