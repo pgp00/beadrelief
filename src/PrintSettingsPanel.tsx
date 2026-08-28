@@ -1,5 +1,6 @@
 import { DEFAULT_AMS_COLORS, makeAmsColorId, replaceProjectColor } from './print/colors';
 import type { PrintableModel } from './print/model';
+import { PRINT_SETTING_LIMITS } from './print/settings';
 import type { StackTemplateId } from './print/stacking';
 import { withLayeredMaterials, withPrintMode, withStackTemplate } from './project';
 import type { BeadProject, PrintMode, PrintSettings } from './types';
@@ -22,11 +23,11 @@ const numberFields: Array<{
   max: number;
   step: number;
 }> = [
-  { key: 'cellPitchMm', zh: '格距', en: 'Pitch', min: 2, max: 10, step: 0.1 },
-  { key: 'baseThicknessMm', zh: '底板厚度', en: 'Base', min: 0.4, max: 5, step: 0.2 },
-  { key: 'beadHeightMm', zh: '拼豆浮雕', en: 'Relief', min: 0.2, max: 4, step: 0.2 },
-  { key: 'dimpleDiameterMm', zh: '中心凹点直径', en: 'Dimple Ø', min: 0, max: 5, step: 0.1 },
-  { key: 'dimpleDepthMm', zh: '中心凹点深度', en: 'Dimple depth', min: 0, max: 2, step: 0.1 },
+  { key: 'cellPitchMm', zh: '格距', en: 'Pitch', ...PRINT_SETTING_LIMITS.cellPitchMm, step: 0.1 },
+  { key: 'baseThicknessMm', zh: '底板厚度', en: 'Base', ...PRINT_SETTING_LIMITS.baseThicknessMm, step: 0.2 },
+  { key: 'beadHeightMm', zh: '拼豆浮雕', en: 'Relief', ...PRINT_SETTING_LIMITS.beadHeightMm, step: 0.2 },
+  { key: 'dimpleDiameterMm', zh: '中心凹点直径', en: 'Dimple Ø', ...PRINT_SETTING_LIMITS.dimpleDiameterMm, step: 0.1 },
+  { key: 'dimpleDepthMm', zh: '中心凹点深度', en: 'Dimple depth', ...PRINT_SETTING_LIMITS.dimpleDepthMm, step: 0.1 },
 ];
 
 export default function PrintSettingsPanel({ project, model, errors, language, onChange, onCommit, onExport }: Props) {

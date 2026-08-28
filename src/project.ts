@@ -1,6 +1,6 @@
 import { getColor, paletteVersion } from './palette';
 import { DEFAULT_AMS_COLORS, amsColorToPaletteColor, makeAmsColorId, nearestPaletteColorOklab, normalizeHex } from './print/colors';
-import { DEFAULT_PRINT_SETTINGS } from './print/settings';
+import { DEFAULT_PRINT_SETTINGS, PRINT_SETTING_LIMITS } from './print/settings';
 import { STACK_LAYERS_PER_FILAMENT, STACK_TEMPLATES, buildStackPalette, parseStackColorId, type StackTemplateId } from './print/stacking';
 import type { AmsColor, BeadLayer, BeadProject, PaletteColor, PrintMode } from './types';
 
@@ -166,9 +166,48 @@ export function normalizeProject(project: BeadProject): BeadProject {
   const height = isSafeDimension(project.height) ? project.height : 32;
   const fallback = createProject(width, height, project.name);
   const amsColors = normalizeAmsColors(project.amsColors);
-  const mode = project.printSettings?.mode === 'layered' && amsColors.length >= 2 ? 'layered' : 'solid';
-  const requestedBase = project.printSettings?.baseColorId;
-  const requestedSlot = Number(/^ams-([1-4])-/.exec(requestedBase ?? '')?.[1]);
+  const importedPrintSettings = project.printSettings && typeof project.printSettings === 'object'
+    ? project.printSettings as Partial<BeadProject['printSettings']>
+    : {};
+  const cellPitchMm = finiteInRange(
+    importedPrintSettings.cellPitchMm,
+    DEFAULT_PRINT_SETTINGS.cellPitchMm,
+    PRINT_SETTING_LIMITS.cellPitchMm.min,
+    PRINT_SETTING_LIMITS.cellPitchMm.max,
+  );
+  const baseThicknessMm = finiteInRange(
+    importedPrintSettings.baseThicknessMm,
+    DEFAULT_PRINT_SETTINGS.baseThicknessMm,
+    PRINT_SETTING_LIMITS.baseThicknessMm.min,
+    PRINT_SETTING_LIMITS.baseThicknessMm.max,
+  );
+  const beadHeightMm = finiteInRange(
+    importedPrintSettings.beadHeightMm,
+    DEFAULT_PRINT_SETTINGS.beadHeightMm,
+    PRINT_SETTING_LIMITS.beadHeightMm.min,
+    PRINT_SETTING_LIMITS.beadHeightMm.max,
+  );
+  const dimpleDiameterMm = Math.min(
+    finiteInRange(
+      importedPrintSettings.dimpleDiameterMm,
+      DEFAULT_PRINT_SETTINGS.dimpleDiameterMm,
+      PRINT_SETTING_LIMITS.dimpleDiameterMm.min,
+      PRINT_SETTING_LIMITS.dimpleDiameterMm.max,
+    ),
+    cellPitchMm - 0.2,
+  );
+  const dimpleDepthMm = Math.min(
+    finiteInRange(
+      importedPrintSettings.dimpleDepthMm,
+      DEFAULT_PRINT_SETTINGS.dimpleDepthMm,
+      PRINT_SETTING_LIMITS.dimpleDepthMm.min,
+      PRINT_SETTING_LIMITS.dimpleDepthMm.max,
+    ),
+    beadHeightMm - 0.2,
+  );
+  const mode = importedPrintSettings.mode === 'layered' && amsColors.length >= 2 ? 'layered' : 'solid';
+  const requestedBase = typeof importedPrintSettings.baseColorId === 'string' ? importedPrintSettings.baseColorId : '';
+  const requestedSlot = Number(/^ams-([1-4])-/.exec(requestedBase)?.[1]);
   const baseColorId =
     amsColors.find((color) => color.id === requestedBase)?.id ??
     amsColors[requestedSlot - 1]?.id ??
@@ -200,8 +239,11 @@ export function normalizeProject(project: BeadProject): BeadProject {
     boardSettings: { ...fallback.boardSettings, ...project.boardSettings },
     amsColors,
     printSettings: {
-      ...DEFAULT_PRINT_SETTINGS,
-      ...project.printSettings,
+      cellPitchMm,
+      baseThicknessMm,
+      beadHeightMm,
+      dimpleDiameterMm,
+      dimpleDepthMm,
       baseColorId,
       mode,
     },
@@ -212,6 +254,12 @@ export function normalizeProject(project: BeadProject): BeadProject {
   return mode === 'layered'
     ? remapPrintCells(normalized, amsColors, mode, buildStackPalette(amsColors))
     : normalized;
+}
+
+function finiteInRange(value: unknown, fallback: number, min: number, max: number): number {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.min(max, Math.max(min, value))
+    : fallback;
 }
 
 function normalizeAmsColors(colors: AmsColor[] | undefined): AmsColor[] {

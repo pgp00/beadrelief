@@ -63,10 +63,9 @@ test("malformed layered stack IDs are reported by model validation", () => {
   assert.match(validatePrintableModel(model).join("\n"), /invalid layered stop color/);
 });
 
-test("the largest layered grid validates without spread argument overflow", () => {
-  const project = withStackTemplate(createProject(50, 50), "rybw");
-  const palette = buildStackPalette(project.amsColors);
-  project.layers[0].cells.fill(palette[12].id);
-  const model = buildPrintableModel(composePrintableGrid(project));
-  assert.deepEqual(validatePrintableModel(model, false), []);
+test("3MF export accepts 32 cells per side and rejects larger grids", () => {
+  const accepted = buildPrintableModel(composePrintableGrid(createProject(32, 32)));
+  const rejected = buildPrintableModel(composePrintableGrid(createProject(33, 32)));
+  assert.doesNotMatch(validatePrintableModel(accepted, false).join("\n"), /32 × 32/);
+  assert.match(validatePrintableModel(rejected, false).join("\n"), /32 × 32/);
 });

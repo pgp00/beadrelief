@@ -1,6 +1,8 @@
 import type { PrintableModel, PrintablePart } from './model';
 import { STACK_LAYER_HEIGHT_MM } from './stacking';
 
+export const MAX_EXPORT_GRID_DIMENSION = 32;
+
 export function closedEdgeErrors(part: PrintablePart): string[] {
   const counts = new Map<string, number>();
   for (let index = 0; index < part.triangles.length; index += 3) {
@@ -20,6 +22,12 @@ export function closedEdgeErrors(part: PrintablePart): string[] {
 export function validatePrintableModel(model: PrintableModel, checkTopology = true): string[] {
   const errors = [...model.inputErrors];
   if (model.gridSize.width <= 0 || model.gridSize.height <= 0) errors.push('The printable grid is empty.');
+  if (
+    model.gridSize.width > MAX_EXPORT_GRID_DIMENSION ||
+    model.gridSize.height > MAX_EXPORT_GRID_DIMENSION
+  ) {
+    errors.push('3MF export supports up to 32 × 32 cells in v0.1.0.');
+  }
   if (model.materials.length < 1 || model.materials.length > 4) errors.push('Use between one and four materials.');
   if (model.materials.some((material) => !material.name.trim())) errors.push('Every material needs a name.');
   if (model.parts.length < (model.mode === 'layered' ? 1 : 2)) {
