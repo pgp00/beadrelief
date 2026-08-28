@@ -235,7 +235,7 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
       )}
 
       {errors.length > 0 && (
-        <ul className="print-errors" role="alert">
+        <ul id="print-export-errors" className="print-errors" role="alert" tabIndex={-1}>
           {errors.map((error) => <li key={error}>{error}</li>)}
         </ul>
       )}

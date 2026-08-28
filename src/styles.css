@@ -559,6 +559,10 @@ button:focus-visible {
 }
 
 .export-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   min-width: 86px;
   height: 30px;
   min-height: 30px;
@@ -604,7 +608,7 @@ button:focus-visible {
   gap: 6px;
 }
 
-.print-export-button svg {
+.export-action-button svg {
   width: 16px;
   height: 16px;
   fill: none;
@@ -973,6 +977,17 @@ button:focus-visible {
 .image-card {
   flex: 0 0 auto;
   align-content: start;
+}
+
+.image-empty-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.image-empty-actions button {
+  min-width: 0;
+  padding-inline: 8px;
 }
 
 .print-settings-card {

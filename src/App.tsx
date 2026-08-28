@@ -663,12 +663,12 @@ export default function App() {
     setCanvasHeight(preset.height);
   }
 
-  function handleImageFile(file: File): boolean {
+  function handleImageFile(file: File, options: { replacementConfirmed?: boolean } = {}): boolean {
     if (!file.type.match(/^image\/(png|jpeg|jpg|webp)$/)) {
       setNotice(language === 'zh' ? '请使用 PNG、JPG、JPEG 或 WebP 图片。' : 'Use a PNG, JPG, JPEG, or WebP image.');
       return false;
     }
-    if (!allowProjectReplacement()) return false;
+    if (!options.replacementConfirmed && !allowProjectReplacement()) return false;
     invalidateGeneration();
     resetAdjustments(false);
     setManualEditsSinceGeneration(false);
@@ -686,6 +686,19 @@ export default function App() {
     autoGenerateShouldCommitRef.current = true;
     setNotice(language === 'zh' ? `正在生成 ${file.name}...` : `Generating ${file.name}...`);
     return true;
+  }
+
+  async function loadHeartSample() {
+    if (!allowProjectReplacement()) return;
+    const response = await fetch('./samples/pingdou-heart-source.png');
+    if (!response.ok) throw new Error(text.sampleLoadError);
+    setConvertWidth(10);
+    setGenerationStyle('cartoon');
+    setBackgroundMode('keep');
+    setTolerance(0);
+    handleImageFile(new File([await response.blob()], 'pingdou-heart-source.png', { type: 'image/png' }), {
+      replacementConfirmed: true,
+    });
   }
 
   function handleReferenceImageFile(file: File) {
@@ -988,6 +1001,13 @@ export default function App() {
   const printErrors = useMemo(() => validatePrintableModel(printableModel, false), [printableModel]);
 
   function exportThreeMf() {
+    if (printErrors.length > 0) {
+      setNotice(printErrors[0]);
+      const errorRegion = document.getElementById('print-export-errors');
+      errorRegion?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      errorRegion?.focus({ preventScroll: true });
+      return;
+    }
     try {
       const stem = project.name
         .trim()
@@ -995,7 +1015,7 @@ export default function App() {
         .replace(/\s+/g, '-')
         .slice(0, 80) || 'pingdou';
       downloadThreeMf(printableModel, `${stem}.3mf`);
-      setNotice(language === 'zh' ? '3MF 已导出，可在 Bambu Studio 中分配 AMS 槽位。' : '3MF exported. Assign AMS slots in Bambu Studio.');
+      setNotice(text.threeMfDownloaded);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : String(error));
     }
@@ -1127,9 +1147,19 @@ export default function App() {
               <button className="project-action-button history-action" onClick={redo} disabled={future.length === 0}>{text.redo}</button>
             </div>
             <div className="topbar-actions export-actions">
+              <button
+                type="button"
+                className="export-action-button primary-action"
+                title={text.exportThreeMf}
+                onClick={exportThreeMf}
+              >
+                <ExportIcon />
+                <span>{text.exportThreeMf}</span>
+              </button>
               <div className="print-export-menu">
                 <button
-                  className="export-action-button primary-action print-export-button"
+                  type="button"
+                  className="export-action-button print-export-button"
                   title={`${text.exportPatternTitle} PNG`}
                   aria-expanded={showPrintExportPanel}
                   onClick={() => setShowPrintExportPanel((value) => !value)}
@@ -1221,7 +1251,7 @@ export default function App() {
         <div className="topbar-right">
           <a
             className="github-link"
-            href="https://github.com/Jett-Wu/Perler_Beads_Generator"
+            href="https://github.com/pgp00/pingdou"
             target="_blank"
             rel="noreferrer"
             aria-label="GitHub"
@@ -1249,13 +1279,24 @@ export default function App() {
             <small>{pendingFile ? text.ready : text.noImage}</small>
           </div>
 
-          <button className={pendingImageUrl ? `upload-zone has-image${isGenerating ? ' is-generating' : ''}` : `upload-zone${isGenerating ? ' is-generating' : ''}`} onClick={() => fileInputRef.current?.click()}>
-            {pendingImageUrl && <img src={pendingImageUrl} alt="" />}
-            <span className="upload-zone-text">
-              <strong>{isGenerating ? text.preparingPattern : pendingFile ? pendingFile.name : text.uploadImage}</strong>
-              <span>{isGenerating ? pendingFile?.name : pendingFile ? 'PNG / JPG / WebP' : 'PNG, JPG, WebP'}</span>
-            </span>
-          </button>
+          {!pendingFile && !hasEditableWork(project) ? (
+            <div className="image-empty-actions">
+              <button className="project-action-button primary-action" type="button" onClick={() => void loadHeartSample().catch((error) => setNotice(error instanceof Error ? error.message : String(error)))}>
+                {text.trySample}
+              </button>
+              <button className="project-action-button" type="button" onClick={() => fileInputRef.current?.click()}>
+                {text.uploadYourImage}
+              </button>
+            </div>
+          ) : (
+            <button className={pendingImageUrl ? `upload-zone has-image${isGenerating ? ' is-generating' : ''}` : `upload-zone${isGenerating ? ' is-generating' : ''}`} type="button" onClick={() => fileInputRef.current?.click()}>
+              {pendingImageUrl && <img src={pendingImageUrl} alt="" />}
+              <span className="upload-zone-text">
+                <strong>{isGenerating ? text.preparingPattern : pendingFile ? pendingFile.name : text.uploadImage}</strong>
+                <span>{isGenerating ? pendingFile?.name : pendingFile ? 'PNG / JPG / WebP' : 'PNG, JPG, WebP'}</span>
+              </span>
+            </button>
+          )}
 
           {pendingFile && manualEditsSinceGeneration && (
             <button className="project-action-button primary-action" type="button" disabled={isGenerating} onClick={() => void generateFromImage({ recordHistory: true })}>
