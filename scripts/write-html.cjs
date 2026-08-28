@@ -8,9 +8,10 @@ const html = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="A local image-to-print tool for fused Perler-bead-style multi-part 3MF models."
+      content="Turn any image into an editable, multicolor 3MF bead relief — locally in your browser."
     />
-    <title>Pingdou 3MF</title>
+    <title>Pingdou — Image to editable multicolor 3MF</title>
+    <link rel="canonical" href="https://pgp00.github.io/pingdou/" />
     <link rel="stylesheet" href="./styles.css" />
     <script type="importmap">
       {

@@ -1,8 +1,20 @@
 {
-  "name": "pingdou-3mf",
+  "name": "pingdou",
   "version": "0.1.0",
-  "description": "A local image-to-print tool for fused Perler-bead-style multi-part 3MF models.",
+  "description": "Turn any image into an editable, multicolor 3MF bead relief — locally in your browser.",
   "private": true,
+  "homepage": "https://pgp00.github.io/pingdou/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pgp00/pingdou.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pgp00/pingdou/issues"
+  },
+  "engines": {
+    "node": ">=22.9.0"
+  },
+  "packageManager": "npm@11.17.0",
   "type": "module",
   "scripts": {
     "dev": "npm run build && node scripts/dev-server.cjs",
