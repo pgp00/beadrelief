@@ -39,6 +39,28 @@ export function shouldAutoRegenerate(hasSource: boolean, hasManualEdits: boolean
   return hasSource && !hasManualEdits;
 }
 
+export function imageLaunchState(hasPendingImage: boolean, project: BeadProject) {
+  return {
+    showActions: !hasPendingImage && !hasEditableWork(project),
+    sampleSettings: {
+      width: 10,
+      generationStyle: 'cartoon' as GenerationStyle,
+      backgroundMode: 'keep' as BackgroundMode,
+      tolerance: 0,
+    },
+  };
+}
+
+export async function loadHeartSample(fetchImage: typeof fetch, localizedError: string): Promise<File> {
+  try {
+    const response = await fetchImage('./samples/pingdou-heart-source.png');
+    if (!response.ok) throw new Error(localizedError);
+    return new File([await response.blob()], 'pingdou-heart-source.png', { type: 'image/png' });
+  } catch {
+    throw new Error(localizedError);
+  }
+}
+
 export function mergeGeneratedProject(
   project: BeadProject,
   targetLayerId: string,
@@ -688,15 +710,15 @@ export default function App() {
     return true;
   }
 
-  async function loadHeartSample() {
+  async function startHeartSample() {
     if (!allowProjectReplacement()) return;
-    const response = await fetch('./samples/pingdou-heart-source.png');
-    if (!response.ok) throw new Error(text.sampleLoadError);
-    setConvertWidth(10);
-    setGenerationStyle('cartoon');
-    setBackgroundMode('keep');
-    setTolerance(0);
-    handleImageFile(new File([await response.blob()], 'pingdou-heart-source.png', { type: 'image/png' }), {
+    const sampleSettings = imageLaunchState(false, project).sampleSettings;
+    const file = await loadHeartSample(fetch, text.sampleLoadError);
+    setConvertWidth(sampleSettings.width);
+    setGenerationStyle(sampleSettings.generationStyle);
+    setBackgroundMode(sampleSettings.backgroundMode);
+    setTolerance(sampleSettings.tolerance);
+    handleImageFile(file, {
       replacementConfirmed: true,
     });
   }
@@ -1055,6 +1077,8 @@ export default function App() {
     setShowPrintExportPanel(false);
   }
 
+  const imageLaunch = imageLaunchState(Boolean(pendingFile), project);
+
   return (
     <main
       className="app-shell"
@@ -1279,9 +1303,9 @@ export default function App() {
             <small>{pendingFile ? text.ready : text.noImage}</small>
           </div>
 
-          {!pendingFile && !hasEditableWork(project) ? (
+          {imageLaunch.showActions ? (
             <div className="image-empty-actions">
-              <button className="project-action-button primary-action" type="button" onClick={() => void loadHeartSample().catch((error) => setNotice(error instanceof Error ? error.message : String(error)))}>
+              <button className="project-action-button primary-action" type="button" onClick={() => void startHeartSample().catch((error) => setNotice(error instanceof Error ? error.message : String(error)))}>
                 {text.trySample}
               </button>
               <button className="project-action-button" type="button" onClick={() => fileInputRef.current?.click()}>
