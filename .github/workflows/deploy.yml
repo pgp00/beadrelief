@@ -3,6 +3,7 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -24,7 +25,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run build
+      - run: npm run verify
+      - run: git diff --exit-code -- samples
+      - name: Verify 3MF ZIP integrity
+        run: for file in samples/*.3mf; do unzip -t "$file"; done
       - uses: actions/upload-pages-artifact@v3
         with:
           path: generated/dist
@@ -34,6 +38,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
