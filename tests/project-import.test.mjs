@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createProject,
+  hasEditableWork,
   isSafeProjectImport,
   MAX_PROJECT_FILE_BYTES,
   normalizeProject,
@@ -40,4 +41,11 @@ test("project import rejects unsafe dimensions, layer counts, and file sizes", (
     layers: Array.from({ length: 65 }, () => project.layers[0]),
   }, 100), false);
   assert.equal(isSafeProjectImport(project, MAX_PROJECT_FILE_BYTES + 1), false);
+});
+
+test("empty projects are replaceable but edited grids are not", () => {
+  assert.equal(hasEditableWork(createProject(10, 10)), false);
+  const edited = createProject(10, 10);
+  edited.layers[0].cells[0] = edited.amsColors[0].id;
+  assert.equal(hasEditableWork(edited), true);
 });

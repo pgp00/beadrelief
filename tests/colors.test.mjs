@@ -15,9 +15,10 @@ import {
   replaceProjectColor,
 } from "../generated/dist/src/print/colors.js";
 
-const { createProject, normalizeProject, withCells } = projectApi;
+const { createProject, hasEditableWork, normalizeProject, withCells } = projectApi;
 globalThis.React = React;
-const { autoGenerationPaletteKey, beginAutoGenerationEffect, pendingGenerationAction } = await import("../generated/dist/src/App.js");
+const { autoGenerationPaletteKey, beginAutoGenerationEffect, pendingGenerationAction, projectGridChanged, shouldAutoRegenerate } = await import("../generated/dist/src/App.js");
+const { resolveLanguage } = await import("../generated/dist/src/i18n.js");
 
 function findElements(element, predicate, found = []) {
   if (!element || typeof element !== "object") return found;
@@ -128,12 +129,47 @@ test("changing an AMS slot updates cells and the base reference", () => {
 
 test("automatic image generation keys ignore layered material edits only", () => {
   const project = createProject(1, 1);
-  const edited = project.amsColors.map((color, index) => index === 1
-    ? { ...color, id: makeAmsColorId(2, "#123456"), name: "Edited", hex: "#123456", tdMm: 2 }
-    : color);
-  assert.notEqual(autoGenerationPaletteKey("solid", project.amsColors), autoGenerationPaletteKey("solid", edited));
-  assert.equal(autoGenerationPaletteKey("layered", project.amsColors), autoGenerationPaletteKey("layered", edited));
+  const renamed = project.amsColors.map((color, index) => index === 1 ? { ...color, name: "Edited" } : color);
+  const recalibrated = project.amsColors.map((color, index) => index === 1 ? { ...color, tdMm: 2 } : color);
+  const recolored = project.amsColors.map((color, index) => index === 1 ? { ...color, hex: "#123456" } : color);
+  assert.equal(autoGenerationPaletteKey("solid", project.amsColors), autoGenerationPaletteKey("solid", renamed));
+  assert.equal(autoGenerationPaletteKey("solid", project.amsColors), autoGenerationPaletteKey("solid", recalibrated));
+  assert.notEqual(autoGenerationPaletteKey("solid", project.amsColors), autoGenerationPaletteKey("solid", recolored));
   assert.notEqual(autoGenerationPaletteKey("solid", project.amsColors), autoGenerationPaletteKey("layered", project.amsColors));
+});
+
+test("first-use language and replacement decisions are pure", () => {
+  assert.equal(resolveLanguage("zh", "en-US"), "zh");
+  assert.equal(resolveLanguage(null, "zh-CN"), "zh");
+  assert.equal(resolveLanguage(null, "fr-FR"), "en");
+
+  assert.equal(hasEditableWork(createProject(10, 10)), false);
+  const edited = createProject(10, 10);
+  edited.layers[0].cells[0] = edited.amsColors[0].id;
+  assert.equal(hasEditableWork(edited), true);
+
+  assert.equal(shouldAutoRegenerate(true, false), true);
+  assert.equal(shouldAutoRegenerate(true, true), false);
+});
+
+test("grid-change tracking ignores material and display metadata", () => {
+  const project = createProject(2, 2);
+  assert.equal(projectGridChanged(project, { ...project, name: "Renamed" }), false);
+  assert.equal(projectGridChanged(project, {
+    ...project,
+    amsColors: project.amsColors.map((color, index) => index === 1 ? { ...color, name: "Edited", tdMm: 2 } : color),
+  }), false);
+  assert.equal(projectGridChanged(project, {
+    ...project,
+    settings: { ...project.settings, showGrid: !project.settings.showGrid },
+  }), false);
+  assert.equal(projectGridChanged(project, {
+    ...project,
+    layers: project.layers.map((layer) => ({ ...layer, visible: false })),
+    cells: Array(4).fill(null),
+  }), false);
+  assert.equal(projectGridChanged(project, withCells(project, [project.amsColors[0].id, null, null, null])), true);
+  assert.equal(projectGridChanged(project, { ...project, width: 3, cells: Array(6).fill(null), layers: project.layers.map((layer) => ({ ...layer, cells: Array(6).fill(null) })) }), true);
 });
 
 test("automatic image generation invalidates immediately and consumes suppression once", () => {

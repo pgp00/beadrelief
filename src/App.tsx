@@ -4,24 +4,24 @@ import PrintSettingsPanel from './PrintSettingsPanel';
 import { downloadPrintPdf, downloadPrintPng, downloadProjectJson, downloadUsageWorkbook } from './exporters';
 import type { PrintExportOptions } from './exporters';
 import { imageFileToBeads } from './imageToBeads';
+import { languageKey, resolveLanguage, ui } from './i18n';
+import type { Language } from './i18n';
 import { amsColorToPaletteColor } from './print/colors';
 import { buildPrintableModel, composePrintableGrid } from './print/model';
 import { buildStackPalette } from './print/stacking';
 import { downloadThreeMf } from './print/threeMf';
 import { validatePrintableModel } from './print/validation';
 import { colorDistance, getColor, nearestPaletteColor } from './palette';
-import { MAX_PROJECT_DIMENSION, MAX_PROJECT_FILE_BYTES, composeVisibleCells, createLayer, createProject, isSafeProjectImport, loadDraft, normalizeProject, saveDraft, withCells, withLayers } from './project';
+import { MAX_PROJECT_DIMENSION, MAX_PROJECT_FILE_BYTES, composeVisibleCells, createLayer, createProject, hasEditableWork, isSafeProjectImport, loadDraft, normalizeProject, projectGridChanged, saveDraft, withCells, withLayers } from './project';
 import { findIsolatedBeads, summarizeLayeredUsage, summarizeUsage } from './usage';
 import type { ArrowKind, BackgroundMode, BeadProject, ClipboardPattern, CopyMode, GenerationStyle, MirrorDirection, MoveMode, RemoveMode, RightClickAction, ShapeFillMode, ShapeKind, TextDirection, ToolId } from './types';
 
 const { useEffect, useMemo, useRef, useState } = React;
 
-type Language = 'zh' | 'en';
-
 export function autoGenerationPaletteKey(mode: BeadProject['printSettings']['mode'], colors: BeadProject['amsColors']): string {
   return mode === 'layered'
     ? 'layered'
-    : `solid:${JSON.stringify(colors.map(({ id, name, hex, tdMm }) => [id, name, hex, tdMm]))}`;
+    : `solid:${JSON.stringify(colors.map(({ id, hex }) => [id, hex]))}`;
 }
 
 export function beginAutoGenerationEffect(request: { current: number }, suppression: { current: boolean }): boolean {
@@ -35,438 +35,11 @@ export function pendingGenerationAction(pending: boolean, suppressed: boolean): 
   return !pending ? 'none' : suppressed ? 'cancel' : 'restart';
 }
 
-const languageKey = 'perler-beads-generator:language';
+export function shouldAutoRegenerate(hasSource: boolean, hasManualEdits: boolean): boolean {
+  return hasSource && !hasManualEdits;
+}
 
-const ui: Record<Language, any> = {
-    zh: {
-        appName: '拼豆图纸生成器',
-        board: '拼豆板',
-        apply: '应用',
-        commonSizes: '常用尺寸',
-        rightClick: '右键',
-        rightClickHint: '右键平移用于拖动画布；右键擦除只清除落点格子，不受橡皮大小影响。',
-        pan: '平移',
-        erase: '擦除',
-        new: '新建',
-        clear: '清空',
-        undo: '撤销',
-        redo: '重做',
-        exportPatternFull: '导出图纸',
-        exportUsageFull: '导出用量',
-        exportRecordFull: '导出编辑',
-        importRecordFull: '导入编辑',
-        exportPatternTitle: '导出图纸',
-        exportUsageTitle: '导出用量清单 Excel',
-        exportRecordTitle: '导出编辑记录 JSON',
-        importRecordTitle: '导入历史记录 JSON',
-        usageExported: '用量清单 Excel 已导出。',
-        recordExported: '编辑记录 JSON 已导出。',
-        recordImported: '编辑记录已导入，可继续编辑。',
-        invalidRecord: '这个文件不是有效的拼豆编辑记录。',
-        unreadableRecord: '无法读取这个编辑记录 JSON。',
-        printExportSettings: '图纸设置',
-        showColorCodes: '显示色号',
-        showGuideLines: '辅助线',
-        projectNickname: '作品昵称',
-        authorNickname: '作者昵称',
-        exportFormat: '导出格式',
-        exportBounds: '导出范围',
-        exportPatternBounds: '图案尺寸',
-        exportCanvasBounds: '画布尺寸',
-        optional: '可选',
-        exportNow: '导出',
-        preview3d: '3D 预览',
-        liveBoard: '实时画板视图',
-        previewEmpty: '暂无 3D 预览',
-        imageToPattern: '导入图片生成',
-        referenceImage: '参考图',
-        uploadReferenceImage: '上传参考图',
-        showReferenceImage: '显示参考图',
-        referenceOpacity: '透明度',
-        referenceAdjust: '拖动/缩放',
-        referenceAdjustHint: '正在拖动/缩放参考图',
-        resetReferenceTransform: '重置位置',
-        referencePlacement: '显示位置',
-        referenceBelow: '拼豆下方',
-        referenceAbove: '拼豆上方',
-        referenceHint: '作为临摹底稿',
-        ready: '已选择',
-        noImage: '未选择图片',
-        uploadImage: '上传图片',
-        width: '最长边格数',
-        colors: '色数上限',
-        colorsHint: '生成时使用的拼豆颜色数量上限；数值越低越简洁，越高越细腻。',
-        generationStyle: '生成风格',
-        generationStyleCartoon: '卡通',
-        generationStyleRealistic: '写实',
-        tolerance: '容差',
-        toleranceHint: '容差越大，越多接近背景色的像素会被去除；容差越小，边缘保留越多。',
-        background: '背景',
-        keepBackground: '保留背景',
-        removeWhite: '去除背景',
-        preparingPattern: '正在生成图案',
-        autoGenerateHint: '调整参数后会自动更新画布。',
-        palette: '调色盘',
-        adjustments: '调整',
-        adjustmentTitle: '当前图层调整',
-        brightness: '亮度',
-        contrast: '对比度',
-        saturation: '饱和度',
-        temperature: '色温',
-        hue: '色相',
-        resetAdjustments: '重置调整',
-        adjustmentHint: '滑动会直接调整当前图层，可用撤销恢复。',
-        adjustmentLocked: '当前图层已锁定，无法应用调整。',
-        colorCleanup: '颜色整理',
-        colorCleanupHint: '合并相近色，减少碎色。',
-        applyColorCleanup: '整理相近颜色',
-        colorLimit: '色数上限',
-        colorLimitHint: '限制当前图层颜色数。',
-        applyColorLimit: '应用色数上限',
-        layerColorsCleaned: (count: number) => (count > 0 ? `已整理 ${count} 颗拼豆。` : '当前图层没有需要整理的相近颜色。'),
-        layerColorsLimited: (count: number, limit: number) => (count > 0 ? `已将当前图层限制到最多 ${limit} 色。` : `当前图层已经不超过 ${limit} 色。`),
-        effects: '效果',
-        invertEffect: '反色',
-        grayscaleEffect: '灰阶',
-        blackWhiteEffect: '黑白',
-        effectApplied: (name: string, count: number) => `已应用${name}，影响 ${count} 颗拼豆。`,
-        mardBasic: 'MARD 基础版（221色）',
-        mardComplete: 'MARD 完整版（291色）',
-        recentColors: '最近使用',
-        layers: '图层',
-        addLayer: '新建图层',
-        deleteLayer: '删除',
-        duplicateLayer: '复制图层',
-        renameLayer: '重命名图层',
-        reorderLayer: '拖动调整图层顺序',
-        activeLayer: '当前图层',
-        hiddenLayer: '已隐藏',
-        lockedLayer: '已锁定',
-        layerBeadCount: (count: number) => `${count} 颗`,
-        usage: '用量',
-        totalBeadsLabel: '总颗数',
-        colorTypes: '颜色数',
-        estimatedPacks: '预计包数',
-        beadsPerPack: '每包数量',
-        perPackUnit: '颗/包',
-        countedLayerTitle: '计入图层',
-        countAllLayers: '全部图层',
-        countCurrentLayer: '当前图层',
-        packUnit: '包',
-        noUsage: '暂无用量',
-        layerCells: '层格',
-        brandCodes: '色号品牌',
-        view: '视图',
-        beadShape: '豆子形状',
-        roundBeads: '圆形',
-        squareBeads: '方形',
-        layerOverlap: '重叠格子',
-        showActiveLayerOnly: '只看当前图层',
-        grid: '网格',
-        coordinates: '坐标',
-        countLayer: '计入用量',
-        eye: '显示',
-        lock: '锁定',
-        unlock: '解锁',
-        lockHint: '锁定后无法在这一层绘制或擦除',
-        unlockHint: '解锁后可以继续编辑这一层',
-        lockedCanvasHint: '当前图层已锁定',
-        manyColors: '颜色较多，可以降低颜色数量。',
-        countedLayers: (count: number) => `已计入 ${count} 个图层`,
-        noCountedLayers: '没有图层计入用量。',
-        cell: '格子',
-        hoverBoard: '移动到画布上',
-        empty: '空',
-        language: '语言',
-        fit: '适配',
-        close: '关闭',
-        expandPreview: '放大 3D 预览',
-        workspaceReady: '工作区已就绪。',
-        heightFromRatio: '另一边将按图片比例计算。',
-        status: (width: number, height: number, beads: number, colors: number) => `${width} * ${height} - ${beads} 颗 - ${colors} 色`,
-        panelStatus: (width: number, height: number, colors: number, beads: number, boards: number) => `${width} * ${height} - ${colors} 色 - ${beads} 颗 - ${boards} 块板`,
-        isolatedBeads: (count: number) => (count > 0 ? `${count} 颗拼豆无相邻，熨烫时留意。` : '没有无相邻拼豆。'),
-        showIsolatedBeads: '显示无相邻拼豆',
-        hideIsolatedBeads: '隐藏无相邻拼豆',
-        eraserSize: '橡皮大小',
-        removeScope: '消除范围',
-        removeSameConnected: '同色连续',
-        removeAllSameColor: '所有同色',
-        removeConnected: '连续块',
-        moveScope: '选中范围',
-        moveLayer: '全图层',
-        movePartial: '局部',
-        panToolHint: '提示：使用其他工具时，右键默认用于拖动画布',
-        mirrorDirection: '镜像方向',
-        mirrorHorizontal: '左右',
-        mirrorVertical: '上下',
-        shapeType: '形状',
-        shapeStyle: '样式',
-        shapeOutline: '空心',
-        shapeFilled: '实心',
-        shapeLine: '直线',
-        shapeRectangle: '矩形',
-        shapeSquare: '正方',
-        shapeEllipse: '椭圆',
-        shapeCircle: '正圆',
-        shapeTriangle: '三角',
-        shapeArrow: '箭头',
-        arrowStyle: '箭头',
-        arrowSingle: '单向',
-        arrowDouble: '双向',
-        arrowBlock: '粗箭头',
-        textContent: '文字内容',
-        textDirection: '排列方向',
-        textHorizontal: '横排',
-        textVertical: '竖排',
-        textSize: '文字高度',
-        textSpacing: '文字间距',
-        textPlaceholder: '文字 / 数字 / 字母 / 符号',
-        clipboardPreview: '剪贴预览',
-        clipboardEmpty: <>先用复制工具选择<br />复制范围</>,
-        clipboardSize: (width: number, height: number, beads: number) => `${width} * ${height} - ${beads} 颗`,
-        resetClipboard: '重置剪贴预览',
-        copyScope: '复制范围',
-        copyConnected: '连续块',
-        copySelection: '多选拼豆',
-        copySelectionHint: '左键选择或取消要复制的拼豆',
-        copiedPattern: (width: number, height: number, beads: number) => `已复制 ${width} * ${height} 图案，${beads} 颗。`,
-        copySelectionUpdated: (beads: number) => `已选择 ${beads} 颗拼豆。`,
-        clipboardReset: '剪贴预览已重置。',
-        pastedPattern: '已粘贴图案。',
-        recoloredBeads: (count: number) => `已替换 ${count} 颗同色拼豆。`,
-        brushCells: (count: number) => `${formatBrushSize(count)} 格`,
-        tools: {
-            pencil: { title: '画笔', hint: '绘制拼豆' },
-            eraser: { title: '橡皮', hint: '清除格子' },
-            fill: { title: '填充', hint: '填充区域' },
-            remove: { title: '消除', hint: '清除连续区域' },
-            recolor: { title: '换色', hint: '替换同色拼豆' },
-            eyedropper: { title: '吸管', hint: '拾取颜色' },
-            move: { title: '移动', hint: '移动当前图层图案' },
-            copy: { title: '复制', hint: '复制连续图案' },
-            paste: { title: '粘贴', hint: '粘贴已复制图案' },
-            mirror: { title: '镜像', hint: '翻转当前图层图案' },
-            shape: { title: '形状', hint: '绘制基础几何图形' },
-            text: { title: '文字', hint: '插入点阵文字' },
-            pan: { title: '拖动', hint: '拖动画布' },
-        },
-    },
-    en: {
-        appName: 'Perler Beads Generator',
-        board: 'Pegboard',
-        apply: 'Apply',
-        commonSizes: 'Common sizes',
-        rightClick: 'Right click',
-        rightClickHint: 'Right-click pan drags the canvas; right-click erase clears only the pointed cell and ignores eraser size.',
-        pan: 'Pan',
-        erase: 'Erase',
-        new: 'New',
-        clear: 'Clear',
-        undo: 'Undo',
-        redo: 'Redo',
-        exportPatternFull: 'Export pattern',
-        exportUsageFull: 'Export usage',
-        exportRecordFull: 'Export edit',
-        importRecordFull: 'Import edit',
-        exportPatternTitle: 'Export pattern',
-        exportUsageTitle: 'Export usage workbook',
-        exportRecordTitle: 'Export edit record JSON',
-        importRecordTitle: 'Import edit history JSON',
-        usageExported: 'Usage workbook exported.',
-        recordExported: 'Edit record JSON exported.',
-        recordImported: 'Edit record imported. You can keep editing.',
-        invalidRecord: 'This file is not a valid edit record.',
-        unreadableRecord: 'Could not read this edit record JSON.',
-        printExportSettings: 'Pattern settings',
-        showColorCodes: 'Color codes',
-        showGuideLines: 'Guide lines',
-        projectNickname: 'Pattern name',
-        authorNickname: 'Author name',
-        exportFormat: 'Export format',
-        exportBounds: 'Export bounds',
-        exportPatternBounds: 'Pattern size',
-        exportCanvasBounds: 'Canvas size',
-        optional: 'Optional',
-        exportNow: 'Export',
-        preview3d: '3D Preview',
-        liveBoard: 'Live board view',
-        previewEmpty: 'No 3D preview yet',
-        imageToPattern: 'Import Image',
-        referenceImage: 'Reference Image',
-        uploadReferenceImage: 'Upload reference',
-        showReferenceImage: 'Show reference',
-        referenceOpacity: 'Opacity',
-        referenceAdjust: 'Move/scale',
-        referenceAdjustHint: 'Moving/scaling reference image',
-        resetReferenceTransform: 'Reset position',
-        referencePlacement: 'Display position',
-        referenceBelow: 'Below beads',
-        referenceAbove: 'Above beads',
-        referenceHint: 'Tracing guide',
-        ready: 'Ready',
-        noImage: 'No image',
-        uploadImage: 'Upload image',
-        width: 'Long side',
-        colors: 'Color limit',
-        colorsHint: 'Maximum bead colors used in generation; lower is simpler, higher keeps more detail.',
-        generationStyle: 'Style',
-        generationStyleCartoon: 'Cartoon',
-        generationStyleRealistic: 'Realistic',
-        tolerance: 'Tolerance',
-        toleranceHint: 'Higher tolerance removes more pixels close to the background color; lower tolerance keeps more edge detail.',
-        background: 'Background',
-        keepBackground: 'Keep background',
-        removeWhite: 'Remove background',
-        preparingPattern: 'Generating pattern',
-        autoGenerateHint: 'Changes update the canvas automatically.',
-        palette: 'Palette',
-        adjustments: 'Adjust',
-        adjustmentTitle: 'Active layer adjustment',
-        brightness: 'Brightness',
-        contrast: 'Contrast',
-        saturation: 'Saturation',
-        temperature: 'Temperature',
-        hue: 'Hue',
-        resetAdjustments: 'Reset adjustments',
-        adjustmentHint: 'Sliders adjust the active layer directly; Undo can restore it.',
-        adjustmentLocked: 'The active layer is locked.',
-        colorCleanup: 'Color cleanup',
-        colorCleanupHint: 'Merge close colors and reduce speckles.',
-        applyColorCleanup: 'Merge close colors',
-        colorLimit: 'Color limit',
-        colorLimitHint: 'Limit colors in the active layer.',
-        applyColorLimit: 'Apply color limit',
-        layerColorsCleaned: (count: number) => (count > 0 ? `${count} beads cleaned up.` : 'No close colors need cleanup in the active layer.'),
-        layerColorsLimited: (count: number, limit: number) => (count > 0 ? `Active layer limited to ${limit} colors.` : `Active layer already has ${limit} colors or fewer.`),
-        effects: 'Effects',
-        invertEffect: 'Invert',
-        grayscaleEffect: 'Grayscale',
-        blackWhiteEffect: 'B/W',
-        effectApplied: (name: string, count: number) => `${name} applied to ${count} beads.`,
-        mardBasic: 'MARD Basic (221 colors)',
-        mardComplete: 'MARD Complete (291 colors)',
-        recentColors: 'Recent',
-        layers: 'Layers',
-        addLayer: 'New layer',
-        deleteLayer: 'Delete',
-        duplicateLayer: 'Duplicate layer',
-        renameLayer: 'Rename layer',
-        reorderLayer: 'Drag to reorder layer',
-        activeLayer: 'Active layer',
-        hiddenLayer: 'Hidden',
-        lockedLayer: 'Locked',
-        layerBeadCount: (count: number) => `${count} beads`,
-        usage: 'Usage',
-        totalBeadsLabel: 'Total beads',
-        colorTypes: 'Colors',
-        estimatedPacks: 'Est. packs',
-        beadsPerPack: 'Beads per pack',
-        perPackUnit: 'beads/pack',
-        countedLayerTitle: 'Counted layers',
-        countAllLayers: 'All layers',
-        countCurrentLayer: 'Current layer',
-        packUnit: 'packs',
-        noUsage: 'No usage yet',
-        layerCells: 'layer-cells',
-        brandCodes: 'Brand codes',
-        view: 'View',
-        beadShape: 'Bead shape',
-        roundBeads: 'Round',
-        squareBeads: 'Square',
-        layerOverlap: 'Overlap cells',
-        showActiveLayerOnly: 'Current layer only',
-        grid: 'Grid',
-        coordinates: 'Coordinates',
-        countLayer: 'Count this layer in usage',
-        eye: 'Eye',
-        lock: 'Lock',
-        unlock: 'Unlock',
-        lockHint: 'Lock this layer to prevent drawing or erasing on it',
-        unlockHint: 'Unlock this layer to edit it again',
-        lockedCanvasHint: 'Current layer is locked',
-        manyColors: 'Many colors; consider lowering max colors.',
-        countedLayers: (count: number) => `${count} layers counted`,
-        noCountedLayers: 'No layers counted in usage.',
-        cell: 'Cell',
-        hoverBoard: 'Hover the board',
-        empty: 'empty',
-        language: 'Language',
-        fit: 'Fit',
-        close: 'Close',
-        expandPreview: 'Expand 3D preview',
-        workspaceReady: 'Workspace ready.',
-        heightFromRatio: 'The other side is calculated from the image ratio.',
-        status: (width: number, height: number, beads: number, colors: number) => `${width} * ${height} - ${beads} beads - ${colors} colors`,
-        panelStatus: (width: number, height: number, colors: number, beads: number, boards: number) => `${width} * ${height} - ${colors} colors - ${beads} beads - ${boards} boards`,
-        isolatedBeads: (count: number) => (count > 0 ? `${count} beads have no neighbors; watch when fusing.` : 'No beads without neighbors.'),
-        showIsolatedBeads: 'Show beads without neighbors',
-        hideIsolatedBeads: 'Hide beads without neighbors',
-        eraserSize: 'Eraser size',
-        removeScope: 'Clear range',
-        removeSameConnected: 'Same area',
-        removeAllSameColor: 'All same',
-        removeConnected: 'Connected',
-        moveScope: 'Selection',
-        moveLayer: 'Layer',
-        movePartial: 'Partial',
-        panToolHint: 'Tip: when using other tools, right-click drags the canvas by default.',
-        mirrorDirection: 'Mirror',
-        mirrorHorizontal: 'Left-right',
-        mirrorVertical: 'Up-down',
-        shapeType: 'Shape',
-        shapeStyle: 'Style',
-        shapeOutline: 'Outline',
-        shapeFilled: 'Filled',
-        shapeLine: 'Line',
-        shapeRectangle: 'Rect',
-        shapeSquare: 'Square',
-        shapeEllipse: 'Oval',
-        shapeCircle: 'Circle',
-        shapeTriangle: 'Triangle',
-        shapeArrow: 'Arrow',
-        arrowStyle: 'Arrow',
-        arrowSingle: 'Single',
-        arrowDouble: 'Double',
-        arrowBlock: 'Block',
-        textContent: 'Text',
-        textDirection: 'Direction',
-        textHorizontal: 'Horizontal',
-        textVertical: 'Vertical',
-        textSize: 'Text height',
-        textSpacing: 'Spacing',
-        textPlaceholder: 'Text / numbers / letters / symbols',
-        clipboardPreview: 'Clipboard',
-        clipboardEmpty: 'Copy a pattern first',
-        clipboardSize: (width: number, height: number, beads: number) => `${width} * ${height} - ${beads} beads`,
-        resetClipboard: 'Reset clipboard preview',
-        copyScope: 'Copy range',
-        copyConnected: 'Connected',
-        copySelection: 'Select beads',
-        copySelectionHint: 'Left-click to select or deselect individual beads.',
-        copiedPattern: (width: number, height: number, beads: number) => `Copied ${width} x ${height}, ${beads} beads.`,
-        copySelectionUpdated: (beads: number) => `${beads} beads selected.`,
-        clipboardReset: 'Clipboard preview reset.',
-        pastedPattern: 'Pattern pasted.',
-        recoloredBeads: (count: number) => `${count} matching beads recolored.`,
-        brushCells: (count: number) => `${formatBrushSize(count)} cells`,
-        tools: {
-            pencil: { title: 'Pencil', hint: 'Paint beads' },
-            eraser: { title: 'Eraser', hint: 'Clear cells' },
-            fill: { title: 'Fill', hint: 'Fill an area' },
-            remove: { title: 'Clear', hint: 'Clear connected area' },
-            recolor: { title: 'Recolor', hint: 'Replace matching beads' },
-            eyedropper: { title: 'Dropper', hint: 'Pick color' },
-            move: { title: 'Move', hint: 'Move active layer artwork' },
-            copy: { title: 'Copy', hint: 'Copy connected pattern' },
-            paste: { title: 'Paste', hint: 'Paste copied pattern' },
-            mirror: { title: 'Mirror', hint: 'Flip active layer artwork' },
-            shape: { title: 'Shape', hint: 'Draw basic geometry' },
-            text: { title: 'Text', hint: 'Insert dot text' },
-            pan: { title: 'Drag', hint: 'Drag canvas' },
-        },
-    },
-};
+export { projectGridChanged } from './project';
 
 const tools: Array<{ id: ToolId }> = [
   { id: 'pencil' },
@@ -483,10 +56,6 @@ const tools: Array<{ id: ToolId }> = [
   { id: 'text' },
   { id: 'pan' },
 ];
-
-function formatBrushSize(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
-}
 
 const sizePresets = [
   { label: '16 * 16', width: 16, height: 16 },
@@ -537,7 +106,17 @@ export default function App() {
   const generateFromImageRef = useRef(generateFromImage);
   const adjustmentSessionRef = useRef<{ layerId: string | null; baseCells: Array<string | null> }>({ layerId: null, baseCells: [] });
   const soloVisibilitySnapshotRef = useRef<Record<string, boolean> | null>(null);
-  const [language, setLanguage] = useState<Language>(() => (localStorage.getItem(languageKey) === 'en' ? 'en' : 'zh'));
+  const [language, setLanguage] = useState<Language>(() => {
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(languageKey);
+    } catch {
+      // session-only
+    }
+    const initialLanguage = resolveLanguage(saved, navigator.language);
+    if (typeof document !== 'undefined') document.documentElement.lang = initialLanguage;
+    return initialLanguage;
+  });
   const text = ui[language];
   const [project, setProject] = useState<BeadProject>(() => loadDraft() ?? createProject());
   const autoGenerationKey = autoGenerationPaletteKey(project.printSettings.mode, project.amsColors);
@@ -594,6 +173,7 @@ export default function App() {
   const [backgroundMode, setBackgroundMode] = useState<BackgroundMode>(defaultImportSettings.backgroundMode);
   const [tolerance, setTolerance] = useState(defaultImportSettings.tolerance);
   const [autoGenerationRestartToken, setAutoGenerationRestartToken] = useState(0);
+  const [manualEditsSinceGeneration, setManualEditsSinceGeneration] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [notice, setNotice] = useState(text.workspaceReady);
   const [floatingHelp, setFloatingHelp] = useState<FloatingHelp | null>(null);
@@ -727,12 +307,17 @@ export default function App() {
   generateFromImageRef.current = generateFromImage;
 
   useEffect(() => {
-    saveDraft(project);
-  }, [project]);
+    if (!saveDraft(project)) setNotice(text.storageUnavailable);
+  }, [project, text.storageUnavailable]);
 
   useEffect(() => {
-    localStorage.setItem(languageKey, language);
-  }, [language]);
+    try {
+      localStorage.setItem(languageKey, language);
+    } catch {
+      setNotice(text.storageUnavailable);
+    }
+    if (typeof document !== 'undefined') document.documentElement.lang = language;
+  }, [language, text.storageUnavailable]);
 
   useEffect(() => {
     return () => {
@@ -754,6 +339,7 @@ export default function App() {
   useEffect(() => {
     setNotice((current: string) => {
       if (current === ui.zh.workspaceReady || current === ui.en.workspaceReady) return text.workspaceReady;
+      if (current === ui.zh.regenerateFromImage || current === ui.en.regenerateFromImage) return text.regenerateFromImage;
       const zhGenerated = current.match(/^(\d+) 色 - (\d+) 颗 - 可编辑图案已生成。$/);
       if (zhGenerated) return `${zhGenerated[1]} colors - ${zhGenerated[2]} beads - editable pattern ready.`;
       const enGenerated = current.match(/^(\d+) colors - (\d+) beads - editable pattern ready\.$/);
@@ -778,7 +364,7 @@ export default function App() {
     }
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
-  }, []);
+  }, [project, language]);
 
   useEffect(() => {
     const shouldGenerate = beginAutoGenerationEffect(generationRequestRef, suppressAutoGenerationRef);
@@ -786,6 +372,12 @@ export default function App() {
     if (!shouldGenerate || !pendingFile) {
       autoGenerationPendingRef.current = false;
       autoGenerateShouldCommitRef.current = false;
+      return;
+    }
+    if (!shouldAutoRegenerate(Boolean(pendingFile), manualEditsSinceGeneration)) {
+      autoGenerationPendingRef.current = false;
+      autoGenerateShouldCommitRef.current = false;
+      setNotice(text.regenerateFromImage);
       return;
     }
     autoGenerationPendingRef.current = true;
@@ -796,14 +388,24 @@ export default function App() {
       void generateFromImageRef.current({ recordHistory: shouldCommit, automatic: true });
     }, 420);
     return () => window.clearTimeout(timer);
-  }, [pendingFile, convertWidth, generationStyle, backgroundMode, tolerance, autoGenerationKey, autoGenerationRestartToken]);
+  }, [pendingFile, convertWidth, generationStyle, backgroundMode, tolerance, autoGenerationKey, autoGenerationRestartToken, manualEditsSinceGeneration]);
 
   function commitHistory() {
     setPast((items) => [...items.slice(-39), project]);
     setFuture([]);
   }
 
-  function updateProject(next: BeadProject) {
+  function updateProject(next: BeadProject, source: 'manual' | 'generated' | 'settings' = 'manual') {
+    if (source === 'generated') {
+      const hadManualEdits = manualEditsSinceGeneration;
+      setManualEditsSinceGeneration(false);
+      if (hadManualEdits) suppressAutoGenerationRef.current = true;
+    } else if (projectGridChanged(project, next)) {
+      setManualEditsSinceGeneration(true);
+      generationRequestRef.current += 1;
+      autoGenerationPendingRef.current = false;
+      setIsGenerating(false);
+    }
     setProject({ ...next, updatedAt: new Date().toISOString() });
   }
 
@@ -815,8 +417,11 @@ export default function App() {
   }
 
   function updatePrintProject(next: BeadProject) {
-    invalidateGeneration();
-    updateProject(next);
+    if (autoGenerationPaletteKey(project.printSettings.mode, project.amsColors)
+      !== autoGenerationPaletteKey(next.printSettings.mode, next.amsColors)) {
+      invalidateGeneration();
+    }
+    updateProject(next, 'settings');
   }
 
   function selectColor(colorId: string, options: { updateRecent?: boolean } = {}) {
@@ -856,9 +461,9 @@ export default function App() {
     setReferenceAdjusting(false);
   }
 
-  function resetAdjustments() {
+  function resetAdjustments(restore = true) {
     const session = adjustmentSessionRef.current;
-    if (session.layerId === activeLayer.id && session.baseCells.length === activeLayer.cells.length) {
+    if (restore && session.layerId === activeLayer.id && session.baseCells.length === activeLayer.cells.length) {
       updateProject(withLayers(project, layers.map((layer) => (layer.id === activeLayer.id ? { ...layer, cells: session.baseCells.slice() } : layer))));
     }
     setAdjustments(defaultAdjustments);
@@ -963,14 +568,21 @@ export default function App() {
     updateProject(next);
   }
 
+  function allowProjectReplacement(): boolean {
+    return !hasEditableWork(project) || window.confirm(text.replaceProjectConfirm);
+  }
+
   function startBlank(width = 32, height = 32) {
+    if (!allowProjectReplacement()) return;
+    invalidateGeneration();
     soloVisibilitySnapshotRef.current = null;
     setProject(createProject(width, height));
     setPast([]);
     setFuture([]);
+    setManualEditsSinceGeneration(false);
     setClipboardPattern(null);
     setCopySelectionIndices([]);
-    resetAdjustments();
+    resetAdjustments(false);
     resetImportSettings();
     setSelectedColorId(defaultColorId);
     setRecentColorIds(defaultRecentColorIds);
@@ -1025,11 +637,15 @@ export default function App() {
     setCanvasHeight(preset.height);
   }
 
-  function handleImageFile(file: File) {
+  function handleImageFile(file: File): boolean {
     if (!file.type.match(/^image\/(png|jpeg|jpg|webp)$/)) {
       setNotice(language === 'zh' ? '请使用 PNG、JPG、JPEG 或 WebP 图片。' : 'Use a PNG, JPG, JPEG, or WebP image.');
-      return;
+      return false;
     }
+    if (!allowProjectReplacement()) return false;
+    invalidateGeneration();
+    resetAdjustments(false);
+    setManualEditsSinceGeneration(false);
     setPendingFile(file);
     setPendingImageUrl((current) => {
       if (current) URL.revokeObjectURL(current);
@@ -1043,6 +659,7 @@ export default function App() {
     resetReferenceTransform();
     autoGenerateShouldCommitRef.current = true;
     setNotice(language === 'zh' ? `正在生成 ${file.name}...` : `Generating ${file.name}...`);
+    return true;
   }
 
   function handleReferenceImageFile(file: File) {
@@ -1111,7 +728,7 @@ export default function App() {
         layers: nextLayers,
         cells: composeVisibleCells(nextLayers, nextWidth, nextHeight),
       };
-      updateProject(nextProject);
+      updateProject(nextProject, 'generated');
       setNotice(
         language === 'zh'
           ? `${result.colorsUsed} 色 - ${result.totalBeads} 颗 - 可编辑图案已生成。`
@@ -1128,7 +745,7 @@ export default function App() {
     }
   }
 
-  async function importJson(file: File) {
+  async function importJson(file: File): Promise<boolean> {
     if (file.size > MAX_PROJECT_FILE_BYTES) throw new Error(text.invalidRecord);
     let imported: BeadProject;
     try {
@@ -1140,16 +757,21 @@ export default function App() {
     if (!isSafeProjectImport(imported, file.size)) {
       throw new Error(text.invalidRecord);
     }
+    if (!allowProjectReplacement()) return false;
+    invalidateGeneration();
     soloVisibilitySnapshotRef.current = null;
     setProject(normalizeProject(imported));
     setPast([]);
     setFuture([]);
+    setManualEditsSinceGeneration(false);
+    resetAdjustments(false);
     setPendingFile(null);
     setPendingImageUrl((current) => {
       if (current) URL.revokeObjectURL(current);
       return null;
     });
     setNotice(text.recordImported);
+    return true;
   }
 
   function exportUsageList() {
@@ -1427,8 +1049,7 @@ export default function App() {
         accept="image/png,image/jpeg,image/webp"
         onChange={(event) => {
           const file = event.currentTarget.files?.[0];
-          if (file) handleImageFile(file);
-          event.currentTarget.value = '';
+          if (file && handleImageFile(file)) event.currentTarget.value = '';
         }}
       />
       <input
@@ -1449,8 +1070,17 @@ export default function App() {
         accept="application/json,.json"
         onChange={(event) => {
           const file = event.currentTarget.files?.[0];
-          if (file) importJson(file).catch((error) => setNotice(error.message));
-          event.currentTarget.value = '';
+          const input = event.currentTarget;
+          if (file) {
+            void importJson(file)
+              .then((accepted) => {
+                if (accepted) input.value = '';
+              })
+              .catch((error) => {
+                setNotice(error.message);
+                input.value = '';
+              });
+          }
         }}
       />
 
@@ -1625,6 +1255,12 @@ export default function App() {
               <span>{isGenerating ? pendingFile?.name : pendingFile ? 'PNG / JPG / WebP' : 'PNG, JPG, WebP'}</span>
             </span>
           </button>
+
+          {pendingFile && manualEditsSinceGeneration && (
+            <button className="project-action-button primary-action" type="button" disabled={isGenerating} onClick={() => void generateFromImage({ recordHistory: true })}>
+              {text.regenerateFromImage}
+            </button>
+          )}
 
           <div className="image-field-grid">
             <label className="image-number-field">
@@ -2686,7 +2322,7 @@ export default function App() {
               </label>
             ))}
             <div className="adjustment-actions">
-              <button type="button" onClick={resetAdjustments} disabled={!hasAdjustments(adjustments)}>
+              <button type="button" onClick={() => resetAdjustments()} disabled={!hasAdjustments(adjustments)}>
                 {text.resetAdjustments}
               </button>
             </div>

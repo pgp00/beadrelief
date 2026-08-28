@@ -300,6 +300,20 @@ export function isSafeProjectImport(project: unknown, fileBytes: number): projec
     && (!candidate.layers || (Array.isArray(candidate.layers) && candidate.layers.length <= MAX_PROJECT_LAYERS));
 }
 
+export function hasEditableWork(project: BeadProject): boolean {
+  return project.layers.some((layer) => layer.cells.some((cell) => cell !== null));
+}
+
+export function projectGridChanged(previous: BeadProject, next: BeadProject): boolean {
+  if (previous.width !== next.width || previous.height !== next.height || previous.layers.length !== next.layers.length) return true;
+  return previous.layers.some((layer, index) => {
+    const nextLayer = next.layers[index];
+    return layer.id !== nextLayer.id
+      || layer.cells.length !== nextLayer.cells.length
+      || layer.cells.some((cell, cellIndex) => cell !== nextLayer.cells[cellIndex]);
+  });
+}
+
 function isSafeDimension(value: unknown): value is number {
   return typeof value === 'number'
     && Number.isSafeInteger(value)
@@ -317,8 +331,13 @@ function emptyCells(width: number, height: number): Array<string | null> {
   return Array.from({ length: width * height }, () => null);
 }
 
-export function saveDraft(project: BeadProject): void {
-  localStorage.setItem(autosaveKey, JSON.stringify(project));
+export function saveDraft(project: BeadProject): boolean {
+  try {
+    localStorage.setItem(autosaveKey, JSON.stringify(project));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function loadDraft(): BeadProject | null {
@@ -329,7 +348,6 @@ export function loadDraft(): BeadProject | null {
     if (!parsed.width || !parsed.height || !Array.isArray(parsed.cells)) return null;
     return normalizeProject(parsed);
   } catch {
-    localStorage.removeItem(autosaveKey);
     return null;
   }
 }
