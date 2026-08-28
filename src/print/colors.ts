@@ -1,11 +1,13 @@
 import type { AmsColor, BeadProject, PaletteColor } from '../types';
 
 export const DEFAULT_AMS_COLORS: AmsColor[] = [
-  { id: 'ams-1-1c1c1c', name: 'Black', hex: '#1c1c1c', tdMm: 1 },
-  { id: 'ams-2-f4f1e8', name: 'White', hex: '#f4f1e8', tdMm: 1 },
+  { id: 'ams-1-f4f1e8', name: 'White', hex: '#f4f1e8', tdMm: 1 },
+  { id: 'ams-2-1c1c1c', name: 'Black', hex: '#1c1c1c', tdMm: 1 },
   { id: 'ams-3-ed2b2b', name: 'Red', hex: '#ed2b2b', tdMm: 1 },
   { id: 'ams-4-2864dc', name: 'Blue', hex: '#2864dc', tdMm: 1 },
 ];
+
+export const DEFAULT_ACTIVE_AMS_COLORS = DEFAULT_AMS_COLORS.slice(0, 3);
 
 export function normalizeHex(hex: string): string {
   const value = `#${hex.replace('#', '').toLowerCase()}`;

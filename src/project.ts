@@ -1,5 +1,5 @@
 import { getColor, paletteVersion } from './palette';
-import { DEFAULT_AMS_COLORS, amsColorToPaletteColor, makeAmsColorId, nearestPaletteColorOklab, normalizeHex } from './print/colors';
+import { DEFAULT_ACTIVE_AMS_COLORS, DEFAULT_AMS_COLORS, amsColorToPaletteColor, makeAmsColorId, nearestPaletteColorOklab, normalizeHex } from './print/colors';
 import { DEFAULT_PRINT_SETTINGS, PRINT_SETTING_LIMITS } from './print/settings';
 import { STACK_LAYERS_PER_FILAMENT, STACK_TEMPLATES, buildStackPalette, parseStackColorId, type StackTemplateId } from './print/stacking';
 import type { AmsColor, BeadLayer, BeadProject, PaletteColor, PrintMode } from './types';
@@ -49,8 +49,8 @@ export function createProject(width = 32, height = 32, name = 'Untitled Pattern'
       boardHeight: 52,
       showBoardIds: true,
     },
-    amsColors: DEFAULT_AMS_COLORS.map((color) => ({ ...color })),
-    printSettings: { ...DEFAULT_PRINT_SETTINGS },
+    amsColors: DEFAULT_ACTIVE_AMS_COLORS.map((color) => ({ ...color })),
+    printSettings: { ...DEFAULT_PRINT_SETTINGS, baseColorId: DEFAULT_ACTIVE_AMS_COLORS[0].id },
     createdAt: now,
     updatedAt: now,
   };
@@ -263,7 +263,7 @@ function finiteInRange(value: unknown, fallback: number, min: number, max: numbe
 }
 
 function normalizeAmsColors(colors: AmsColor[] | undefined): AmsColor[] {
-  const source = colors?.length ? colors.slice(0, 4) : DEFAULT_AMS_COLORS;
+  const source = colors?.length ? colors.slice(0, 4) : DEFAULT_ACTIVE_AMS_COLORS;
   return source.map((color, index) => {
     const fallback = DEFAULT_AMS_COLORS[index] ?? DEFAULT_AMS_COLORS[0];
     let hex: string;

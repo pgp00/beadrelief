@@ -54,8 +54,8 @@ test("AMS ids embed their slot and current color", () => {
 
 test("OKLab matching is deterministic and stays inside the active palette", () => {
   const palette = DEFAULT_AMS_COLORS.map(amsColorToPaletteColor);
-  assert.equal(nearestPaletteColorOklab("#fefefe", palette).id, "ams-2-f4f1e8");
-  assert.equal(nearestPaletteColorOklab("#e3262e", palette).id, "ams-3-ed2b2b");
+  assert.equal(nearestPaletteColorOklab("#fefefe", palette).id, DEFAULT_AMS_COLORS[0].id);
+  assert.equal(nearestPaletteColorOklab("#e3262e", palette).id, DEFAULT_AMS_COLORS[2].id);
   const selected = palette.slice(0, 2);
   const samples = ["#111111", "#eeeeee", "#777777"];
   const first = samples.map((sample) => nearestPaletteColorOklab(sample, selected).id);
@@ -63,15 +63,36 @@ test("OKLab matching is deterministic and stays inside the active palette", () =
   assert.ok(first.every((id) => selected.some((color) => color.id === id)));
 });
 
-test("legacy projects receive safe AMS and print defaults", () => {
+test("new projects start with white, black, and red while legacy slots are preserved", () => {
+  const fresh = createProject(1, 1);
+  assert.deepEqual(
+    fresh.amsColors.map(({ name, hex }) => [name, hex]),
+    [["White", "#f4f1e8"], ["Black", "#1c1c1c"], ["Red", "#ed2b2b"]],
+  );
+  assert.equal(fresh.printSettings.baseColorId, fresh.amsColors[0].id);
+
+  const imported = {
+    ...fresh,
+    amsColors: [
+      { id: "ams-1-010203", name: "One", hex: "#010203", tdMm: 1 },
+      { id: "ams-2-040506", name: "Two", hex: "#040506", tdMm: 1 },
+      { id: "ams-3-070809", name: "Three", hex: "#070809", tdMm: 1 },
+      { id: "ams-4-0a0b0c", name: "Four", hex: "#0a0b0c", tdMm: 1 },
+    ],
+    printSettings: { ...fresh.printSettings, baseColorId: "ams-2-040506" },
+  };
+  const normalized = normalizeProject(imported);
+  assert.deepEqual(normalized.amsColors, imported.amsColors);
+  assert.equal(normalized.printSettings.baseColorId, "ams-2-040506");
+});
+
+test("projects missing AMS data receive the three new defaults", () => {
   const legacy = createProject(1, 1);
   delete legacy.amsColors;
   delete legacy.printSettings;
   const normalized = normalizeProject(legacy);
-  assert.equal(normalized.amsColors.length, 4);
+  assert.equal(normalized.amsColors.length, 3);
   assert.equal(normalized.printSettings.baseColorId, normalized.amsColors[0].id);
-  assert.equal(normalized.printSettings.mode, "solid");
-  assert.ok(normalized.amsColors.every((color) => color.tdMm === 1));
 });
 
 test("legacy AMS colors receive the default transmission distance", () => {
@@ -119,12 +140,13 @@ test("image conversion caps source pixels and treats the requested size as the l
 });
 
 test("changing an AMS slot updates cells and the base reference", () => {
-  const project = withCells(createProject(2, 1), ["ams-1-1c1c1c", "ams-2-f4f1e8"]);
-  const updated = replaceProjectColor(project, "ams-1-1c1c1c", "ams-1-333333");
-  assert.deepEqual(updated.layers[0].cells, ["ams-1-333333", "ams-2-f4f1e8"]);
-  assert.deepEqual(updated.cells, ["ams-1-333333", "ams-2-f4f1e8"]);
+  const project = createProject(2, 1);
+  const [first, second] = project.amsColors;
+  const updated = replaceProjectColor(withCells(project, [first.id, second.id]), first.id, "ams-1-333333");
+  assert.deepEqual(updated.layers[0].cells, ["ams-1-333333", second.id]);
+  assert.deepEqual(updated.cells, ["ams-1-333333", second.id]);
   assert.equal(updated.printSettings.baseColorId, "ams-1-333333");
-  assert.equal(project.layers[0].cells[0], "ams-1-1c1c1c");
+  assert.equal(project.layers[0].cells[0], null);
 });
 
 test("automatic image generation keys ignore layered material edits only", () => {
@@ -238,10 +260,10 @@ test("layered print controls select modes, templates, and TD without losing stac
   const layeredTree = renderPrintSettings(layered, onChange, onCommit);
   const templates = findElements(layeredTree, (element) => element.type === "button" && ["CMYW", "RYBW"].includes(element.props.children));
   const tdInputs = findElements(layeredTree, (element) => element.type === "input" && element.props.type === "number" && Number(element.props.min) === 0.01);
-  assert.equal(tdInputs.length, 4);
+  assert.equal(tdInputs.length, 3);
   assert.equal(tdInputs[0].props.disabled, true);
   assert.ok(tdInputs.slice(1).every((input) => !input.props.disabled));
-  assert.deepEqual(tdInputs.map((input) => input.props["aria-label"]), ["AMS 1 TD (mm)", "AMS 2 TD (mm)", "AMS 3 TD (mm)", "AMS 4 TD (mm)"]);
+  assert.deepEqual(tdInputs.map((input) => input.props["aria-label"]), ["AMS 1 TD (mm)", "AMS 2 TD (mm)", "AMS 3 TD (mm)"]);
   const opaqueHint = findElements(layeredTree, (element) => element.type === "small" && element.props.className === "ams-td-base-hint");
   assert.equal(opaqueHint[0]?.props.children, "Treated as opaque; TD ignored.");
   const zhHint = findElements(renderPrintSettings(layered, onChange, onCommit, "zh"), (element) => element.type === "small" && element.props.className === "ams-td-base-hint");
