@@ -14,7 +14,7 @@ import { validatePrintableModel } from './print/validation';
 import { colorDistance, getColor, nearestPaletteColor } from './palette';
 import { MAX_PROJECT_DIMENSION, MAX_PROJECT_FILE_BYTES, composeVisibleCells, createLayer, createProject, hasEditableWork, isSafeProjectImport, loadDraft, normalizeProject, projectGridChanged, saveDraft, withCells, withLayers } from './project';
 import { findIsolatedBeads, summarizeLayeredUsage, summarizeUsage } from './usage';
-import type { ArrowKind, BackgroundMode, BeadProject, ClipboardPattern, CopyMode, GenerationStyle, MirrorDirection, MoveMode, RemoveMode, RightClickAction, ShapeFillMode, ShapeKind, TextDirection, ToolId } from './types';
+import type { ArrowKind, BackgroundMode, BeadProject, ClipboardPattern, ConvertResult, CopyMode, GenerationStyle, MirrorDirection, MoveMode, RemoveMode, RightClickAction, ShapeFillMode, ShapeKind, TextDirection, ToolId } from './types';
 
 const { useEffect, useMemo, useRef, useState } = React;
 
@@ -37,6 +37,26 @@ export function pendingGenerationAction(pending: boolean, suppressed: boolean): 
 
 export function shouldAutoRegenerate(hasSource: boolean, hasManualEdits: boolean): boolean {
   return hasSource && !hasManualEdits;
+}
+
+export function mergeGeneratedProject(
+  project: BeadProject,
+  targetLayerId: string,
+  result: Pick<ConvertResult, 'width' | 'height' | 'cells'>,
+): BeadProject {
+  const nextLayers = project.layers.map((layer) => ({
+    ...layer,
+    cells: layer.id === targetLayerId
+      ? resizeCells(result.cells, result.width, result.height, result.width, result.height)
+      : resizeCells(layer.cells, project.width, project.height, result.width, result.height),
+  }));
+  return {
+    ...project,
+    width: result.width,
+    height: result.height,
+    layers: nextLayers,
+    cells: composeVisibleCells(nextLayers, result.width, result.height),
+  };
 }
 
 export { projectGridChanged } from './project';
@@ -117,8 +137,12 @@ export default function App() {
     if (typeof document !== 'undefined') document.documentElement.lang = initialLanguage;
     return initialLanguage;
   });
+  const languageRef = useRef(language);
+  languageRef.current = language;
   const text = ui[language];
   const [project, setProject] = useState<BeadProject>(() => loadDraft() ?? createProject());
+  const projectRef = useRef(project);
+  projectRef.current = project;
   const autoGenerationKey = autoGenerationPaletteKey(project.printSettings.mode, project.amsColors);
   const [selectedColorId, setSelectedColorId] = useState(defaultColorId);
   const [recentColorIds, setRecentColorIds] = useState(defaultRecentColorIds);
@@ -391,7 +415,7 @@ export default function App() {
   }, [pendingFile, convertWidth, generationStyle, backgroundMode, tolerance, autoGenerationKey, autoGenerationRestartToken, manualEditsSinceGeneration]);
 
   function commitHistory() {
-    setPast((items) => [...items.slice(-39), project]);
+    setPast((items) => [...items.slice(-39), projectRef.current]);
     setFuture([]);
   }
 
@@ -569,7 +593,9 @@ export default function App() {
   }
 
   function allowProjectReplacement(): boolean {
-    return !hasEditableWork(project) || window.confirm(text.replaceProjectConfirm);
+    const currentProject = projectRef.current;
+    const currentText = ui[languageRef.current];
+    return !hasEditableWork(currentProject) || window.confirm(currentText.replaceProjectConfirm);
   }
 
   function startBlank(width = 32, height = 32) {
@@ -686,8 +712,6 @@ export default function App() {
     const requestId = generationRequestRef.current + 1;
     generationRequestRef.current = requestId;
     const targetLayerId = activeLayer.id;
-    const sourceProject = project;
-    const sourceLayers = layers;
     setIsGenerating(true);
     setNotice(language === 'zh' ? '正在本地更新拼豆图案...' : 'Updating bead pattern locally...');
     try {
@@ -706,28 +730,7 @@ export default function App() {
         autoGenerateShouldCommitRef.current = false;
         commitHistory();
       }
-      const nextWidth = result.width;
-      const nextHeight = result.height;
-      const nextLayers = sourceLayers.map((layer) => {
-        if (layer.id === targetLayerId) {
-          return {
-            ...layer,
-            cells: resizeCells(result.cells, result.width, result.height, nextWidth, nextHeight),
-          };
-        }
-        return {
-          ...layer,
-          cells: resizeCells(layer.cells, sourceProject.width, sourceProject.height, nextWidth, nextHeight),
-        };
-      });
-      const nextProject = {
-        ...sourceProject,
-        width: nextWidth,
-        height: nextHeight,
-        activeLayerId: targetLayerId,
-        layers: nextLayers,
-        cells: composeVisibleCells(nextLayers, nextWidth, nextHeight),
-      };
+      const nextProject = mergeGeneratedProject(projectRef.current, targetLayerId, result);
       updateProject(nextProject, 'generated');
       setNotice(
         language === 'zh'
@@ -1049,7 +1052,8 @@ export default function App() {
         accept="image/png,image/jpeg,image/webp"
         onChange={(event) => {
           const file = event.currentTarget.files?.[0];
-          if (file && handleImageFile(file)) event.currentTarget.value = '';
+          if (file) handleImageFile(file);
+          event.currentTarget.value = '';
         }}
       />
       <input
@@ -1073,14 +1077,11 @@ export default function App() {
           const input = event.currentTarget;
           if (file) {
             void importJson(file)
-              .then((accepted) => {
-                if (accepted) input.value = '';
-              })
               .catch((error) => {
                 setNotice(error.message);
-                input.value = '';
               });
           }
+          input.value = '';
         }}
       />
 

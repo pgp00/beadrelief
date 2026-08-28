@@ -17,7 +17,7 @@ import {
 
 const { createProject, hasEditableWork, normalizeProject, withCells } = projectApi;
 globalThis.React = React;
-const { autoGenerationPaletteKey, beginAutoGenerationEffect, pendingGenerationAction, projectGridChanged, shouldAutoRegenerate } = await import("../generated/dist/src/App.js");
+const { autoGenerationPaletteKey, beginAutoGenerationEffect, mergeGeneratedProject, pendingGenerationAction, projectGridChanged, shouldAutoRegenerate } = await import("../generated/dist/src/App.js");
 const { resolveLanguage } = await import("../generated/dist/src/i18n.js");
 
 function findElements(element, predicate, found = []) {
@@ -136,6 +136,34 @@ test("automatic image generation keys ignore layered material edits only", () =>
   assert.equal(autoGenerationPaletteKey("solid", project.amsColors), autoGenerationPaletteKey("solid", recalibrated));
   assert.notEqual(autoGenerationPaletteKey("solid", project.amsColors), autoGenerationPaletteKey("solid", recolored));
   assert.notEqual(autoGenerationPaletteKey("solid", project.amsColors), autoGenerationPaletteKey("layered", project.amsColors));
+});
+
+test("in-flight generation merges cells into the latest project state", () => {
+  const started = createProject(2, 2);
+  const latest = {
+    ...started,
+    name: "Accepted name",
+    amsColors: started.amsColors.map((color, index) => index === 1
+      ? { ...color, name: "Accepted AMS", tdMm: 2 }
+      : color),
+    layers: started.layers.map((layer) => ({
+      ...layer,
+      name: "Accepted layer",
+      opacity: 0.5,
+    })),
+  };
+  const merged = mergeGeneratedProject(latest, "base", {
+    width: 2,
+    height: 1,
+    cells: [latest.amsColors[0].id, latest.amsColors[1].id],
+  });
+
+  assert.equal(merged.name, "Accepted name");
+  assert.equal(merged.amsColors[1].name, "Accepted AMS");
+  assert.equal(merged.amsColors[1].tdMm, 2);
+  assert.equal(merged.layers[0].name, "Accepted layer");
+  assert.equal(merged.layers[0].opacity, 0.5);
+  assert.deepEqual(merged.layers[0].cells, [latest.amsColors[0].id, latest.amsColors[1].id]);
 });
 
 test("first-use language and replacement decisions are pure", () => {
