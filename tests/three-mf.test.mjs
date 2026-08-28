@@ -26,6 +26,38 @@ function readStoredEntries(archive) {
   return entries;
 }
 
+function parseModelSettings(settings) {
+  return [...settings.matchAll(/(<part\b[^>]*>)([\s\S]*?)<\/part>/g)].map(([, opening, body]) => {
+    const id = opening.match(/\bid="(\d+)"/)?.[1];
+    const name = body.match(/<metadata key="name" value="([^"]*)"\s*\/>/)?.[1];
+    const extruder = body.match(/<metadata key="extruder" value="(\d+)"\s*\/>/)?.[1];
+    assert.ok(id && name !== undefined && extruder);
+    return {
+      id: Number(id),
+      name: decodeXml(name),
+      extruder: Number(extruder),
+    };
+  });
+}
+
+function decodeXml(value) {
+  return value.replace(/&(amp|lt|gt|quot|apos);/g, (_, entity) => ({
+    amp: '&',
+    lt: '<',
+    gt: '>',
+    quot: '"',
+    apos: "'",
+  })[entity]);
+}
+
+function expectedPartAssignments(model) {
+  return model.parts.map((part, index) => {
+    const materialIndex = model.materials.findIndex((material) => material.id === part.materialId);
+    assert.notEqual(materialIndex, -1);
+    return { id: index + 1, name: part.name, extruder: materialIndex + 1 };
+  });
+}
+
 test("3MF contains one assembly, named parts, and four or fewer base materials", () => {
   const project = createProject(2, 2);
   project.amsColors = DEFAULT_AMS_COLORS.map((material) => ({ ...material }));
@@ -46,14 +78,7 @@ test("3MF contains one assembly, named parts, and four or fewer base materials",
   assert.deepEqual(projectSettings.filament_colour, model.materials.map((material) => material.hex.toUpperCase()));
   assert.deepEqual(projectSettings.filament_type, model.materials.map(() => "PLA"));
   const modelSettings = decoder.decode(entries.get("Metadata/model_settings.config"));
-  model.parts.forEach((part, index) => {
-    const materialIndex = model.materials.findIndex((material) => material.id === part.materialId);
-    assert.notEqual(materialIndex, -1);
-    assert.match(
-      modelSettings,
-      new RegExp(`<part id="${index + 1}"[\\s\\S]*?key="extruder" value="${materialIndex + 1}"`),
-    );
-  });
+  assert.deepEqual(parseModelSettings(modelSettings), expectedPartAssignments(model));
   const relationships = decoder.decode(entries.get("_rels/.rels"));
   assert.match(relationships, /Target="\/3D\/3dmodel\.model"/);
   const xml = decoder.decode(entries.get("3D/3dmodel.model"));
@@ -87,6 +112,21 @@ test("3MF contains one assembly, named parts, and four or fewer base materials",
   assert.equal(new TextDecoder().decode(archive.slice(-22, -18)), "PK\u0005\u0006");
 });
 
+test("default three-slot 3MF keeps White, Black, and Red assignments", () => {
+  const fresh = createProject(1, 1);
+  fresh.layers[0].cells = [fresh.amsColors[1].id];
+  const model = buildPrintableModel(composePrintableGrid(fresh));
+  const entries = readStoredEntries(createThreeMf(model));
+  const decoder = new TextDecoder();
+  const projectSettings = JSON.parse(decoder.decode(entries.get("Metadata/project_settings.config")));
+  assert.deepEqual(projectSettings.filament_colour, ["#F4F1E8", "#1C1C1C", "#ED2B2B"]);
+  assert.deepEqual(projectSettings.filament_colour, fresh.amsColors.map((material) => material.hex.toUpperCase()));
+  assert.deepEqual(
+    parseModelSettings(decoder.decode(entries.get("Metadata/model_settings.config"))),
+    expectedPartAssignments(model),
+  );
+});
+
 test("3MF rejects missing material references and malformed material colors", () => {
   const project = createProject(1, 1);
   project.layers[0].cells = [project.amsColors[1].id];
@@ -112,7 +152,7 @@ test("layered 3MF exports only physical material bands", async () => {
   const modelSettings = decoder.decode(entries.get("Metadata/model_settings.config"));
   assert.equal((xml.match(/<base /g) ?? []).length, 4);
   assert.equal((xml.match(/<component objectid=/g) ?? []).length, 4);
-  assert.equal((modelSettings.match(/<part id="/g) ?? []).length, model.parts.length);
+  assert.deepEqual(parseModelSettings(modelSettings), expectedPartAssignments(model));
   assert.doesNotMatch(xml, /Estimated_/);
   assert.match(xml, /Base_and_Beads_Bambu_PLA_Basic_Blue/);
   assert.match(xml, /Stack_Bambu_PLA_Basic_White/);
