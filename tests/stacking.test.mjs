@@ -95,6 +95,8 @@ test("layered project normalization migrates known non-stack colors to the neare
 
 test("mode changes remap cells and layered TD changes preserve stop levels", () => {
   const solid = createProject(2, 1);
+  solid.amsColors = STACK_TEMPLATES.rybw.map((color) => ({ ...color }));
+  solid.printSettings.baseColorId = solid.amsColors[0].id;
   solid.layers[0].cells = [solid.amsColors[0].id, solid.amsColors[1].id];
   const layered = withPrintMode(solid, "layered");
   const palette = buildStackPalette(layered.amsColors);

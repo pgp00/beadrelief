@@ -13,18 +13,19 @@ test("a new printable project fits the default 32-cell image workflow", () => {
 
 test("visible cells become a base plus one part per used color", () => {
   const project = createProject(2, 2);
+  const [first, second] = project.amsColors;
   project.layers[0].cells = [
-    "ams-1-1c1c1c", "ams-2-f4f1e8",
-    null, "ams-2-f4f1e8",
+    first.id, second.id,
+    null, second.id,
   ];
   const grid = composePrintableGrid(project);
   const model = buildPrintableModel(grid);
   assert.deepEqual(grid.cells, [
-    "ams-1-1c1c1c", "ams-2-f4f1e8",
-    "ams-1-1c1c1c", "ams-2-f4f1e8",
+    first.id, second.id,
+    first.id, second.id,
   ]);
-  assert.deepEqual(model.parts.map((part) => part.name), ["Base", "Beads_Black", "Beads_White"]);
-  assert.deepEqual(model.materials.map((material) => material.id), ["ams-1-1c1c1c", "ams-2-f4f1e8"]);
+  assert.deepEqual(model.parts.map((part) => part.name), ["Base", `Beads_${first.name}`, `Beads_${second.name}`]);
+  assert.deepEqual(model.materials.map((material) => material.id), [first.id, second.id]);
   assert.deepEqual(model.sizeMm, { x: 10, y: 10, z: 2 });
 });
 
