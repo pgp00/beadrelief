@@ -1,5 +1,32 @@
 # Bambu Studio P2S Compatibility Check
 
+## v0.1.0 heart release sample — pending physical evidence
+
+- Record date: 2026-08-28
+- Source PNG: `samples/pingdou-heart-source.png`
+- Source PNG SHA-256: `e6f8cc9cde3bebb2bce12cf8ef96dfa403c9d658702a6d4a2a9c04eeffa41d44`
+- Editable project: `samples/pingdou-heart-project.json`
+- Editable project SHA-256: `60adcce884dd146b0e8574d05ef4d9d1a722cb125d65eb900cb96902726aca20`
+- Release 3MF: `samples/pingdou-heart-p2s.3mf`
+- Release 3MF SHA-256: `8152531195e23e555d8073a6a4f9c8221e536aa1a7de999e0618f81945253579`
+- Artifact dimensions: 10 × 10 cells, 25 × 25 × 2 mm
+- Materials: white, black, and red
+- Target software: Bambu Studio `02.08.02.61`
+- Target printer/nozzle: Bambu Lab P2S, 0.4 mm
+- Process profile and layer height: pending maintainer GUI slice
+- Filament slot assignments: pending maintainer GUI confirmation
+- Import result: pending maintainer GUI confirmation
+- Assignment result: pending maintainer GUI confirmation
+- Slice result: pending maintainer GUI confirmation
+- Estimated print time: pending; must be below 30 minutes
+- Actual wall-clock print time: pending; must be below 30 minutes
+- Physical print result: pending
+- Required evidence: `docs/pingdou-heart-bambu-slice.webp`, `docs/pingdou-printed-result.jpg`, and the composed `docs/pingdou-workflow-hero.webp`
+
+The three image files above are intentionally not linked from the public README until real maintainer-owned evidence exists. This section is a release gate, not a compatibility claim.
+
+## Earlier compatibility fixtures
+
 - Date: 2026-07-31
 - macOS version: 26.5.1 (25F80)
 - Bambu Studio version: 02.07.01.62
