@@ -1038,8 +1038,8 @@ export default function App() {
         .slice(0, 80) || 'pingdou';
       downloadThreeMf(printableModel, `${stem}.3mf`);
       setNotice(language === 'zh'
-        ? '3MF 已导出，已包含 Bambu 颜色分配；打印前请确认实际 AMS 槽位。'
-        : '3MF exported with Bambu colors included; confirm the physical AMS slots before printing.');
+        ? '3MF 已导出，已包含 Bambu 项目耗材颜色和零件分配；打印前请确认实际 AMS 槽位。'
+        : '3MF exported with Bambu project-filament colors and part assignments included; confirm the physical AMS slots before printing.');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : String(error));
     }

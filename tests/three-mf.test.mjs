@@ -172,10 +172,25 @@ test("heart sample keeps its deterministic 10 by 10 three-color footprint", asyn
   );
   const [white, black, red] = project.amsColors;
   assert.equal(project.printSettings.baseColorId, white.id);
-  assert.deepEqual(new Set(project.cells.filter(Boolean)), new Set([white.id, black.id, red.id]));
+  const orderedIds = [white.id, black.id, red.id];
+  assert.deepEqual([...new Set(project.cells)], orderedIds);
+  assert.deepEqual([...new Set(project.layers[0].cells)], orderedIds);
+  assert.deepEqual(project.cells, project.layers[0].cells);
   assert.deepEqual(buildPrintableModel(composePrintableGrid(project)).sizeMm, {
     x: 25,
     y: 25,
     z: 2,
   });
+});
+
+test("committed samples include Bambu color and part-assignment metadata", async () => {
+  for (const filename of [
+    "samples/pingdou-heart-p2s.3mf",
+    "samples/pingdou-p2s-sample.3mf",
+    "samples/pingdou-p2s-layered-sample.3mf",
+  ]) {
+    const entries = readStoredEntries(await readFile(filename));
+    assert.ok(entries.has("Metadata/project_settings.config"), `${filename} is missing project settings`);
+    assert.ok(entries.has("Metadata/model_settings.config"), `${filename} is missing model settings`);
+  }
 });
