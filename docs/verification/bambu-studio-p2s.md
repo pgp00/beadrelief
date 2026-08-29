@@ -1,93 +1,38 @@
-# Bambu Studio P2S Compatibility Check
+# Bambu Studio compatibility
 
-## v0.1.0 heart release sample — pending physical evidence
+## Current reproducible samples
 
-- Record date: 2026-08-28
-- Source PNG: `samples/pingdou-heart-source.png`
-- Source PNG SHA-256: `e6f8cc9cde3bebb2bce12cf8ef96dfa403c9d658702a6d4a2a9c04eeffa41d44`
-- Editable project: `samples/pingdou-heart-project.json`
-- Editable project SHA-256: `4d67c502a30d4a02614e791dd7777f10dcfdd2b4c97fd4cdde27ea71c4e9d3d5`
-- Release 3MF: `samples/pingdou-heart-p2s.3mf`
-- Release 3MF SHA-256: `8565e9aa27a34a895a2f5c58fe9dbe09471585f3ad320fe53092900effab7ce8`
-- Artifact dimensions: 10 × 10 cells, 25 × 25 × 2 mm
-- Materials: white, black, and red
-- Target software: Bambu Studio `02.08.02.61`
-- Target printer/nozzle: Bambu Lab P2S, 0.4 mm
-- Process profile and layer height: pending maintainer GUI slice
-- Project-filament colors and part assignments: embedded in the release 3MF; pending maintainer GUI confirmation
-- Physical AMS slot mapping: pending maintainer GUI confirmation
-- Import result: pending maintainer GUI confirmation
-- Project-filament assignment result: embedded in the release 3MF; pending maintainer GUI confirmation
-- Physical AMS assignment result: pending maintainer GUI confirmation
-- Slice result: pending maintainer GUI confirmation
-- Estimated print time: pending; must be below 30 minutes
-- Actual wall-clock print time: pending; must be below 30 minutes
-- Physical print result: pending
-- Required evidence: `docs/pingdou-heart-bambu-slice.webp`, `docs/pingdou-printed-result.jpg`, and the composed `docs/pingdou-workflow-hero.webp`
+| File | SHA-256 |
+| --- | --- |
+| `samples/pingdou-heart-source.png` | `e6f8cc9cde3bebb2bce12cf8ef96dfa403c9d658702a6d4a2a9c04eeffa41d44` |
+| `samples/pingdou-heart-project.json` | `4d67c502a30d4a02614e791dd7777f10dcfdd2b4c97fd4cdde27ea71c4e9d3d5` |
+| `samples/pingdou-heart-p2s.3mf` | `7c6e12e8a64d179ab672b7e04ef37bb6e2e5696def4b7b82d5fa62630a8f28e5` |
+| `samples/pingdou-p2s-sample.3mf` | `82d8a1bd82955a52988d2b331686ac9f07d9dfd1ba3d6d1b19c961c7919df1c5` |
+| `samples/pingdou-p2s-layered-sample.3mf` | `72baff9bcef680bd1fdd33c62fe868cf99e4fc3b9c45580cb1213e8b0fa80848` |
 
-The three image files above are intentionally not linked from the public README until real maintainer-owned evidence exists. This section is a release gate, not a compatibility claim.
+The heart is a 10 × 10, approximately 25 × 25 × 2 mm solid-mode sample using white, black, and red. Its grouped 3MF includes Bambu project-filament colors and part assignments; physical AMS slot mapping still needs confirmation before printing.
 
-## Earlier compatibility fixtures
+Automated verification currently covers:
 
-This section records the pre-auto-color fixture bytes and their observed Bambu Studio mapping/slice behavior. Those bytes are superseded by the current auto-color fixtures below and remain recoverable at commit `e6a318c`.
+- deterministic regeneration of all three 3MF samples;
+- ZIP integrity and required 3MF metadata entries;
+- matching component-object and Bambu part-metadata IDs;
+- the expected white, black, and red heart assignments;
+- printable-model geometry and export validation.
 
-- Date: 2026-07-31
-- macOS version: 26.5.1 (25F80)
-- Bambu Studio version: 02.07.01.62
-- Download source: https://github.com/bambulab/BambuStudio/releases/download/v02.07.01.62/Bambu_Studio_mac-v02.07.01.62-20260616174358.dmg
-- Download SHA-256: `1e54c25aefc5249d56b63711cf773bed56f14430aafcc34340cd4894aef15896`
-- Printer profile: Bambu Lab P2S, 0.4 mm nozzle
-- Process profile: 0.20 mm Standard @BBL P2S
-- Sample: `samples/pingdou-p2s-sample.3mf`
-- Sample SHA-256 (superseded; bytes recoverable at commit `e6a318c`): `d325903b031b7cb40f34b452e280c94c1ed674b9586bfcba1f41486e80d5aa55`
-- Imported structure: one assembly with five independently assignable parts
-- 3MF part names: `Base`, `Beads_Black`, `Beads_White`, `Beads_Red`, `Beads_Blue`
-- Bambu Studio labels: `Pingdou`, `Pingdou_2`, `Pingdou_3`, `Pingdou_4`, `Pingdou_5`
-- Material mapping: Base/Black→1, White→2, Red→3, Blue→4
-- Imported dimensions: 20 × 20 × 2 mm
-- Imported volume: 720.619 mm³
-- Imported triangles: 4620
-- Repair warning: none
-- Slice result: pass
-- Slice height check: layer 6 is a continuous 1.20 mm base; layer 10 reaches 2.00 mm and shows all four bead colors with shallow closed center dimples
-- Slice totals: 32m0s, 12 filament changes, 2.61 m / 7.91 g including purge tower and purged filament
-- Notes: Bambu Studio displayed its standard third-party 3MF warning and imported one project filament initially. Adding three project filaments and assigning the five parts produced the expected four-color preview. It also replaced the standard child-object names with sequential `Pingdou` labels in its UI; the archive retains the five descriptive names. No account, printer connection, upload, or print command was used. These observations apply only to the superseded pre-auto-color bytes above.
+Run the same checks locally with:
 
-## Layered fixture — Phase A CLI evidence
+```bash
+npm ci
+npm run verify
+```
 
-- Sample: `samples/pingdou-p2s-layered-sample.3mf`
-- Generator: `scripts/generate-layered-sample.mjs`
-- CLI verification: `npm run verify` passed: 34 Node tests, then both sample generators completed.
-- Archive integrity: `unzip -t` reported `No errors detected` for both fixed samples.
-- Solid sample SHA-256 before generator run: `f36d35befb5b86c72e1df72727f4be8b680d67d9a2a4f50ec92290d5cd14da30`
-- Solid sample SHA-256 after historical generator run (superseded; bytes recoverable at commit `e6a318c`): `d325903b031b7cb40f34b452e280c94c1ed674b9586bfcba1f41486e80d5aa55`.
-- Layered sample SHA-256 (superseded; bytes recoverable at commit `e6a318c`): `74c9e2d9775deea9dee7258081cd70fd05f59920068783fa4a9eab5b3e4fa736`
-- XML structure: 4 base materials, 4 assembly components, physical-part bounds `0 × 0 × 0` to `20 × 20 × 2.48 mm`, and no `Estimated_*` geometry.
+## Current manual status
 
-The historical generated fixtures were deterministic. The historical solid fixture changed because the manifold topology correction changed cap-center vertex order and cap-triangle winding; its archive entries, size, and model dimensions were unchanged. The historical layered fixture used four RYBW physical materials in bottom-to-top AMS order. Its exported model excluded `Estimated_*` preview geometry; those estimated colors were preview-only and were not Bambu Studio Mixed Filament metadata.
+The exact current heart bytes have not yet been recorded through a fresh Bambu Studio GUI import, slice, and physical print. No print-time or physical-result claim is made. Before printing, review the imported project-filament mapping, map it to the physical AMS slots, and inspect the slice preview.
 
-## Current auto-color fixtures — pending fresh GUI acceptance
+## Historical P2S slice observation
 
-These regenerated bytes supersede the historical fixtures above. Fresh Bambu Studio GUI acceptance has not been run for these current files, so no current-fixture import, slice, or physical-print result is claimed.
+An earlier layered fixture was imported and sliced with Bambu Studio `02.07.01.62`, a Bambu Lab P2S, and a `0.4 mm` nozzle. It imported as four assignable parts without a geometry-repair warning and sliced successfully with a `23m23s` total estimate, three layer-boundary tool changes, and `4.04 g` total material including purge and prime.
 
-- Solid sample: `samples/pingdou-p2s-sample.3mf`
-- Solid sample SHA-256: `b2cbd16dc3953efbec34dd01358dff59fa7e3a9b89397188b234b65ce45cd9dd`
-- Layered sample: `samples/pingdou-p2s-layered-sample.3mf`
-- Layered sample SHA-256: `bb548f44fcfc8c01c86cbb35e58f665137e29e7c819117ad551614ac72dfff5f`
-- Automated verification: `npm run verify` passed with 57 Node tests, then both current sample generators completed; `unzip -t` passed for all three tracked 3MF archives.
-- Current archive structure: each tracked 3MF contains `Metadata/project_settings.config` and `Metadata/model_settings.config`; the Bambu project-filament colors and one-based part assignments are generated from the current material order.
-
-## Layered fixture — Bambu Studio acceptance
-
-- Acceptance date: 2026-08-01
-- Bambu Studio: `02.07.01.62`; importing the fixture showed only the standard third-party 3MF warning, “load geometry data and color data only”.
-- Imported structure: one `Pingdou` assembly with four independently assignable children auto-labelled `Pingdou`, `Pingdou_2`, `Pingdou_3`, and `Pingdou_4`. Archive names remain `Base_and_Beads_Bambu_PLA_Basic_Blue`, `Stack_Bambu_PLA_Basic_Red`, `Stack_Bambu_PLA_Basic_Yellow`, and `Stack_Bambu_PLA_Basic_White`.
-- Imported dimensions: `20 × 20 × 2.48 mm`; volume `725.081 mm³`; `7872` triangles. No repair, out-of-bed, or empty-layer warning occurred.
-- Printer/process: Bambu Lab P2S, `0.4 mm` nozzle, `0.16 mm` initial layer, `0.08 mm` remaining layer height, and mixed-color sublayer off (`enable_mixed_color_sublayer=0`).
-- Object/Part Setting applied `100%` infill and Rectilinear to the assembly/parts. The saved Bambu project records `sparse_infill_density=100` and `sparse_infill_pattern=zig-zag` (Bambu's internal Rectilinear enum), plus `edges_fixed=0`, `degenerate_facets=0`, `facets_removed=0`, `facets_reversed=0`, and `backwards_edges=0` for all four meshes. Its global process remains `15%` Grid; the `100%` Rectilinear values are explicit per-object overrides.
-- Saved project mapping: `Pingdou`→extruder 4 Blue, `Pingdou_2`→extruder 3 Red, `Pingdou_3`→extruder 2 Yellow, `Pingdou_4`→extruder 1 White; saved colors are `#FFFFFF`, `#FFFF00`, `#FF0000`, `#0000FF`.
-- Official Bambu Studio CLI sliced the GUI-configured temporary project successfully: `return_code=0`, `error_string="Success."`, empty `warning_message`, bbox `20 × 20 × 2.4799998`, `7872` triangles, and `filament_change_times=3`.
-- G-code: 30 layers, 30 unique Z heights from `0.16` through `2.48 mm`, max Z `2.48 mm`, model printing `16m21s`, total estimate `23m23s`. Slot weights 1–4 are `0.5429513`, `1.0718923`, `0.9248368`, and `1.5149400 g` (`4.04 g` total including purge/prime; rounded display: `0.54`, `1.07`, `0.92`, `1.51 g`).
-- Tool order: initial `T3` Blue, `T2` Red at Z `1.60`, `T1` Yellow at Z `1.92`, and `T0` White at Z `2.24`. Exactly three `CP` toolchanges occur at `CHANGE_LAYER` boundaries; no other printing tool selection exists (`T65535` is shutdown). This proves no same-layer color mixing.
-- GUI observations: four child rows showed Blue/Red/Yellow/White badges and `100%`; P2S/nozzle and `20 × 20 × 2.48 mm` were visible. No repository screenshot was retained.
-- No printer connection, upload, or print command was used; this was import/configure/slice acceptance only. `samples/pingdou-p2s-layered-bambu-temp.3mf` is controller-created temporary evidence and is intentionally untracked.
+Those bytes were superseded at commit `e6a318c`. This observation supports the geometry and slicer workflow only; it is not acceptance evidence for the current sample files or a completed physical print.

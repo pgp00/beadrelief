@@ -4,7 +4,6 @@
 
 [打开在线演示](https://pgp00.github.io/pingdou/) · [下载爱心 3MF](samples/pingdou-heart-p2s.3mf) · [English](README.md)
 
-<!-- RELEASE_GATE: replace the source preview below with docs/pingdou-workflow-hero.webp after real slice and print assets are supplied. -->
 ![Pingdou 爱心源图预览](samples/pingdou-heart-source.png)
 
 - **本地处理：** 图片和生成文件留在浏览器中。
@@ -32,11 +31,9 @@
 - [可编辑项目 JSON](samples/pingdou-heart-project.json)
 - [分组 3MF](samples/pingdou-heart-p2s.3mf)
 
-## P2S 发布验证
+## 验证状态
 
-爱心样例尚未在真实 Bambu Studio GUI 会话中完成验证，也没有实体打印照片。导入、项目耗材颜色和零件分配行为、实际 AMS 映射、层高/工艺配置、预计时间、切片结果和实际打印用时都仍等待实测证据。详见[验证记录](docs/verification/bambu-studio-p2s.md)，其中列出了文件哈希和发布门槛状态。
-
-目标环境：Bambu Studio `v02.08.02.61`、Bambu Lab P2S、`0.4 mm` 喷嘴。
+CI 会重新生成仓库内样例、检查每个 3MF，并验证文件内的项目耗材颜色和零件分配。当前爱心文件尚未完成实体打印，因此打印前仍需确认 AMS 槽位映射和切片预览。精确哈希与兼容性记录见 [Bambu Studio 验证](docs/verification/bambu-studio-p2s.md)。
 
 如果 Pingdou 帮你做出了作品，点个 GitHub Star 可以帮助更多创作者发现它。
 

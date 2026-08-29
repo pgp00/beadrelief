@@ -4,7 +4,6 @@ Turn any image into an editable, multicolor 3MF bead relief — locally in your 
 
 [Try the live demo](https://pgp00.github.io/pingdou/) · [Download the heart 3MF](samples/pingdou-heart-p2s.3mf) · [简体中文](README.zh-CN.md)
 
-<!-- RELEASE_GATE: replace the source preview below with docs/pingdou-workflow-hero.webp after real slice and print assets are supplied. -->
 ![Pingdou heart source preview](samples/pingdou-heart-source.png)
 
 - **Local by design:** source images and generated files stay in your browser.
@@ -32,11 +31,9 @@ Use the same small heart through the full editable-project path:
 - [Editable project JSON](samples/pingdou-heart-project.json)
 - [Grouped 3MF](samples/pingdou-heart-p2s.3mf)
 
-## P2S release verification
+## Verification status
 
-The heart sample is not yet verified in a real Bambu Studio GUI session, and no physical-print photograph is available. Import, project-filament color and part-assignment behavior, physical AMS mapping, layer/profile settings, estimated time, slice result, and wall-clock print time remain pending measured evidence. See the [verification record](docs/verification/bambu-studio-p2s.md) for the artifact hashes and release-gate status.
-
-Target setup: Bambu Studio `v02.08.02.61`, Bambu Lab P2S, `0.4 mm` nozzle.
+CI regenerates the checked-in samples, tests every 3MF archive, and verifies the embedded project-filament colors and part assignments. The current heart file has not yet been physically printed, so confirm the AMS slot mapping and slice preview before printing. Exact hashes and the compatibility record are in [Bambu Studio verification](docs/verification/bambu-studio-p2s.md).
 
 If Pingdou helped you make something, a GitHub star helps other makers find it.
 
