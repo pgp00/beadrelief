@@ -164,6 +164,12 @@ test("Layered XLSX reports AMS order and layer cells without bead-pack estimates
   assert.match(sheet, /<v>8<\/v>/);
   assert.match(sheet, /<v>4<\/v>/);
   assert.doesNotMatch(sheet, /\u9884\u8ba1\u5305\u6570|\u6bcf\u5305\u6570\u91cf|\u603b\u9897\u6570/);
+
+  downloadUsageWorkbook(project, false);
+  const patternWorkbook = readStoredEntries(await downloadedBytes(downloads[1]));
+  const patternSheet = decoder.decode(patternWorkbook.get("xl/worksheets/sheet1.xml"));
+  assert.match(patternSheet, /\u603b\u9897\u6570/);
+  assert.doesNotMatch(patternSheet, />Layer cells</);
 });
 
 test("PNG and PDF downloads have their required binary structure", async (t) => {

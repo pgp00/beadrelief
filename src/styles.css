@@ -970,6 +970,29 @@ button:focus-visible {
   box-shadow: var(--shadow-soft);
 }
 
+.output-mode-card {
+  gap: 8px;
+}
+
+.output-mode-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.output-mode-toggle button {
+  min-height: 36px;
+  border-color: var(--line-strong);
+  background: #ffffff;
+  font-weight: var(--weight-semibold);
+}
+
+.output-mode-toggle button.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
 .preview-card {
   flex: 0 0 auto;
 }

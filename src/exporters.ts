@@ -54,7 +54,7 @@ export function downloadUsageCsv(project: BeadProject, usage: UsageRow[]): void 
   downloadBlob(`${safeName(project.name || '\u62fc\u8c46\u56fe\u7eb8')}-\u7528\u91cf\u6e05\u5355.csv`, `\ufeff${content}`, 'text/csv;charset=utf-8');
 }
 
-export function downloadUsageWorkbook(project: BeadProject): void {
+export function downloadUsageWorkbook(project: BeadProject, layered = project.printSettings.mode === 'layered'): void {
   const usageLayers = (project.layers ?? []).filter((layer) => layer.includeInUsage);
   const sheets = [
     { name: '\u603b\u6570', layers: usageLayers },
@@ -63,7 +63,7 @@ export function downloadUsageWorkbook(project: BeadProject): void {
     const scopedProject = { ...project, layers };
     return {
       name,
-      rows: project.printSettings.mode === 'layered'
+      rows: layered
         ? layeredUsageSheetRows(project, name, summarizeLayeredUsage(scopedProject))
         : usageSheetRows(project, name, summarizeUsage(scopedProject)),
     };

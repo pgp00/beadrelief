@@ -40,6 +40,9 @@ const styleProfiles: Record<GenerationStyle, StyleProfile> = {
 
 export const MAX_IMAGE_FILE_BYTES = 25 * 1024 * 1024;
 export const MAX_DECODED_IMAGE_PIXELS = 100_000_000;
+export const MAX_PALETTE_COLORS = 512;
+export const MAX_OUTPUT_COLORS = 512;
+export const MAX_OUTPUT_DIMENSION = 180;
 
 export function validateImageFileSize(size: number): void {
   if (!Number.isSafeInteger(size) || size < 1 || size > MAX_IMAGE_FILE_BYTES) {
@@ -62,11 +65,11 @@ export function planImageConversion(
   if (naturalWidth * naturalHeight > MAX_DECODED_IMAGE_PIXELS) {
     throw new Error('Image dimensions are too large.');
   }
-  if (!Number.isFinite(requestedLongSide) || !Number.isSafeInteger(paletteLength) || paletteLength < 1 || paletteLength > 16
-    || !Number.isFinite(requestedMaxColors)) {
-    throw new Error('Choose between one and sixteen printable colors.');
+  if (!Number.isFinite(requestedLongSide) || !Number.isSafeInteger(paletteLength) || paletteLength < 1 || paletteLength > MAX_PALETTE_COLORS
+    || !Number.isFinite(requestedMaxColors) || requestedMaxColors < 1 || requestedMaxColors > MAX_OUTPUT_COLORS) {
+    throw new Error('Choose a palette and output limit between one and 512 colors.');
   }
-  const longSide = Math.min(50, Math.max(8, Math.round(requestedLongSide)));
+  const longSide = Math.min(MAX_OUTPUT_DIMENSION, Math.max(8, Math.round(requestedLongSide)));
   const imageLongSide = Math.max(naturalWidth, naturalHeight);
   const sourceScale = Math.min(1, 4096 / imageLongSide);
   return {
@@ -122,13 +125,13 @@ export function rgbaToBeads(
 ): ConvertResult {
   const activePalette = options.palette ?? palette;
   if (![sourceWidth, sourceHeight, width, height].every(Number.isSafeInteger)
-    || sourceWidth < 1 || sourceHeight < 1 || width < 1 || height < 1 || width > 50 || height > 50
+    || sourceWidth < 1 || sourceHeight < 1 || width < 1 || height < 1 || width > MAX_OUTPUT_DIMENSION || height > MAX_OUTPUT_DIMENSION
     || data.length !== sourceWidth * sourceHeight * 4) {
     throw new Error('Invalid RGBA image dimensions.');
   }
   if (!Number.isFinite(options.width) || !Number.isSafeInteger(options.maxColors)
     || !Number.isFinite(options.tolerance) || !Number.isFinite(options.speckleReduction)
-    || options.maxColors < 1 || options.maxColors > activePalette.length
+    || options.maxColors < 1 || options.maxColors > activePalette.length || options.maxColors > MAX_OUTPUT_COLORS
     || options.backgroundColor.some((channel) => !Number.isFinite(channel))) {
     throw new Error('Image conversion options must be finite.');
   }

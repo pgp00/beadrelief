@@ -6,7 +6,7 @@
 
 ### Image in. Editable beads out.
 
-Turn any image into an editable, multicolor 3MF bead relief — entirely in your browser.
+Turn any image into an editable bead pattern or a multicolor 3MF relief — entirely in your browser.
 
 [**Try the live demo →**](https://pgp00.github.io/beadrelief/) · [Download the sample 3MF](samples/beadrelief-heart-p2s.3mf) · [简体中文](README.zh-CN.md)
 
@@ -20,17 +20,18 @@ Turn any image into an editable, multicolor 3MF bead relief — entirely in your
 
 ## Why BeadRelief?
 
-| 🔒 Local by design | ✏️ Editable before export | 🖨️ Bambu-ready 3MF |
+| 🔒 Local by design | 🧩 Printable bead charts | 🖨️ Bambu-ready 3MF |
 |:---:|:---:|:---:|
-| Images and generated files stay in your browser. | Correct individual cells after conversion. | Project-filament colors and part assignments are included. |
+| Images and generated files stay in your browser. | Use the full MARD palette and export PNG/PDF patterns. | Project-filament colors and part assignments are included. |
 
-## From pixels to print
+## Choose an output
 
-**Upload an image** → **choose up to four colors** → **edit the pattern** → **inspect the 3D relief** → **export a grouped 3MF**
+The live demo has two explicit workflows that share the same editable canvas:
 
-1. Open the [live demo](https://pgp00.github.io/beadrelief/) and upload a JPG, PNG, or WebP image.
-2. Tune the palette and correct any cells that need a human touch.
-3. Review the 3D preview, then export the grouped `.3mf`.
+- **Bead pattern:** use the complete upstream workbench with Basic/Complete MARD palettes, all drawing tools, layers, reference tracing, adjustments, usage counting, 3D bead preview, and PNG/PDF/XLSX/JSON exports. Pattern canvases and image conversion support up to 180 × 180 cells, with the full 291-color palette available.
+- **3D print:** convert with up to four AMS colors, inspect the relief, and export a grouped `.3mf`.
+
+Open the [live demo](https://pgp00.github.io/beadrelief/), choose **Bead pattern** or **3D print**, then upload a JPG, PNG, or WebP image.
 
 ## Open it in Bambu Studio
 
@@ -71,7 +72,7 @@ CI regenerates the checked-in samples, tests every 3MF archive, and verifies the
 <summary><strong>Known limits</strong></summary>
 
 - Solid mode exports one grouped relief. Layered mode is experimental, uses one global bottom-to-top filament order, and is not Bambu Studio Mixed Filament metadata.
-- A project uses up to four materials.
+- 3D print mode uses up to four materials; those AMS and 3MF limits do not apply to bead-pattern mode.
 - 3MF export is limited to 32 × 32 cells.
 - Confirm the physical AMS slot mapping in Bambu Studio before printing.
 

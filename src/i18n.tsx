@@ -15,6 +15,13 @@ export function resolveLanguage(saved: string | null, browserLanguage: string): 
 export const ui: Record<Language, any> = {
     zh: {
         appName: 'BeadRelief',
+        outputMode: '输出类型',
+        patternMode: '拼豆图纸',
+        threeDMode: '3D 打印',
+        patternModeHint: '完整拼豆工作台 · PNG / PDF 图纸',
+        threeDModeHint: 'AMS 配色 · 3MF 模型',
+        beadPreview: '拼豆 3D 预览',
+        liveBeadPreview: '按图层显示真实拼豆效果',
         board: '拼豆板',
         apply: '应用',
         commonSizes: '常用尺寸',
@@ -248,6 +255,13 @@ export const ui: Record<Language, any> = {
     },
     en: {
         appName: 'BeadRelief',
+        outputMode: 'Output type',
+        patternMode: 'Bead pattern',
+        threeDMode: '3D print',
+        patternModeHint: 'Complete bead workspace · PNG / PDF pattern',
+        threeDModeHint: 'AMS colors · 3MF model',
+        beadPreview: '3D bead preview',
+        liveBeadPreview: 'Layered bead rendering',
         board: 'Pegboard',
         apply: 'Apply',
         commonSizes: 'Common sizes',

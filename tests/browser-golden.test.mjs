@@ -73,10 +73,32 @@ test('heart PNG golden path edits and downloads every export', { skip: !browserP
     await page.locator('input[type="file"]').first().waitFor({ state: 'attached', timeout: 5_000 }).catch((error) => {
       throw new Error(`${browserErrors.join('\n')}\n${error.message}`);
     });
+    await page.getByRole('button', { name: 'Bead pattern', exact: true }).click();
+    assert.equal(await page.getByRole('button', { name: 'Bead pattern', exact: true }).getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.getByRole('button', { name: 'Export 3MF', exact: true }).count(), 0);
+    assert.equal(await page.getByLabel('Pattern color limit').inputValue(), '24');
+    assert.equal(await page.getByLabel('Pattern color limit').getAttribute('max'), '291');
+    assert.equal(await page.getByLabel('Canvas width').getAttribute('max'), '180');
+    assert.deepEqual(await page.locator('.readonly-brand-field select option').allTextContents(), [
+      'MARD Basic (221 colors)',
+      'MARD Complete (291 colors)',
+    ]);
     await page.locator('input[type="file"][accept^="image/png"]').first().setInputFiles(
       path.join(process.cwd(), 'samples/beadrelief-heart-source.png'),
     );
     await page.getByText(/editable pattern ready\.$/).waitFor();
+    assert.equal(await page.locator('.swatch').count(), 291);
+    const patternDraft = JSON.parse(await page.evaluate(() => localStorage.getItem('perler-beads-generator:draft')));
+    assert.ok(patternDraft.layers.some((layer) => layer.cells.some((cell) => cell && !cell.startsWith('ams-'))));
+
+    await page.getByRole('button', { name: '3D print', exact: true }).click();
+    await page.waitForFunction(() => {
+      const draft = JSON.parse(localStorage.getItem('perler-beads-generator:draft'));
+      return draft.layers.every((layer) => layer.cells.every((cell) => cell === null || cell.startsWith('ams-')));
+    });
+    assert.equal(await page.getByRole('button', { name: 'Export 3MF', exact: true }).count(), 1);
+    assert.equal(await page.getByLabel('Pattern color limit').count(), 0);
+    assert.equal(await page.locator('.swatch').count(), 3);
 
     const beforeEdit = await page.evaluate(() => localStorage.getItem('perler-beads-generator:draft'));
     await page.locator('.swatch').nth(1).click();

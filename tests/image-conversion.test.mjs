@@ -45,8 +45,8 @@ test("keep retains white while remove-white drops detected white background", ()
 });
 
 test("conversion rejects non-finite numeric inputs", () => {
-  assert.throws(() => planImageConversion("image/png", 10, 10, Number.NaN, 3, 3), /sixteen/);
-  assert.throws(() => planImageConversion("image/png", 10, 10, 10, 3, Number.NaN), /sixteen/);
+  assert.throws(() => planImageConversion("image/png", 10, 10, Number.NaN, 3, 3), /between one and 512/);
+  assert.throws(() => planImageConversion("image/png", 10, 10, 10, 3, Number.NaN), /between one and 512/);
   assert.throws(
     () => rgbaToBeads(new Uint8ClampedArray([0, 0, 0, 255]), 1, 1, 1, 1, options({ tolerance: Number.NaN })),
     /finite/,

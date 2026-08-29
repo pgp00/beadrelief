@@ -5,7 +5,7 @@ import { STACK_LAYERS_PER_FILAMENT, STACK_TEMPLATES, buildStackPalette, parseSta
 import type { AmsColor, BeadLayer, BeadProject, PaletteColor, PrintMode } from './types';
 
 export const autosaveKey = 'perler-beads-generator:draft';
-export const MAX_PROJECT_DIMENSION = 50;
+export const MAX_PROJECT_DIMENSION = 180;
 export const MAX_PROJECT_LAYERS = 64;
 export const MAX_PROJECT_FILE_BYTES = 20 * 1024 * 1024;
 

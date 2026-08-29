@@ -1,5 +1,7 @@
 import * as THREE from 'three';
+import { getColor } from './palette';
 import type { PrintableModel } from './print/model';
+import type { BeadProject } from './types';
 
 const { useEffect, useRef, useState } = React;
 const PREVIEW_BACKGROUND = 0x242422;
@@ -15,8 +17,7 @@ type PreviewRefs = {
   lastY: number;
 };
 
-type Props = {
-  model: PrintableModel;
+type CommonProps = {
   title: string;
   emptyLabel: string;
   closeLabel: string;
@@ -24,7 +25,9 @@ type Props = {
   webglErrorLabel: string;
 };
 
-export default function ThreePreview({ model, title, emptyLabel, closeLabel, expandLabel, webglErrorLabel }: Props) {
+type Props = CommonProps & ({ model: PrintableModel; project?: never } | { project: BeadProject; model?: never });
+
+export default function ThreePreview({ model, project, title, emptyLabel, closeLabel, expandLabel, webglErrorLabel }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const modalHostRef = useRef<HTMLDivElement | null>(null);
   const dialogRef = useRef<HTMLDialogElement | null>(null);
@@ -40,7 +43,9 @@ export default function ThreePreview({ model, title, emptyLabel, closeLabel, exp
   });
   const [expanded, setExpanded] = useState(false);
   const [webglUnavailable, setWebglUnavailable] = useState(false);
-  const beadCount = model.gridSize.width * model.gridSize.height;
+  const beadCount = project
+    ? project.layers.filter((layer) => layer.visible).reduce((sum, layer) => sum + layer.cells.filter(Boolean).length, 0)
+    : model.gridSize.width * model.gridSize.height;
 
   useEffect(() => {
     const host = expanded ? modalHostRef.current : hostRef.current;
@@ -162,15 +167,19 @@ export default function ThreePreview({ model, title, emptyLabel, closeLabel, exp
 
     disposeGroup(preview.content);
     preview.content.clear();
-    preview.content.add(createPreviewGroup(model));
+    preview.content.add(project ? createPatternPreviewGroup(project) : createPreviewGroup(model));
 
-    const span = Math.max(model.sizeMm.x, model.sizeMm.y, 20);
+    const span = project
+      ? Math.max(project.width, project.height, 8) * 0.72
+      : Math.max(model.sizeMm.x, model.sizeMm.y, 20);
     controlsRef.current.minDistance = Math.max(3.5, span * 0.35);
     controlsRef.current.maxDistance = Math.max(12, span * 3.8);
     controlsRef.current.distance = clamp(span * 1.25, controlsRef.current.minDistance, controlsRef.current.maxDistance);
-    controlsRef.current.targetY = model.sizeMm.z / 2;
+    controlsRef.current.targetY = project
+      ? Math.max(0, (project.layers.filter((layer) => layer.visible).length - 1) * 0.31)
+      : model.sizeMm.z / 2;
     updateCamera(preview, controlsRef.current);
-  }, [model, expanded]);
+  }, [model, project, expanded]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -289,6 +298,64 @@ export function createPreviewGroup(model: PrintableModel): THREE.Group {
     group.add(mesh);
   }
   return group;
+}
+
+export function createPatternPreviewGroup(project: BeadProject): THREE.Group {
+  const group = new THREE.Group();
+  const spacing = 0.72;
+  const beadRadius = 0.31;
+  const beadHeight = beadRadius * 2;
+  const byColor = new Map<string, Array<[number, number, number]>>();
+  const visibleLayers = project.layers.filter((layer) => layer.visible);
+  visibleLayers.forEach((layer, layerIndex) => {
+    layer.cells.forEach((colorId, index) => {
+      if (!colorId) return;
+      const items = byColor.get(colorId) ?? [];
+      items.push([index % project.width, Math.floor(index / project.width), layerIndex]);
+      byColor.set(colorId, items);
+    });
+  });
+  const geometry = project.settings.beadDisplayMode === 'pixel'
+    ? new THREE.BoxGeometry(beadRadius * 2, beadHeight, beadRadius * 2)
+    : createRoundBeadGeometry(beadRadius, beadHeight);
+  const matrix = new THREE.Matrix4();
+  byColor.forEach((items, colorId) => {
+    const color = getColor(colorId);
+    if (!color) return;
+    const mesh = new THREE.InstancedMesh(
+      geometry,
+      new THREE.MeshStandardMaterial({ color: color.hex, roughness: 0.72, metalness: 0 }),
+      items.length,
+    );
+    items.forEach(([x, y, layerIndex], itemIndex) => {
+      matrix.makeTranslation(
+        (x - (project.width - 1) / 2) * spacing,
+        layerIndex * beadHeight,
+        (y - (project.height - 1) / 2) * spacing,
+      );
+      mesh.setMatrixAt(itemIndex, matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    group.add(mesh);
+  });
+  if (byColor.size === 0) geometry.dispose();
+  return group;
+}
+
+function createRoundBeadGeometry(radius: number, height: number): THREE.BufferGeometry {
+  const shape = new THREE.Shape();
+  shape.absarc(0, 0, radius, 0, Math.PI * 2, false);
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth: height,
+    bevelEnabled: true,
+    bevelSegments: 2,
+    bevelSize: 0.02,
+    bevelThickness: 0.02,
+    curveSegments: 24,
+  });
+  geometry.center();
+  geometry.rotateX(Math.PI / 2);
+  return geometry;
 }
 
 function disposeGroup(group: THREE.Group) {

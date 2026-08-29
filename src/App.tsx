@@ -13,7 +13,7 @@ import { buildPrintableModel, composePrintableGrid } from './print/model';
 import { buildStackPalette } from './print/stacking';
 import { downloadThreeMf } from './print/threeMf';
 import { validatePrintableModel } from './print/validation';
-import { getColor } from './palette';
+import { basicPalette, completePalette, getColor } from './palette';
 import { MAX_PROJECT_DIMENSION, MAX_PROJECT_FILE_BYTES, MAX_PROJECT_LAYERS, composeVisibleCells, createLayer, createProject, hasEditableWork, isSafeProjectImport, loadDraft, normalizeProject, projectGridChanged, saveDraft, withCells, withLayers } from './project';
 import { findIsolatedBeads, summarizeLayeredUsage, summarizeUsage } from './usage';
 import type { ArrowKind, BackgroundMode, BeadProject, ClipboardPattern, ConvertResult, CopyMode, GenerationStyle, MirrorDirection, MoveMode, RemoveMode, RightClickAction, ShapeFillMode, ShapeKind, TextDirection, ToolId } from './types';
@@ -161,6 +161,10 @@ type HoverCell = { x: number; y: number; colorId: string | null };
 type DragTarget = { id: string; edge: 'before' | 'after' };
 type FloatingHelp = { text: string; left: number; top: number };
 type ReferencePlacement = 'below' | 'above';
+type OutputMode = 'pattern' | 'three-d';
+type PaletteMode = 'basic' | 'complete';
+
+const MAX_PRINT_WORKSPACE_DIMENSION = 50;
 
 export default function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -186,11 +190,17 @@ export default function App() {
   const languageRef = useRef(language);
   languageRef.current = language;
   const text = ui[language];
+  const [outputMode, setOutputMode] = useState<OutputMode>('three-d');
+  const [paletteMode, setPaletteMode] = useState<PaletteMode>('complete');
   const [project, setProject] = useState<BeadProject>(() => loadDraft() ?? createProject());
   const [previewProject, setPreviewProject] = useState(project);
   const projectRef = useRef(project);
   projectRef.current = project;
-  const autoGenerationKey = autoGenerationPaletteKey(project.printSettings.mode, project.amsColors);
+  const [patternColorLimit, setPatternColorLimit] = useState(24);
+  const projectGenerationKey = (value: BeadProject) => outputMode === 'pattern'
+    ? `pattern:${paletteMode}:${patternColorLimit}`
+    : autoGenerationPaletteKey(value.printSettings.mode, value.amsColors);
+  const autoGenerationKey = projectGenerationKey(project);
   const [selectedColorId, setSelectedColorId] = useState(defaultColorId);
   const [recentColorIds, setRecentColorIds] = useState(defaultRecentColorIds);
   const [tool, setTool] = useState<ToolId>('pencil');
@@ -266,6 +276,7 @@ export default function App() {
   const layeredUsage = useMemo(() => (
     project.printSettings.mode === 'layered' ? summarizeLayeredUsage(project) : []
   ), [project]);
+  const layeredOutput = outputMode === 'three-d' && project.printSettings.mode === 'layered';
   const totalBeads = usage.reduce((sum, row) => sum + row.count, 0);
   const totalPacks = usage.reduce((sum, row) => sum + row.packs, 0);
   const boardCount =
@@ -282,7 +293,9 @@ export default function App() {
   const stackPalette = useMemo(() => (
     project.printSettings.mode === 'layered' ? buildStackPalette(project.amsColors) : []
   ), [project.amsColors, project.printSettings.mode]);
-  const activePalette = project.printSettings.mode === 'layered' ? stackPalette : solidPalette;
+  const activePalette = outputMode === 'pattern'
+    ? paletteMode === 'basic' ? basicPalette : completePalette
+    : project.printSettings.mode === 'layered' ? stackPalette : solidPalette;
   const recentColors = recentColorIds.flatMap((id) => {
     const color = activePalette.find((item) => item.id === id);
     return color ? [color] : [];
@@ -523,6 +536,16 @@ export default function App() {
     updateProject(next, 'settings');
   }
 
+  function selectOutputMode(next: OutputMode) {
+    if (next === outputMode) return;
+    setOutputMode(next);
+    if (next === 'three-d') setConvertWidth((current) => Math.min(current, MAX_PRINT_WORKSPACE_DIMENSION));
+    setShowPrintExportPanel(false);
+    setNotice(next === 'pattern'
+      ? (language === 'zh' ? '拼豆图纸模式：使用完整 MARD 色板。' : 'Bead pattern mode: using the full MARD palette.')
+      : (language === 'zh' ? '3D 打印模式：使用 AMS 颜色生成 3MF。' : '3D print mode: using AMS colors for 3MF.'));
+  }
+
   function selectColor(colorId: string, options: { updateRecent?: boolean } = {}) {
     setSelectedColorId(colorId);
     if (options.updateRecent === false) return;
@@ -678,7 +701,7 @@ export default function App() {
     const previous = past[past.length - 1];
     if (!previous) return;
     suppressAutoGenerationRef.current = autoGenerationPendingRef.current
-      || autoGenerationPaletteKey(previous.printSettings.mode, previous.amsColors) !== autoGenerationKey;
+      || projectGenerationKey(previous) !== autoGenerationKey;
     invalidateGeneration();
     setPast((items) => items.slice(0, -1));
     setFuture((items) => [...items, project]);
@@ -689,7 +712,7 @@ export default function App() {
     const next = future[future.length - 1];
     if (!next) return;
     suppressAutoGenerationRef.current = autoGenerationPendingRef.current
-      || autoGenerationPaletteKey(next.printSettings.mode, next.amsColors) !== autoGenerationKey;
+      || projectGenerationKey(next) !== autoGenerationKey;
     invalidateGeneration();
     setFuture((items) => items.slice(0, -1));
     setPast((items) => [...items, project]);
@@ -724,8 +747,9 @@ export default function App() {
   }
 
   function resizeCanvas() {
-    const width = clampInteger(canvasWidth, 8, MAX_PROJECT_DIMENSION);
-    const height = clampInteger(canvasHeight, 8, MAX_PROJECT_DIMENSION);
+    const maximum = outputMode === 'pattern' ? MAX_PROJECT_DIMENSION : MAX_PRINT_WORKSPACE_DIMENSION;
+    const width = clampInteger(canvasWidth, 8, maximum);
+    const height = clampInteger(canvasHeight, 8, maximum);
     if (width === project.width && height === project.height) return;
     if (resizeWouldCropProject(project, width, height) && !window.confirm(text.resizeCropConfirm)) return;
 
@@ -813,7 +837,7 @@ export default function App() {
     try {
       const result = await imageFileToBeads(pendingFile, {
         width: convertWidth,
-        maxColors: activePalette.length,
+        maxColors: outputMode === 'pattern' ? patternColorLimit : activePalette.length,
         palette: activePalette,
         generationStyle,
         backgroundMode,
@@ -870,7 +894,7 @@ export default function App() {
 
   function exportUsageList() {
     if (blockExportWhileGenerating()) return;
-    downloadUsageWorkbook(project);
+    downloadUsageWorkbook(project, layeredOutput);
     setNotice(text.usageExported);
   }
 
@@ -1177,9 +1201,9 @@ export default function App() {
           <div className="topbar-params canvas-params" aria-label="Canvas controls">
             <span className="topbar-control-label">{text.board}</span>
             <div className="topbar-dimension-group">
-              <input aria-label="Canvas width" type="number" min={8} max={MAX_PROJECT_DIMENSION} value={canvasWidth} onChange={(event) => setCanvasWidth(Number(event.target.value))} />
+              <input aria-label="Canvas width" type="number" min={8} max={outputMode === 'pattern' ? MAX_PROJECT_DIMENSION : MAX_PRINT_WORKSPACE_DIMENSION} value={canvasWidth} onChange={(event) => setCanvasWidth(Number(event.target.value))} />
               <span className="size-times">×</span>
-              <input aria-label="Canvas height" type="number" min={8} max={MAX_PROJECT_DIMENSION} value={canvasHeight} onChange={(event) => setCanvasHeight(Number(event.target.value))} />
+              <input aria-label="Canvas height" type="number" min={8} max={outputMode === 'pattern' ? MAX_PROJECT_DIMENSION : MAX_PRINT_WORKSPACE_DIMENSION} value={canvasHeight} onChange={(event) => setCanvasHeight(Number(event.target.value))} />
             </div>
             <select className="canvas-preset-select" aria-label="Canvas preset" value={selectedSizePreset || ''} onChange={(event) => applyPreset(event.target.value)}>
               <option value="" disabled hidden>{text.commonSizes}</option>
@@ -1199,20 +1223,20 @@ export default function App() {
               <button className="project-action-button history-action" onClick={redo} disabled={future.length === 0}>{text.redo}</button>
             </div>
             <div className="topbar-actions export-actions">
-              <button
-                type="button"
-                className="export-action-button primary-action"
-                title={text.exportThreeMf}
-                disabled={exportDisabled}
-                onClick={exportThreeMf}
-              >
-                <ExportIcon />
-                <span>{text.exportThreeMf}</span>
-              </button>
+              {outputMode === 'three-d' && <button
+                  type="button"
+                  className="export-action-button primary-action"
+                  title={text.exportThreeMf}
+                  disabled={exportDisabled}
+                  onClick={exportThreeMf}
+                >
+                  <ExportIcon />
+                  <span>{text.exportThreeMf}</span>
+                </button>}
               <div className="print-export-menu">
                 <button
                   type="button"
-                  className="export-action-button print-export-button"
+                  className={`export-action-button print-export-button${outputMode === 'pattern' ? ' primary-action' : ''}`}
                   title={`${text.exportPatternTitle} PNG`}
                   aria-expanded={showPrintExportPanel}
                   disabled={exportDisabled}
@@ -1326,6 +1350,33 @@ export default function App() {
       </header>
 
       <aside className="left-panel">
+        <section className="left-card output-mode-card">
+          <div className="left-card-header">
+            <div>
+              <strong>{text.outputMode}</strong>
+              <span>{outputMode === 'pattern' ? text.patternModeHint : text.threeDModeHint}</span>
+            </div>
+          </div>
+          <div className="output-mode-toggle" role="group" aria-label={text.outputMode}>
+            <button
+              type="button"
+              className={outputMode === 'pattern' ? 'active' : ''}
+              aria-pressed={outputMode === 'pattern'}
+              onClick={() => selectOutputMode('pattern')}
+            >
+              {text.patternMode}
+            </button>
+            <button
+              type="button"
+              className={outputMode === 'three-d' ? 'active' : ''}
+              aria-pressed={outputMode === 'three-d'}
+              onClick={() => selectOutputMode('three-d')}
+            >
+              {text.threeDMode}
+            </button>
+          </div>
+        </section>
+
         <section className="left-card image-card">
           <div className="left-card-header">
             <div>
@@ -1368,11 +1419,24 @@ export default function App() {
                 {text.width}
                 <span className="help-dot image-help-dot" {...imageHelpProps(text.heightFromRatio)}>?</span>
               </span>
-              <input aria-label="Output long side" type="number" min={8} max={50} value={convertWidth} onChange={(event) => {
+              <input aria-label="Output long side" type="number" min={8} max={outputMode === 'pattern' ? MAX_PROJECT_DIMENSION : MAX_PRINT_WORKSPACE_DIMENSION} value={convertWidth} onChange={(event) => {
                 markGenerationPending();
                 setConvertWidth(Number(event.target.value));
               }} />
             </label>
+            {outputMode === 'pattern' && <label className="image-range-field">
+              <span>
+                <span className="field-label-with-help">
+                  {text.colors}
+                  <span className="help-dot image-help-dot" {...imageHelpProps(text.colorsHint)}>?</span>
+                </span>
+                <strong>{patternColorLimit}</strong>
+              </span>
+              <input aria-label="Pattern color limit" type="range" min={1} max={activePalette.length} value={patternColorLimit} onChange={(event) => {
+                markGenerationPending();
+                setPatternColorLimit(Number(event.target.value));
+              }} />
+            </label>}
             {backgroundMode === 'remove-white' && <label className="image-range-field">
               <span>
                 <span className="field-label-with-help">
@@ -1415,7 +1479,7 @@ export default function App() {
           </label>
         </section>
 
-        <PrintSettingsPanel
+        {outputMode === 'three-d' && <PrintSettingsPanel
           project={project}
           model={printableModel}
           errors={printErrors}
@@ -1424,7 +1488,7 @@ export default function App() {
           onCommit={commitHistory}
           onExport={exportThreeMf}
           exportDisabled={exportDisabled}
-        />
+        />}
 
         <section className="left-card reference-card">
           <div className="left-card-header">
@@ -2017,19 +2081,30 @@ export default function App() {
         <section className="left-card preview-card right-preview-card">
           <div className="left-card-header">
             <div>
-              <strong>{text.preview3d}</strong>
-              <span>{text.liveBoard}</span>
+              <strong>{outputMode === 'pattern' ? text.beadPreview : text.preview3d}</strong>
+              <span>{outputMode === 'pattern' ? text.liveBeadPreview : text.liveBoard}</span>
             </div>
-            <small>{printableModel.gridSize.width * printableModel.gridSize.height} {language === 'zh' ? '格' : 'cells'}</small>
+            <small>{outputMode === 'pattern' ? totalBeads : printableModel.gridSize.width * printableModel.gridSize.height} {language === 'zh' ? '格' : 'cells'}</small>
           </div>
-          <ThreePreview
-            model={printableModel}
-            title={text.preview3d}
-            emptyLabel={text.previewEmpty}
-            closeLabel={text.close}
-            expandLabel={text.expandPreview}
-            webglErrorLabel={text.webglUnavailable}
-          />
+          {outputMode === 'pattern' ? (
+            <ThreePreview
+              project={displayProject}
+              title={text.beadPreview}
+              emptyLabel={text.previewEmpty}
+              closeLabel={text.close}
+              expandLabel={text.expandPreview}
+              webglErrorLabel={text.webglUnavailable}
+            />
+          ) : (
+            <ThreePreview
+              model={printableModel}
+              title={text.preview3d}
+              emptyLabel={text.previewEmpty}
+              closeLabel={text.close}
+              expandLabel={text.expandPreview}
+              webglErrorLabel={text.webglUnavailable}
+            />
+          )}
         </section>
 
         {rightTab === 'palette' && (
@@ -2045,6 +2120,17 @@ export default function App() {
                 <small>{selectedColor?.hex}</small>
               </div>
             </div>
+            {outputMode === 'pattern' && <div className="readonly-brand-field">
+              {text.brandCodes}
+              <select value={paletteMode} onChange={(event) => {
+                const next = event.target.value as PaletteMode;
+                setPaletteMode(next);
+                setPatternColorLimit((current) => Math.min(current, next === 'basic' ? basicPalette.length : completePalette.length));
+              }}>
+                <option value="basic">{text.mardBasic}</option>
+                <option value="complete">{text.mardComplete}</option>
+              </select>
+            </div>}
             <div className="recent-colors-field">
               <span>{text.recentColors}</span>
               <div className="recent-color-row">
@@ -2303,17 +2389,17 @@ export default function App() {
             <div className="usage-overview">
               <div><span>{text.totalBeadsLabel}</span><strong>{totalBeads}</strong></div>
               <div>
-                <span>{project.printSettings.mode === 'layered' ? (language === 'zh' ? '耗材' : 'Filaments') : text.colorTypes}</span>
-                <strong>{project.printSettings.mode === 'layered' ? project.amsColors.length : usage.length}</strong>
+                <span>{layeredOutput ? (language === 'zh' ? '耗材' : 'Filaments') : text.colorTypes}</span>
+                <strong>{layeredOutput ? project.amsColors.length : usage.length}</strong>
               </div>
               <div>
-                <span>{project.printSettings.mode === 'layered' ? text.layerCells : text.estimatedPacks}</span>
-                <strong>{project.printSettings.mode === 'layered'
+                <span>{layeredOutput ? text.layerCells : text.estimatedPacks}</span>
+                <strong>{layeredOutput
                   ? layeredUsage.reduce((sum, row) => sum + row.layerCells, 0)
                   : totalPacks}</strong>
               </div>
             </div>
-            {project.printSettings.mode === 'solid' && (
+            {!layeredOutput && (
               <label className="usage-pack-setting">
                 <span>{text.beadsPerPack}</span>
                 <div className="usage-pack-control">
@@ -2393,7 +2479,7 @@ export default function App() {
               )}
             </div>
             <div className="usage-list">
-              {project.printSettings.mode === 'layered'
+              {layeredOutput
                 ? layeredUsage.map((row) => (
                   <div className="usage-row" key={row.color.id}>
                     <span className="usage-chip" style={{ backgroundColor: row.color.hex }} />
@@ -2424,7 +2510,7 @@ export default function App() {
                     </span>
                   </button>
                 ))}
-              {usage.length === 0 && project.printSettings.mode === 'solid' && <div className="usage-empty">{text.noUsage}</div>}
+              {usage.length === 0 && !layeredOutput && <div className="usage-empty">{text.noUsage}</div>}
             </div>
           </section>
         )}

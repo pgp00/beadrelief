@@ -111,17 +111,17 @@ test("project imports reject unsafe allocation shapes", () => {
   const project = createProject(1, 1);
   assert.equal(typeof projectApi.isSafeProjectImport, "function");
   assert.equal(projectApi.isSafeProjectImport({ ...project, width: 1.5 }, 100), false);
-  assert.equal(projectApi.isSafeProjectImport({ ...project, width: 51 }, 100), false);
+  assert.equal(projectApi.isSafeProjectImport({ ...project, width: 181 }, 100), false);
   assert.equal(projectApi.isSafeProjectImport({ ...project, layers: Array.from({ length: 65 }, () => project.layers[0]) }, 100), false);
   assert.equal(projectApi.isSafeProjectImport(project, projectApi.MAX_PROJECT_FILE_BYTES + 1), false);
   assert.equal(normalizeProject({ ...project, width: 1.5 }).width, 32);
-  assert.equal(normalizeProject({ ...project, width: 51 }).width, 32);
+  assert.equal(normalizeProject({ ...project, width: 181 }).width, 32);
 });
 
 test("image conversion caps source pixels and treats the requested size as the long side", () => {
   assert.deepEqual(planImageConversion("image/jpeg", 6000, 3000, 60, 4, 8), {
-    width: 50,
-    height: 25,
+    width: 60,
+    height: 30,
     sourceWidth: 4096,
     sourceHeight: 2048,
     maxColors: 4,
@@ -141,8 +141,10 @@ test("image conversion caps source pixels and treats the requested size as the l
     maxColors: 13,
   });
   assert.throws(() => planImageConversion("image/gif", 10, 10, 8, 1, 1), /JPG, PNG, or WebP/);
-  assert.throws(() => planImageConversion("image/webp", 10, 10, 8, 0, 1), /one and sixteen/);
-  assert.throws(() => planImageConversion("image/png", 10, 10, 8, 17, 17), /sixteen/);
+  assert.throws(() => planImageConversion("image/webp", 10, 10, 8, 0, 1), /between one and 512/);
+  assert.throws(() => planImageConversion("image/png", 10, 10, 8, 513, 16), /between one and 512/);
+  assert.throws(() => planImageConversion("image/png", 10, 10, 8, 291, 513), /between one and 512/);
+  assert.equal(planImageConversion("image/png", 10, 10, 180, 291, 291).maxColors, 291);
 });
 
 test("changing an AMS slot updates cells and the base reference", () => {
