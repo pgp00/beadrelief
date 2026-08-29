@@ -188,7 +188,7 @@ test("layered 3MF exports only physical material bands", async () => {
 });
 
 test("heart sample keeps its deterministic 10 by 10 three-color footprint", async () => {
-  const project = JSON.parse(await readFile("samples/pingdou-heart-project.json", "utf8"));
+  const project = JSON.parse(await readFile("samples/beadrelief-heart-project.json", "utf8"));
   assert.deepEqual(
     [project.width, project.height, project.printSettings.cellPitchMm],
     [10, 10, 2.5],
@@ -214,9 +214,9 @@ test("heart sample keeps its deterministic 10 by 10 three-color footprint", asyn
 
 test("committed samples include Bambu color and part-assignment metadata", async () => {
   for (const filename of [
-    "samples/pingdou-heart-p2s.3mf",
-    "samples/pingdou-p2s-sample.3mf",
-    "samples/pingdou-p2s-layered-sample.3mf",
+    "samples/beadrelief-heart-p2s.3mf",
+    "samples/beadrelief-p2s-sample.3mf",
+    "samples/beadrelief-p2s-layered-sample.3mf",
   ]) {
     const entries = readStoredEntries(await readFile(filename));
     assert.ok(entries.has("Metadata/project_settings.config"), `${filename} is missing project settings`);

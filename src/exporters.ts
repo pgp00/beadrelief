@@ -130,7 +130,7 @@ function renderPrintCanvas(project: BeadProject, options: PrintExportOptions): H
   context.fillText(title, margin, margin + 16);
   context.fillStyle = '#6b7280';
   context.font = '12px Arial, "Microsoft YaHei", sans-serif';
-  context.fillText('Perler Beads Generator', margin, margin + 40);
+  context.fillText('BeadRelief', margin, margin + 40);
   if (options.authorName?.trim()) {
     context.textAlign = 'right';
     context.fillStyle = '#4b5563';

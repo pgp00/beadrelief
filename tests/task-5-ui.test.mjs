@@ -61,3 +61,15 @@ test("sample loading localizes fetch failures", async () => {
     { message: ui.zh.sampleLoadError },
   );
 });
+
+test("public identity stays BeadRelief", async () => {
+  const packageJson = JSON.parse(await readFile("package.json", "utf8"));
+  const source = await readFile("src/App.tsx", "utf8");
+
+  assert.equal(packageJson.name, "beadrelief");
+  assert.equal(packageJson.homepage, "https://pgp00.github.io/beadrelief/");
+  assert.equal(packageJson.repository.url, "https://github.com/pgp00/beadrelief.git");
+  assert.equal(ui.en.appName, "BeadRelief");
+  assert.equal(ui.zh.appName, "BeadRelief");
+  assert.match(source, /https:\/\/github\.com\/pgp00\/beadrelief/);
+});

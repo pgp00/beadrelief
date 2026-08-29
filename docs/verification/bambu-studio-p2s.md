@@ -4,11 +4,11 @@
 
 | File | SHA-256 |
 | --- | --- |
-| `samples/pingdou-heart-source.png` | `e6f8cc9cde3bebb2bce12cf8ef96dfa403c9d658702a6d4a2a9c04eeffa41d44` |
-| `samples/pingdou-heart-project.json` | `4d67c502a30d4a02614e791dd7777f10dcfdd2b4c97fd4cdde27ea71c4e9d3d5` |
-| `samples/pingdou-heart-p2s.3mf` | `7c6e12e8a64d179ab672b7e04ef37bb6e2e5696def4b7b82d5fa62630a8f28e5` |
-| `samples/pingdou-p2s-sample.3mf` | `82d8a1bd82955a52988d2b331686ac9f07d9dfd1ba3d6d1b19c961c7919df1c5` |
-| `samples/pingdou-p2s-layered-sample.3mf` | `72baff9bcef680bd1fdd33c62fe868cf99e4fc3b9c45580cb1213e8b0fa80848` |
+| `samples/beadrelief-heart-source.png` | `e6f8cc9cde3bebb2bce12cf8ef96dfa403c9d658702a6d4a2a9c04eeffa41d44` |
+| `samples/beadrelief-heart-project.json` | `c3f64b7eee6a695eb8b46539339c47d40a87f1d4fe0ab915fbab8732d30a89fa` |
+| `samples/beadrelief-heart-p2s.3mf` | `ba2470a53aadd1b53789fbd9a10d03c328f28eaba653d7c2c19900906bebaa40` |
+| `samples/beadrelief-p2s-sample.3mf` | `1596f2ec5d17c8e62b8e9791e8d3afebf66eb7e22369f639ad3009970ac0a833` |
+| `samples/beadrelief-p2s-layered-sample.3mf` | `9c34eba2f1bb8fa56a4a9515f521b780c750a95a0b1515ba9bb73970c6489b40` |
 
 The heart is a 10 × 10, approximately 25 × 25 × 2 mm solid-mode sample using white, black, and red. Its grouped 3MF includes Bambu project-filament colors and part assignments; physical AMS slot mapping still needs confirmation before printing.
 

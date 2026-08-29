@@ -1,15 +1,15 @@
 {
-  "name": "pingdou",
+  "name": "beadrelief",
   "version": "0.1.0",
   "description": "Turn any image into an editable, multicolor 3MF bead relief — locally in your browser.",
   "private": true,
-  "homepage": "https://pgp00.github.io/pingdou/",
+  "homepage": "https://pgp00.github.io/beadrelief/",
   "repository": {
     "type": "git",
-    "url": "https://github.com/pgp00/pingdou.git"
+    "url": "https://github.com/pgp00/beadrelief.git"
   },
   "bugs": {
-    "url": "https://github.com/pgp00/pingdou/issues"
+    "url": "https://github.com/pgp00/beadrelief/issues"
   },
   "engines": {
     "node": ">=22.9.0"

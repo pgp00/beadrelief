@@ -161,7 +161,7 @@ function buildSolidPrintableModel(grid: SolidPrintableGrid): PrintableModel {
   }
 
   return {
-    name: 'Pingdou',
+    name: 'BeadRelief',
     mode: 'solid',
     materials,
     parts,
@@ -238,7 +238,7 @@ function buildLayeredPrintableModel(grid: LayeredPrintableGrid): PrintableModel 
     baseColorId: grid.materials[0].id,
   };
   return {
-    name: 'Pingdou',
+    name: 'BeadRelief',
     mode: 'layered',
     materials: grid.materials.map((material) => ({ ...material })),
     parts,

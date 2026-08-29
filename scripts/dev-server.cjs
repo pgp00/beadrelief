@@ -45,7 +45,7 @@ http
   })
   .listen(port, '127.0.0.1', () => {
     fs.mkdirSync(generated, { recursive: true });
-    fs.writeFileSync(path.join(generated, 'dev-server.log'), `Perler Beads Generator is running at http://127.0.0.1:${port}/\n`);
+    fs.writeFileSync(path.join(generated, 'dev-server.log'), `BeadRelief is running at http://127.0.0.1:${port}/\n`);
   });
 
 setInterval(() => {}, 60_000);

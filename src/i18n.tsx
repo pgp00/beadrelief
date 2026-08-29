@@ -14,7 +14,7 @@ export function resolveLanguage(saved: string | null, browserLanguage: string): 
 
 export const ui: Record<Language, any> = {
     zh: {
-        appName: '拼豆图纸生成器',
+        appName: 'BeadRelief',
         board: '拼豆板',
         apply: '应用',
         commonSizes: '常用尺寸',
@@ -236,7 +236,7 @@ export const ui: Record<Language, any> = {
         },
     },
     en: {
-        appName: 'Perler Beads Generator',
+        appName: 'BeadRelief',
         board: 'Pegboard',
         apply: 'Apply',
         commonSizes: 'Common sizes',

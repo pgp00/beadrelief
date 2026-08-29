@@ -5,7 +5,7 @@ import { composePrintableGrid, buildPrintableModel } from "../generated/dist/src
 import { createThreeMf } from "../generated/dist/src/print/threeMf.js";
 import { validatePrintableModel } from "../generated/dist/src/print/validation.js";
 
-const project = createProject(4, 4, "pingdou-p2s-sample");
+const project = createProject(4, 4, "beadrelief-p2s-sample");
 project.amsColors.push({ ...DEFAULT_AMS_COLORS[3] });
 const [white, black, red, blue] = project.amsColors;
 project.layers[0].cells = [
@@ -26,8 +26,8 @@ if (JSON.stringify(model.sizeMm) !== JSON.stringify({ x: 20, y: 20, z: 2 })) {
 }
 
 await mkdir("samples", { recursive: true });
-await writeFile("samples/pingdou-p2s-sample.3mf", createThreeMf(model));
-console.log("samples/pingdou-p2s-sample.3mf: 5 parts, 4 materials, 20×20×2 mm");
+await writeFile("samples/beadrelief-p2s-sample.3mf", createThreeMf(model));
+console.log("samples/beadrelief-p2s-sample.3mf: 5 parts, 4 materials, 20×20×2 mm");
 
 const heartRows = [
   "..........",
@@ -45,7 +45,7 @@ if (heartRows.length !== 10 || heartRows.some((row) => row.length !== 10 || /[^.
   throw new Error("Heart sample must be a 10 × 10 matrix containing only ., #, and R.");
 }
 
-const heartProject = createProject(10, 10, "pingdou-heart");
+const heartProject = createProject(10, 10, "beadrelief-heart");
 const [heartWhite, heartBlack, heartRed] = heartProject.amsColors;
 heartProject.printSettings = {
   ...heartProject.printSettings,
@@ -73,6 +73,6 @@ if (JSON.stringify(heartModel.sizeMm) !== JSON.stringify({ x: 25, y: 25, z: 2 })
   throw new Error(`Unexpected heart sample size: ${JSON.stringify(heartModel.sizeMm)}`);
 }
 
-await writeFile("samples/pingdou-heart-project.json", `${JSON.stringify(heartProject, null, 2)}\n`);
-await writeFile("samples/pingdou-heart-p2s.3mf", createThreeMf(heartModel));
-console.log("samples/pingdou-heart-p2s.3mf: 4 parts, 3 materials, 25×25×2 mm");
+await writeFile("samples/beadrelief-heart-project.json", `${JSON.stringify(heartProject, null, 2)}\n`);
+await writeFile("samples/beadrelief-heart-p2s.3mf", createThreeMf(heartModel));
+console.log("samples/beadrelief-heart-p2s.3mf: 4 parts, 3 materials, 25×25×2 mm");

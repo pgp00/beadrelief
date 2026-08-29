@@ -1,10 +1,10 @@
-# Pingdou
+# BeadRelief
 
 Turn any image into an editable, multicolor 3MF bead relief — locally in your browser.
 
-[Try the live demo](https://pgp00.github.io/pingdou/) · [Download the heart 3MF](samples/pingdou-heart-p2s.3mf) · [简体中文](README.zh-CN.md)
+[Try the live demo](https://pgp00.github.io/beadrelief/) · [Download the heart 3MF](samples/beadrelief-heart-p2s.3mf) · [简体中文](README.zh-CN.md)
 
-![Pingdou heart source preview](samples/pingdou-heart-source.png)
+![BeadRelief heart source preview](samples/beadrelief-heart-source.png)
 
 - **Local by design:** source images and generated files stay in your browser.
 - **Editable before export:** fix individual cells after image conversion.
@@ -12,7 +12,7 @@ Turn any image into an editable, multicolor 3MF bead relief — locally in your 
 
 ## 60-second quick start
 
-1. Open the [live demo](https://pgp00.github.io/pingdou/).
+1. Open the [live demo](https://pgp00.github.io/beadrelief/).
 2. Upload a JPG, PNG, or WebP image.
 3. Choose up to four colors, edit cells as needed, and check the 3D relief preview.
 4. Export the grouped 3MF.
@@ -27,15 +27,15 @@ Turn any image into an editable, multicolor 3MF bead relief — locally in your 
 
 Use the same small heart through the full editable-project path:
 
-- [Source PNG](samples/pingdou-heart-source.png)
-- [Editable project JSON](samples/pingdou-heart-project.json)
-- [Grouped 3MF](samples/pingdou-heart-p2s.3mf)
+- [Source PNG](samples/beadrelief-heart-source.png)
+- [Editable project JSON](samples/beadrelief-heart-project.json)
+- [Grouped 3MF](samples/beadrelief-heart-p2s.3mf)
 
 ## Verification status
 
 CI regenerates the checked-in samples, tests every 3MF archive, and verifies the embedded project-filament colors and part assignments. The current heart file has not yet been physically printed, so confirm the AMS slot mapping and slice preview before printing. Exact hashes and the compatibility record are in [Bambu Studio verification](docs/verification/bambu-studio-p2s.md).
 
-If Pingdou helped you make something, a GitHub star helps other makers find it.
+If BeadRelief helped you make something, a GitHub star helps other makers find it.
 
 ## Run locally
 
@@ -61,7 +61,7 @@ Image processing and generated files stay in the browser; the app does not uploa
 
 ## Upstream and license
 
-Pingdou is based on the MIT-licensed [Jett-Wu/Perler_Beads_Generator](https://github.com/Jett-Wu/Perler_Beads_Generator). See [UPSTREAM.md](UPSTREAM.md) for the imported commit and the project-specific changes. This repository is released under the [MIT License](LICENSE).
+BeadRelief is based on the MIT-licensed [Jett-Wu/Perler_Beads_Generator](https://github.com/Jett-Wu/Perler_Beads_Generator). See [UPSTREAM.md](UPSTREAM.md) for the imported commit and the project-specific changes. This repository is released under the [MIT License](LICENSE).
 
 ## Contributing
 

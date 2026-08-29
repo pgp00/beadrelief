@@ -55,9 +55,9 @@ export function imageLaunchState(hasPendingImage: boolean, project: BeadProject)
 
 export async function loadHeartSample(fetchImage: typeof fetch, localizedError: string): Promise<File> {
   try {
-    const response = await fetchImage('./samples/pingdou-heart-source.png');
+    const response = await fetchImage('./samples/beadrelief-heart-source.png');
     if (!response.ok) throw new Error(localizedError);
-    return new File([await response.blob()], 'pingdou-heart-source.png', { type: 'image/png' });
+    return new File([await response.blob()], 'beadrelief-heart-source.png', { type: 'image/png' });
   } catch {
     throw new Error(localizedError);
   }
@@ -1020,7 +1020,7 @@ export default function App() {
         .trim()
         .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, '-')
         .replace(/\s+/g, '-')
-        .slice(0, 80) || 'pingdou';
+        .slice(0, 80) || 'beadrelief';
       downloadThreeMf(printableModel, `${stem}.3mf`);
       setNotice(language === 'zh'
         ? '3MF 已导出，已包含 Bambu 项目耗材颜色和零件分配；打印前请确认实际 AMS 槽位。'
@@ -1114,7 +1114,7 @@ export default function App() {
       />
 
       <header className="topbar">
-        <div className="brand-lockup" aria-label="Perler Beads Generator">
+        <div className="brand-lockup" aria-label="BeadRelief">
           <span className="logo-mark" aria-hidden="true">
             <span />
             <span />
@@ -1259,7 +1259,7 @@ export default function App() {
         <div className="topbar-right">
           <a
             className="github-link"
-            href="https://github.com/pgp00/pingdou"
+            href="https://github.com/pgp00/beadrelief"
             target="_blank"
             rel="noreferrer"
             aria-label="GitHub"

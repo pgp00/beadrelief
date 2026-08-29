@@ -10,8 +10,8 @@ const html = `<!doctype html>
       name="description"
       content="Turn any image into an editable, multicolor 3MF bead relief — locally in your browser."
     />
-    <title>Pingdou — Image to editable multicolor 3MF</title>
-    <link rel="canonical" href="https://pgp00.github.io/pingdou/" />
+    <title>BeadRelief — Image to editable multicolor 3MF</title>
+    <link rel="canonical" href="https://pgp00.github.io/beadrelief/" />
     <link rel="stylesheet" href="./styles.css" />
     <script type="importmap">
       {
