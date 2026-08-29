@@ -85,6 +85,7 @@ function projectSettingsJson(model: PrintableModel): string {
   return `${JSON.stringify({
     filament_colour: model.materials.map((material) => material.hex.toUpperCase()),
     filament_type: model.materials.map(() => 'PLA'),
+    nozzle_diameter: ['0.4'],
   }, null, 4)}\n`;
 }
 

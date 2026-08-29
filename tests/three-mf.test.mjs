@@ -112,6 +112,16 @@ test("3MF contains one assembly, named parts, and four or fewer base materials",
   assert.equal(new TextDecoder().decode(archive.slice(-22, -18)), "PK\u0005\u0006");
 });
 
+test("project settings include exactly one 0.4 mm nozzle entry", () => {
+  const project = createProject(1, 1);
+  project.layers[0].cells = [project.amsColors[1].id];
+  const model = buildPrintableModel(composePrintableGrid(project));
+  const settings = JSON.parse(new TextDecoder().decode(
+    readStoredEntries(createThreeMf(model)).get("Metadata/project_settings.config"),
+  ));
+  assert.deepEqual(settings.nozzle_diameter, ["0.4"]);
+});
+
 test("default three-slot 3MF keeps White, Black, and Red assignments", () => {
   const fresh = createProject(1, 1);
   fresh.layers[0].cells = [fresh.amsColors[1].id];
