@@ -77,6 +77,8 @@ type Props = {
   onPickColor: (colorId: string) => void;
   onHover: (cell: HoverCell | null) => void;
   fitLabel: string;
+  canvasLabel: string;
+  coordinateLabel: string;
   canEdit: boolean;
   lockedHint: string;
 };
@@ -123,6 +125,8 @@ export default function WorkspaceCanvas({
   onPickColor,
   onHover,
   fitLabel,
+  canvasLabel,
+  coordinateLabel,
   canEdit,
   lockedHint,
 }: Props) {
@@ -133,6 +137,7 @@ export default function WorkspaceCanvas({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isSpaceDown, setIsSpaceDown] = useState(false);
   const [hoverPoint, setHoverPoint] = useState<PointerGridPoint | null>(null);
+  const [keyboardCell, setKeyboardCell] = useState({ x: 0, y: 0 });
   const [shapeDraft, setShapeDraft] = useState<ShapeDraft | null>(null);
   const [referenceImage, setReferenceImage] = useState<HTMLImageElement | null>(null);
   const [activePointerMode, setActivePointerMode] = useState<'pan' | 'rightErase' | 'move' | 'shape' | 'reference' | null>(null);
@@ -262,6 +267,7 @@ export default function WorkspaceCanvas({
   }, [project, cellSize, zoom, pan, highlightedColorId, highlightedCellIndices, tool, selectedColorId, eraserSize, moveMode, removeMode, mirrorMode, clipboardPattern, copyMode, copySelectionIndices, shapeKind, shapeDraft, hoverPoint, canEdit, referenceImageOptions, textToolValue, textToolDirection, textToolSize, textToolSpacing, formatColorCode]);
 
   function handlePointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (!event.isPrimary) return;
     const point = canvasToGridPoint(event.clientX, event.clientY);
     const cell = point?.cell ?? null;
     const rightClickAction = tool === 'pencil' ? project.settings.rightClickAction : 'pan';
@@ -457,6 +463,7 @@ export default function WorkspaceCanvas({
   }
 
   function handlePointerMove(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (!event.isPrimary) return;
     if (pointerRef.current.draggingReference) {
       const dx = (event.clientX - pointerRef.current.lastX) / (cellSize * zoom);
       const dy = (event.clientY - pointerRef.current.lastY) / (cellSize * zoom);
@@ -482,6 +489,7 @@ export default function WorkspaceCanvas({
 
     const point = canvasToGridPoint(event.clientX, event.clientY, pointerRef.current.movingPattern);
     const cell = point?.cell ?? null;
+    if (cell) setKeyboardCell(cell);
     setHoverPoint(point);
     onHover(cell ? { ...cell, colorId: getTopVisibleColor(project, cell.y * project.width + cell.x) } : null);
     if (pointerRef.current.copySelecting) {
@@ -555,6 +563,7 @@ export default function WorkspaceCanvas({
   }
 
   function handlePointerUp(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (!event.isPrimary) return;
     if (pointerRef.current.shaping) {
       const draft = shapeDraft ?? {
         kind: shapeKind,
@@ -589,6 +598,37 @@ export default function WorkspaceCanvas({
   function handlePointerLeave() {
     setHoverPoint(null);
     onHover(null);
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLCanvasElement>) {
+    const delta = {
+      ArrowLeft: [-1, 0],
+      ArrowRight: [1, 0],
+      ArrowUp: [0, -1],
+      ArrowDown: [0, 1],
+    }[event.key];
+    if (delta) {
+      event.preventDefault();
+      const next = {
+        x: Math.max(0, Math.min(project.width - 1, keyboardCell.x + delta[0])),
+        y: Math.max(0, Math.min(project.height - 1, keyboardCell.y + delta[1])),
+      };
+      setKeyboardCell(next);
+      setHoverPoint({ cell: next, gridX: next.x + 0.5, gridY: next.y + 0.5 });
+      onHover({ ...next, colorId: getTopVisibleColor(project, next.y * project.width + next.x) });
+      return;
+    }
+    if (!canEdit || ![' ', 'Enter', 'Delete', 'Backspace'].includes(event.key)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const index = keyboardCell.y * project.width + keyboardCell.x;
+    const cells = getActiveLayerCells(project);
+    const nextColor = event.key === 'Delete' || event.key === 'Backspace' ? null : selectedColorId;
+    if (cells[index] === nextColor) return;
+    const next = cells.slice();
+    next[index] = nextColor;
+    onCommitStart();
+    onCellsChange(next);
   }
 
   function handleWheel(event: React.WheelEvent<HTMLCanvasElement>) {
@@ -783,6 +823,9 @@ export default function WorkspaceCanvas({
         ref={canvasRef}
         className={canvasClassName}
         data-tool={canvasTool}
+        tabIndex={0}
+        role="application"
+        aria-label={canvasLabel}
         onContextMenu={(event) => event.preventDefault()}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -790,9 +833,13 @@ export default function WorkspaceCanvas({
         onPointerCancel={handlePointerUp}
         onPointerLeave={handlePointerLeave}
         onWheel={handleWheel}
+        onKeyDown={handleKeyDown}
       />
       <div className="board-chip">
         {project.width} * {project.height}
+      </div>
+      <div className="canvas-coordinate-status" aria-live="polite" data-x={keyboardCell.x} data-y={keyboardCell.y}>
+        {coordinateLabel}: {keyboardCell.x + 1}, {keyboardCell.y + 1}
       </div>
       {!canEdit && <div className="canvas-lock-hint">{lockedHint}</div>}
       {referenceImageAdjusting && referenceImageVisible && (

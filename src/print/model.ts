@@ -32,6 +32,7 @@ export type SolidPrintableGrid = {
   cells: string[];
   materials: AmsColor[];
   settings: PrintSettings;
+  inputErrors: string[];
 };
 
 export type LayeredPrintableGrid = {
@@ -109,11 +110,14 @@ export function composePrintableGrid(project: BeadProject): PrintableGrid {
   const baseColorId = materialIds.has(project.printSettings.baseColorId)
     ? project.printSettings.baseColorId
     : project.amsColors[0].id;
-  const cells = composeVisibleCells(project.layers, project.width, project.height).map((id) => {
+  const inputErrors: string[] = [];
+  const cells = composeVisibleCells(project.layers, project.width, project.height).map((id, index) => {
     if (!id) return baseColorId;
     if (materialIds.has(id)) return id;
     const legacy = getColor(id);
-    return legacy ? nearestPaletteColorOklab(legacy.hex, palette).id : baseColorId;
+    if (legacy) return nearestPaletteColorOklab(legacy.hex, palette).id;
+    inputErrors.push(`Cell ${index + 1} references an unknown color.`);
+    return baseColorId;
   });
   return {
     mode: 'solid',
@@ -122,6 +126,7 @@ export function composePrintableGrid(project: BeadProject): PrintableGrid {
     cells,
     materials: project.amsColors.map((color) => ({ ...color })),
     settings: { ...project.printSettings, baseColorId },
+    inputErrors,
   };
 }
 
@@ -166,7 +171,7 @@ function buildSolidPrintableModel(grid: SolidPrintableGrid): PrintableModel {
     materials,
     parts,
     previewParts: [],
-    inputErrors: [],
+    inputErrors: [...grid.inputErrors],
     gridSize: { width: grid.width, height: grid.height },
     settings: { ...grid.settings },
     sizeMm: {

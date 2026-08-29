@@ -1,0 +1,51 @@
+import assert from 'node:assert/strict';
+import { existsSync, readdirSync, statSync } from 'node:fs';
+import { inflateRawSync } from 'node:zlib';
+import test from 'node:test';
+import { MAX_IMAGE_FILE_BYTES, planImageConversion, validateImageFileSize } from '../generated/dist/src/imageToBeads.js';
+import { buildPrintableModel, composePrintableGrid } from '../generated/dist/src/print/model.js';
+import { buildStackPalette } from '../generated/dist/src/print/stacking.js';
+import { createCompressedThreeMf } from '../generated/dist/src/print/threeMf.js';
+import { createProject, withStackTemplate } from '../generated/dist/src/project.js';
+
+function readZipEntries(archive) {
+  const entries = new Map();
+  const view = new DataView(archive.buffer, archive.byteOffset, archive.byteLength);
+  for (let offset = 0; offset + 30 <= archive.length && view.getUint32(offset, true) === 0x04034b50;) {
+    const method = view.getUint16(offset + 8, true);
+    const size = view.getUint32(offset + 18, true);
+    const nameLength = view.getUint16(offset + 26, true);
+    const extraLength = view.getUint16(offset + 28, true);
+    const nameStart = offset + 30;
+    const dataStart = nameStart + nameLength + extraLength;
+    const name = new TextDecoder().decode(archive.subarray(nameStart, nameStart + nameLength));
+    const payload = archive.subarray(dataStart, dataStart + size);
+    entries.set(name, method === 8 ? inflateRawSync(payload) : payload);
+    offset = dataStart + size;
+  }
+  return entries;
+}
+
+test('native raw-DEFLATE keeps a full 32x32 Layered 3MF below 10 MB', async () => {
+  const project = withStackTemplate(createProject(32, 32, 'Layered performance'), 'rybw');
+  const topColor = buildStackPalette(project.amsColors).at(-1).id;
+  project.layers[0].cells.fill(topColor);
+  const archive = await createCompressedThreeMf(buildPrintableModel(composePrintableGrid(project)));
+  assert.ok(archive.byteLength < 10 * 1024 * 1024, `${archive.byteLength} bytes`);
+  const entries = readZipEntries(archive);
+  assert.match(new TextDecoder().decode(entries.get('3D/3dmodel.model')), /^<\?xml/);
+  assert.ok(entries.has('Metadata/project_settings.config'));
+});
+
+test('image byte and decoded-pixel limits reject oversized input', () => {
+  assert.throws(() => validateImageFileSize(MAX_IMAGE_FILE_BYTES + 1), /25 MB/);
+  assert.throws(() => planImageConversion('image/png', 20_000, 20_000, 32, 3, 3), /dimensions are too large/);
+});
+
+test('production build uses minified Three and emits no source maps', () => {
+  const vendor = 'generated/dist/vendor';
+  assert.ok(statSync(`${vendor}/three.module.js`).size < 500_000);
+  assert.ok(statSync(`${vendor}/three.core.min.js`).size < 500_000);
+  assert.equal(readdirSync('generated/dist/src', { recursive: true }).some((file) => String(file).endsWith('.map')), false);
+  assert.equal(existsSync('generated/dist/src/main.js'), true);
+});

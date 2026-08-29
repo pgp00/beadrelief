@@ -18,21 +18,23 @@
   "type": "module",
   "scripts": {
     "dev": "npm run build && node scripts/dev-server.cjs",
-    "build": "tsc && node scripts/clean-dist.cjs && tsc -p tsconfig.build.json && node scripts/post-build.cjs && node scripts/write-html.cjs",
+    "build": "node scripts/clean-dist.cjs && tsc -p tsconfig.build.json && node scripts/post-build.cjs && node scripts/write-html.cjs",
     "preview": "node scripts/dev-server.cjs",
     "test": "npm run build && node --test tests/*.test.mjs",
     "sample": "npm run build && node scripts/generate-sample.mjs && node scripts/generate-layered-sample.mjs",
-    "verify": "npm run build && node --test tests/*.test.mjs && node scripts/generate-sample.mjs && node scripts/generate-layered-sample.mjs"
+    "verify": "npm run build && node --test tests/*.test.mjs && node scripts/generate-sample.mjs && node scripts/generate-layered-sample.mjs",
+    "release:prepare": "npm run verify && node scripts/generate-checksums.mjs"
   },
   "dependencies": {
-    "@types/three": "^0.184.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "three": "^0.184.0",
-    "typescript": "^5.4.0"
+    "three": "^0.184.0"
   },
   "devDependencies": {
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3"
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
+    "@types/three": "^0.184.1",
+    "playwright-core": "^1.62.1",
+    "typescript": "^5.4.0"
   }
 }

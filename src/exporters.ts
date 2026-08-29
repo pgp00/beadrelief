@@ -1,5 +1,6 @@
 import { getColor, mappedCode } from './palette';
 import type { BeadLayer, BeadProject, UsageRow } from './types';
+import { summarizeLayeredUsage, summarizeUsage } from './usage';
 
 export type PrintExportOptions = {
   format?: 'png' | 'pdf';
@@ -56,15 +57,17 @@ export function downloadUsageCsv(project: BeadProject, usage: UsageRow[]): void 
 export function downloadUsageWorkbook(project: BeadProject): void {
   const usageLayers = (project.layers ?? []).filter((layer) => layer.includeInUsage);
   const sheets = [
-    {
-      name: '\u603b\u6570',
-      rows: usageSheetRows(project, '\u603b\u6570', summarizeLayerUsage(project, usageLayers)),
-    },
-    ...usageLayers.map((layer, index) => ({
-      name: usageLayerSheetName(layer, index),
-      rows: usageSheetRows(project, usageLayerSheetName(layer, index), summarizeLayerUsage(project, [layer])),
-    })),
-  ];
+    { name: '\u603b\u6570', layers: usageLayers },
+    ...usageLayers.map((layer, index) => ({ name: usageLayerSheetName(layer, index), layers: [layer] })),
+  ].map(({ name, layers }) => {
+    const scopedProject = { ...project, layers };
+    return {
+      name,
+      rows: project.printSettings.mode === 'layered'
+        ? layeredUsageSheetRows(project, name, summarizeLayeredUsage(scopedProject))
+        : usageSheetRows(project, name, summarizeUsage(scopedProject)),
+    };
+  });
   const workbook = createXlsxWorkbook(sheets);
   downloadBlob(`${safeName(project.name || '\u62fc\u8c46\u56fe\u7eb8')}-\u7528\u91cf\u6e05\u5355.xlsx`, workbook, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 }
@@ -364,7 +367,7 @@ type UsageWorkbookRow = Array<string | number>;
 function usageSheetRows(
   project: BeadProject,
   sheetTitle: string,
-  usage: Array<{ color: NonNullable<ReturnType<typeof getColor>>; count: number; packs: number }>,
+  usage: UsageRow[],
 ): UsageWorkbookRow[] {
   const totalBeads = usage.reduce((sum, row) => sum + row.count, 0);
   return [
@@ -388,23 +391,29 @@ function usageSheetRows(
   ];
 }
 
-function summarizeLayerUsage(
+function layeredUsageSheetRows(
   project: BeadProject,
-  layers: BeadLayer[],
-): Array<{ color: NonNullable<ReturnType<typeof getColor>>; count: number; packs: number }> {
-  const counts = new Map<string, number>();
-  layers.forEach((layer) => {
-    layer.cells.forEach((colorId) => {
-      if (!colorId) return;
-      counts.set(colorId, (counts.get(colorId) ?? 0) + 1);
-    });
-  });
-  return [...counts.entries()]
-    .flatMap(([colorId, count]) => {
-      const color = getColor(colorId);
-      return color ? [{ color, count, packs: Math.ceil(count / project.settings.beadsPerPack) }] : [];
-    })
-    .sort((a, b) => b.count - a.count || a.color.primaryCode.localeCompare(b.color.primaryCode));
+  sheetTitle: string,
+  usage: ReturnType<typeof summarizeLayeredUsage>,
+): UsageWorkbookRow[] {
+  return [
+    ['\u9879\u76ee\u540d\u79f0', project.name || '\u62fc\u8c46\u56fe\u7eb8'],
+    ['\u8868\u683c', sheetTitle],
+    ['\u6253\u5370\u6a21\u5f0f', 'Layered'],
+    ['\u753b\u5e03\u5c3a\u5bf8', `${project.width} x ${project.height}`],
+    ['AMS \u6570\u91cf', usage.length],
+    ['Layer cells', usage.reduce((sum, row) => sum + row.layerCells, 0)],
+    ['\u5c42\u9ad8', '0.08 mm'],
+    [],
+    ['AMS', '\u987a\u5e8f', '\u8017\u6750\u540d\u79f0', 'HEX', 'Layer cells'],
+    ...usage.map((row, index) => [
+      `AMS ${index + 1}`,
+      index + 1,
+      row.color.name,
+      row.color.hex,
+      row.layerCells,
+    ]),
+  ];
 }
 
 function usageLayerSheetName(layer: BeadLayer, index: number): string {
@@ -474,19 +483,21 @@ function uniqueSheetNames(names: string[]): string[] {
     const base = sanitizeSheetName(name || `Sheet ${index + 1}`);
     let candidate = base;
     let suffix = 2;
-    while (used.has(candidate)) {
+    while (used.has(candidate.toLowerCase())) {
       const tail = ` ${suffix}`;
       candidate = `${base.slice(0, 31 - tail.length)}${tail}`;
       suffix += 1;
     }
-    used.add(candidate);
+    used.add(candidate.toLowerCase());
     return candidate;
   });
 }
 
 function sanitizeSheetName(name: string): string {
   const cleaned = name.replace(/[\[\]:*?/\\]/g, ' ').replace(/\s+/g, ' ').trim();
-  return (cleaned || 'Sheet').slice(0, 31);
+  const unquoted = cleaned.replace(/^'+|'+$/g, '').trim().slice(0, 31).replace(/^'+|'+$/g, '').trim();
+  const safe = unquoted || 'Sheet';
+  return safe.toLowerCase() === 'history' ? `${safe} 1` : safe;
 }
 
 function columnName(index: number): string {

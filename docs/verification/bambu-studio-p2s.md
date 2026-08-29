@@ -8,7 +8,7 @@
 | `samples/beadrelief-heart-project.json` | `c3f64b7eee6a695eb8b46539339c47d40a87f1d4fe0ab915fbab8732d30a89fa` |
 | `samples/beadrelief-heart-p2s.3mf` | `ba2470a53aadd1b53789fbd9a10d03c328f28eaba653d7c2c19900906bebaa40` |
 | `samples/beadrelief-p2s-sample.3mf` | `1596f2ec5d17c8e62b8e9791e8d3afebf66eb7e22369f639ad3009970ac0a833` |
-| `samples/beadrelief-p2s-layered-sample.3mf` | `9c34eba2f1bb8fa56a4a9515f521b780c750a95a0b1515ba9bb73970c6489b40` |
+| `samples/beadrelief-p2s-layered-sample.3mf` | `13770a1e4ce17e03c314a85e54f274c9b4af326f9a0053e71963a00d78700f12` |
 
 The heart is a 10 × 10, approximately 25 × 25 × 2 mm solid-mode sample using white, black, and red. Its grouped 3MF includes Bambu project-filament colors and part assignments; physical AMS slot mapping still needs confirmation before printing.
 
@@ -30,6 +30,8 @@ npm run verify
 ## Current manual status
 
 The exact current heart bytes have not yet been recorded through a fresh Bambu Studio GUI import, slice, and physical print. No print-time or physical-result claim is made. Before printing, review the imported project-filament mapping, map it to the physical AMS slots, and inspect the slice preview.
+
+Layered mode is experimental until a current Bambu Studio import confirms that the embedded `layer_height` and `initial_layer_print_height` values of `0.08` are honored and each material band slices into exactly four layers.
 
 ## Historical P2S slice observation
 

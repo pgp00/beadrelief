@@ -38,6 +38,15 @@ const styleProfiles: Record<GenerationStyle, StyleProfile> = {
   },
 };
 
+export const MAX_IMAGE_FILE_BYTES = 25 * 1024 * 1024;
+export const MAX_DECODED_IMAGE_PIXELS = 100_000_000;
+
+export function validateImageFileSize(size: number): void {
+  if (!Number.isSafeInteger(size) || size < 1 || size > MAX_IMAGE_FILE_BYTES) {
+    throw new Error('Image files must be between 1 byte and 25 MB.');
+  }
+}
+
 export function planImageConversion(
   mimeType: string,
   naturalWidth: number,
@@ -46,11 +55,17 @@ export function planImageConversion(
   paletteLength: number,
   requestedMaxColors: number,
 ): { width: number; height: number; sourceWidth: number; sourceHeight: number; maxColors: number } {
-  assertSupportedImageType(mimeType);
+  normalizeImageMimeType(mimeType);
   if (!Number.isFinite(naturalWidth) || !Number.isFinite(naturalHeight) || naturalWidth <= 0 || naturalHeight <= 0) {
     throw new Error('Could not read image dimensions.');
   }
-  if (paletteLength < 1 || paletteLength > 16) throw new Error('Choose between one and sixteen printable colors.');
+  if (naturalWidth * naturalHeight > MAX_DECODED_IMAGE_PIXELS) {
+    throw new Error('Image dimensions are too large.');
+  }
+  if (!Number.isFinite(requestedLongSide) || !Number.isSafeInteger(paletteLength) || paletteLength < 1 || paletteLength > 16
+    || !Number.isFinite(requestedMaxColors)) {
+    throw new Error('Choose between one and sixteen printable colors.');
+  }
   const longSide = Math.min(50, Math.max(8, Math.round(requestedLongSide)));
   const imageLongSide = Math.max(naturalWidth, naturalHeight);
   const sourceScale = Math.min(1, 4096 / imageLongSide);
@@ -63,18 +78,21 @@ export function planImageConversion(
   };
 }
 
-function assertSupportedImageType(mimeType: string): void {
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) {
+export function normalizeImageMimeType(mimeType: string): 'image/jpeg' | 'image/png' | 'image/webp' {
+  const normalized = mimeType.toLowerCase() === 'image/jpg' ? 'image/jpeg' : mimeType.toLowerCase();
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(normalized)) {
     throw new Error('Use a JPG, PNG, or WebP image.');
   }
+  return normalized as 'image/jpeg' | 'image/png' | 'image/webp';
 }
 
 export async function imageFileToBeads(file: File, options: ConvertOptions): Promise<ConvertResult> {
-  assertSupportedImageType(file.type);
+  validateImageFileSize(file.size);
+  const mimeType = normalizeImageMimeType(file.type);
   const image = await loadImage(file);
   const activePalette = options.palette ?? palette;
   const plan = planImageConversion(
-    file.type,
+    mimeType,
     image.naturalWidth,
     image.naturalHeight,
     options.width,
@@ -91,13 +109,37 @@ export async function imageFileToBeads(file: File, options: ConvertOptions): Pro
   context.drawImage(image, 0, 0, sourceWidth, sourceHeight);
   const data = context.getImageData(0, 0, sourceWidth, sourceHeight).data;
   const effectiveOptions = { ...options, maxColors };
+  return rgbaToBeads(data, sourceWidth, sourceHeight, width, height, effectiveOptions);
+}
+
+export function rgbaToBeads(
+  data: Uint8ClampedArray,
+  sourceWidth: number,
+  sourceHeight: number,
+  width: number,
+  height: number,
+  options: ConvertOptions,
+): ConvertResult {
+  const activePalette = options.palette ?? palette;
+  if (![sourceWidth, sourceHeight, width, height].every(Number.isSafeInteger)
+    || sourceWidth < 1 || sourceHeight < 1 || width < 1 || height < 1 || width > 50 || height > 50
+    || data.length !== sourceWidth * sourceHeight * 4) {
+    throw new Error('Invalid RGBA image dimensions.');
+  }
+  if (!Number.isFinite(options.width) || !Number.isSafeInteger(options.maxColors)
+    || !Number.isFinite(options.tolerance) || !Number.isFinite(options.speckleReduction)
+    || options.maxColors < 1 || options.maxColors > activePalette.length
+    || options.backgroundColor.some((channel) => !Number.isFinite(channel))) {
+    throw new Error('Image conversion options must be finite.');
+  }
   const profile = styleProfiles[options.generationStyle ?? 'cartoon'];
+  if (!profile) throw new Error('Unsupported generation style.');
   const requestedSpeckleStrength = options.speckleReduction ?? 0;
   const speckleStrength = requestedSpeckleStrength > 0 ? clampStrength(requestedSpeckleStrength + profile.postStrengthBias) : 0;
-  const backgroundColor = estimateBackgroundColor(data, sourceWidth, sourceHeight);
-  const sampledCells = sampleGridCells(data, sourceWidth, sourceHeight, width, height, effectiveOptions, backgroundColor, profile, speckleStrength);
-  const ranked = rankPaletteColors(sampledCells, effectiveOptions, activePalette, profile);
-  const candidates = selectCandidateColors(ranked, maxColors, activePalette, speckleStrength, profile);
+  const backgroundColor = estimateBackgroundColor(data, sourceWidth, sourceHeight, options.backgroundColor);
+  const sampledCells = sampleGridCells(data, sourceWidth, sourceHeight, width, height, options, backgroundColor, profile, speckleStrength);
+  const ranked = rankPaletteColors(sampledCells, options, activePalette, profile);
+  const candidates = selectCandidateColors(ranked, options.maxColors, activePalette, speckleStrength, profile);
   const cells = sampledCells.map((cell) => chooseCellColor(cell, candidates, profile));
 
   const mergedCells = mergeSimilarColors(cells, speckleStrength, candidates);
@@ -157,7 +199,11 @@ function sampleGridCells(
           );
           const index = (sourceY * sourceWidth + sourceX) * 4;
           const alpha = data[index + 3];
-          const rgb: [number, number, number] = [data[index], data[index + 1], data[index + 2]];
+          const rgb = compositeRgb(data, index, options.backgroundColor);
+          if (!rgb) {
+            backgroundCount += 1;
+            continue;
+          }
           if (isBackgroundSample(alpha, rgb, options, detectedBackgroundColor)) {
             backgroundCount += 1;
             continue;
@@ -599,19 +645,24 @@ function clampStrength(value: number): number {
   return Math.max(0, Math.min(4, Math.round(value)));
 }
 
-function estimateBackgroundColor(data: Uint8ClampedArray, width: number, height: number): [number, number, number] {
+function estimateBackgroundColor(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  backgroundColor: [number, number, number],
+): [number, number, number] {
   const samples: Array<[number, number, number]> = [];
   const maxSamplesPerEdge = 80;
   const xStep = Math.max(1, Math.floor(width / maxSamplesPerEdge));
   const yStep = Math.max(1, Math.floor(height / maxSamplesPerEdge));
 
   for (let x = 0; x < width; x += xStep) {
-    pushOpaqueSample(samples, data, width, x, 0);
-    pushOpaqueSample(samples, data, width, x, height - 1);
+    pushVisibleSample(samples, data, width, x, 0, backgroundColor);
+    pushVisibleSample(samples, data, width, x, height - 1, backgroundColor);
   }
   for (let y = 0; y < height; y += yStep) {
-    pushOpaqueSample(samples, data, width, 0, y);
-    pushOpaqueSample(samples, data, width, width - 1, y);
+    pushVisibleSample(samples, data, width, 0, y, backgroundColor);
+    pushVisibleSample(samples, data, width, width - 1, y, backgroundColor);
   }
 
   if (samples.length === 0) return [255, 255, 255];
@@ -635,14 +686,32 @@ function estimateBackgroundColor(data: Uint8ClampedArray, width: number, height:
   ];
 }
 
-function pushOpaqueSample(
+function pushVisibleSample(
   samples: Array<[number, number, number]>,
   data: Uint8ClampedArray,
   width: number,
   x: number,
   y: number,
+  backgroundColor: [number, number, number],
 ): void {
   const index = (y * width + x) * 4;
-  if (data[index + 3] < 24) return;
-  samples.push([data[index], data[index + 1], data[index + 2]]);
+  const rgb = compositeRgb(data, index, backgroundColor);
+  if (rgb) samples.push(rgb);
+}
+
+function compositeRgb(
+  data: Uint8ClampedArray,
+  index: number,
+  backgroundColor: [number, number, number],
+): [number, number, number] | null {
+  const alpha = data[index + 3];
+  if (alpha < 24) return null;
+  if (alpha === 255) return [data[index], data[index + 1], data[index + 2]];
+  const foregroundShare = alpha / 255;
+  const backgroundShare = 1 - foregroundShare;
+  return [
+    Math.round(data[index] * foregroundShare + backgroundColor[0] * backgroundShare),
+    Math.round(data[index + 1] * foregroundShare + backgroundColor[1] * backgroundShare),
+    Math.round(data[index + 2] * foregroundShare + backgroundColor[2] * backgroundShare),
+  ];
 }

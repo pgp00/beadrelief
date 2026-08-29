@@ -14,7 +14,7 @@ import { buildStackPalette } from './print/stacking';
 import { downloadThreeMf } from './print/threeMf';
 import { validatePrintableModel } from './print/validation';
 import { getColor } from './palette';
-import { MAX_PROJECT_DIMENSION, MAX_PROJECT_FILE_BYTES, composeVisibleCells, createLayer, createProject, hasEditableWork, isSafeProjectImport, loadDraft, normalizeProject, projectGridChanged, saveDraft, withCells, withLayers } from './project';
+import { MAX_PROJECT_DIMENSION, MAX_PROJECT_FILE_BYTES, MAX_PROJECT_LAYERS, composeVisibleCells, createLayer, createProject, hasEditableWork, isSafeProjectImport, loadDraft, normalizeProject, projectGridChanged, saveDraft, withCells, withLayers } from './project';
 import { findIsolatedBeads, summarizeLayeredUsage, summarizeUsage } from './usage';
 import type { ArrowKind, BackgroundMode, BeadProject, ClipboardPattern, ConvertResult, CopyMode, GenerationStyle, MirrorDirection, MoveMode, RemoveMode, RightClickAction, ShapeFillMode, ShapeKind, TextDirection, ToolId } from './types';
 
@@ -41,6 +41,37 @@ export function shouldAutoRegenerate(hasSource: boolean, hasManualEdits: boolean
   return hasSource && !hasManualEdits;
 }
 
+export function hasLayerCapacity(layerCount: number): boolean {
+  return layerCount < MAX_PROJECT_LAYERS;
+}
+
+export function canEditLayer(layer: Pick<BeadProject['layers'][number], 'locked' | 'visible'>): boolean {
+  return !layer.locked && layer.visible;
+}
+
+export function resizeWouldCropProject(project: BeadProject, width: number, height: number): boolean {
+  if (width >= project.width && height >= project.height) return false;
+  return project.layers.some((layer) => layer.cells.some((cell, index) => (
+    cell !== null && (index % project.width >= width || Math.floor(index / project.width) >= height)
+  )));
+}
+
+export function printOptionsForProject(project: BeadProject, options: PrintExportOptions, language: Language): PrintExportOptions {
+  return {
+    ...options,
+    projectName: project.name,
+    layerLabelPrefix: language === 'en' ? 'Layer' : '图层',
+  };
+}
+
+export function generationBlocksExport(running: boolean, scheduled: boolean): boolean {
+  return running || scheduled;
+}
+
+export function codedUiError(code: string, message: string): string {
+  return `[${code}] ${message}`;
+}
+
 export function imageLaunchState(hasPendingImage: boolean, project: BeadProject) {
   return {
     showActions: !hasPendingImage && !hasEditableWork(project),
@@ -63,23 +94,30 @@ export async function loadHeartSample(fetchImage: typeof fetch, localizedError: 
   }
 }
 
-export function mergeGeneratedProject(
+export function replaceGeneratedProject(
   project: BeadProject,
-  targetLayerId: string,
   result: Pick<ConvertResult, 'width' | 'height' | 'cells'>,
 ): BeadProject {
-  const nextLayers = project.layers.map((layer) => ({
+  const fresh = createProject(result.width, result.height, project.name);
+  return withCells({
+    ...fresh,
+    settings: { ...project.settings, showActiveLayerOnly: false },
+    boardSettings: { ...project.boardSettings },
+    amsColors: project.amsColors.map((color) => ({ ...color })),
+    printSettings: { ...project.printSettings },
+  }, result.cells, result.width, result.height);
+}
+
+export function projectForDisplay(project: BeadProject): BeadProject {
+  if (!project.settings.showActiveLayerOnly) return project;
+  const layers = project.layers.map((layer) => ({
     ...layer,
-    cells: layer.id === targetLayerId
-      ? resizeCells(result.cells, result.width, result.height, result.width, result.height)
-      : resizeCells(layer.cells, project.width, project.height, result.width, result.height),
+    visible: layer.id === project.activeLayerId,
   }));
   return {
     ...project,
-    width: result.width,
-    height: result.height,
-    layers: nextLayers,
-    cells: composeVisibleCells(nextLayers, result.width, result.height),
+    layers,
+    cells: composeVisibleCells(layers, project.width, project.height),
   };
 }
 
@@ -134,7 +172,6 @@ export default function App() {
   const suppressAutoGenerationRef = useRef(false);
   const generateFromImageRef = useRef(generateFromImage);
   const adjustmentSessionRef = useRef<{ layerId: string | null; baseCells: Array<string | null> }>({ layerId: null, baseCells: [] });
-  const soloVisibilitySnapshotRef = useRef<Record<string, boolean> | null>(null);
   const [language, setLanguage] = useState<Language>(() => {
     let saved: string | null = null;
     try {
@@ -150,6 +187,7 @@ export default function App() {
   languageRef.current = language;
   const text = ui[language];
   const [project, setProject] = useState<BeadProject>(() => loadDraft() ?? createProject());
+  const [previewProject, setPreviewProject] = useState(project);
   const projectRef = useRef(project);
   projectRef.current = project;
   const autoGenerationKey = autoGenerationPaletteKey(project.printSettings.mode, project.amsColors);
@@ -174,7 +212,6 @@ export default function App() {
     exportBounds: 'pattern',
     showColorCodes: true,
     showGuideLines: true,
-    projectName: '',
     authorName: '',
   });
   const [showPencilOptions, setShowPencilOptions] = useState(false);
@@ -208,6 +245,7 @@ export default function App() {
   const [autoGenerationRestartToken, setAutoGenerationRestartToken] = useState(0);
   const [manualEditsSinceGeneration, setManualEditsSinceGeneration] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [notice, setNotice] = useState(text.workspaceReady);
   const [floatingHelp, setFloatingHelp] = useState<FloatingHelp | null>(null);
   const [hoverCell, setHoverCell] = useState<HoverCell | null>(null);
@@ -340,8 +378,22 @@ export default function App() {
   generateFromImageRef.current = generateFromImage;
 
   useEffect(() => {
-    if (!saveDraft(project)) setNotice(text.storageUnavailable);
+    const timer = window.setTimeout(() => {
+      if (!saveDraft(project)) setNotice(text.storageUnavailable);
+    }, 400);
+    return () => window.clearTimeout(timer);
   }, [project, text.storageUnavailable]);
+
+  useEffect(() => {
+    const flushDraft = () => saveDraft(projectRef.current);
+    window.addEventListener('beforeunload', flushDraft);
+    return () => window.removeEventListener('beforeunload', flushDraft);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setPreviewProject(project), 250);
+    return () => window.clearTimeout(timer);
+  }, [project]);
 
   useEffect(() => {
     try {
@@ -414,6 +466,7 @@ export default function App() {
       return;
     }
     autoGenerationPendingRef.current = true;
+    setIsGenerating(true);
     const effectRequestId = generationRequestRef.current;
     const timer = window.setTimeout(() => {
       if (effectRequestId !== generationRequestRef.current) return;
@@ -449,10 +502,23 @@ export default function App() {
     if (action !== 'none') setAutoGenerationRestartToken((current) => current + 1);
   }
 
+  function markGenerationPending() {
+    if (!pendingFile || !shouldAutoRegenerate(true, manualEditsSinceGeneration)) return;
+    autoGenerationPendingRef.current = true;
+    setIsGenerating(true);
+  }
+
+  function blockExportWhileGenerating(): boolean {
+    if (!generationBlocksExport(isGenerating, autoGenerationPendingRef.current)) return false;
+    setNotice(language === 'zh' ? '图案更新完成后才能导出。' : 'Wait for the pattern update before exporting.');
+    return true;
+  }
+
   function updatePrintProject(next: BeadProject) {
     if (autoGenerationPaletteKey(project.printSettings.mode, project.amsColors)
       !== autoGenerationPaletteKey(next.printSettings.mode, next.amsColors)) {
       invalidateGeneration();
+      markGenerationPending();
     }
     updateProject(next, 'settings');
   }
@@ -478,7 +544,14 @@ export default function App() {
   }
 
   function updateCells(cells: Array<string | null>) {
+    if (!ensureActiveLayerEditable()) return;
     updateProject(withCells(project, cells));
+  }
+
+  function ensureActiveLayerEditable(): boolean {
+    if (canEditLayer(activeLayer)) return true;
+    setNotice(activeLayer.locked ? text.lockedCanvasHint : text.hiddenCanvasHint);
+    return false;
   }
 
   function resetImportSettings() {
@@ -494,6 +567,40 @@ export default function App() {
     setReferenceAdjusting(false);
   }
 
+  function resetProjectSession(nextProject: BeadProject) {
+    const colorIds = nextProject.amsColors.map((color) => color.id);
+    setSelectedColorId(colorIds[0] ?? defaultColorId);
+    setRecentColorIds(colorIds.slice(0, 2));
+    setPaletteGroup('all');
+    setTool('pencil');
+    setShowPencilOptions(false);
+    setShowEraserOptions(false);
+    setShowRemoveOptions(false);
+    setShowMoveOptions(false);
+    setShowMirrorOptions(false);
+    setShowShapeOptions(false);
+    setShowTextOptions(false);
+    setShowClipboardOptions(false);
+    setShowPanOptions(false);
+    setClipboardPattern(null);
+    setCopySelectionIndices([]);
+    setShowPrintExportPanel(false);
+    setPrintExportOptions((current) => ({ ...current, projectName: undefined, authorName: '' }));
+    setPendingFile(null);
+    setPendingImageUrl((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return null;
+    });
+    setReferenceFile(null);
+    setReferenceImageUrl((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return null;
+    });
+    setReferenceVisible(false);
+    resetReferenceTransform();
+    resetAdjustments(false);
+  }
+
   function resetAdjustments(restore = true) {
     const session = adjustmentSessionRef.current;
     if (restore && session.layerId === activeLayer.id && session.baseCells.length === activeLayer.cells.length) {
@@ -504,10 +611,7 @@ export default function App() {
   }
 
   function updateAdjustment(key: keyof AdjustmentSettings, value: number) {
-    if (activeLayer.locked) {
-      setNotice(text.adjustmentLocked);
-      return;
-    }
+    if (!ensureActiveLayerEditable()) return;
     const nextAdjustments = { ...adjustments, [key]: value };
     if (adjustmentSessionRef.current.layerId !== activeLayer.id) {
       adjustmentSessionRef.current = { layerId: activeLayer.id, baseCells: activeLayer.cells.slice() };
@@ -520,10 +624,7 @@ export default function App() {
   }
 
   function applyColorCleanup() {
-    if (activeLayer.locked) {
-      setNotice(text.adjustmentLocked);
-      return;
-    }
+    if (!ensureActiveLayerEditable()) return;
     const { cells, changed } = mergeCloseLayerColors(activeLayer.cells, activePalette, colorCleanupStrength);
     if (changed > 0) {
       commitHistory();
@@ -533,10 +634,7 @@ export default function App() {
   }
 
   function applyLayerColorLimit() {
-    if (activeLayer.locked) {
-      setNotice(text.adjustmentLocked);
-      return;
-    }
+    if (!ensureActiveLayerEditable()) return;
     const { cells, changed } = limitLayerColors(activeLayer.cells, activePalette, layerColorLimit);
     if (changed > 0) {
       commitHistory();
@@ -546,10 +644,7 @@ export default function App() {
   }
 
   function applyLayerEffect(effect: LayerEffect, label: string) {
-    if (activeLayer.locked) {
-      setNotice(text.adjustmentLocked);
-      return;
-    }
+    if (!ensureActiveLayerEditable()) return;
     const { cells, changed } = applyEffectToLayer(activeLayer.cells, activePalette, effect);
     if (changed > 0) {
       commitHistory();
@@ -609,36 +704,19 @@ export default function App() {
 
   function startBlank(width = 32, height = 32) {
     if (!allowProjectReplacement()) return;
+    const nextProject = createProject(width, height);
     invalidateGeneration();
-    soloVisibilitySnapshotRef.current = null;
-    setProject(createProject(width, height));
+    resetProjectSession(nextProject);
+    setProject(nextProject);
     setPast([]);
     setFuture([]);
     setManualEditsSinceGeneration(false);
-    setClipboardPattern(null);
-    setCopySelectionIndices([]);
-    resetAdjustments(false);
     resetImportSettings();
-    setSelectedColorId(defaultColorId);
-    setRecentColorIds(defaultRecentColorIds);
-    setPaletteGroup('all');
-    setPendingFile(null);
-    setPendingImageUrl((current) => {
-      if (current) URL.revokeObjectURL(current);
-      return null;
-    });
-    setReferenceFile(null);
-    setReferenceImageUrl((current) => {
-      if (current) URL.revokeObjectURL(current);
-      return null;
-    });
-    setReferenceVisible(false);
-    resetReferenceTransform();
     setNotice(language === 'zh' ? `已创建 ${width} * ${height} 空白画布。` : `Blank ${width} x ${height} canvas created.`);
   }
 
   function clearCanvas() {
-    if (activeLayer.locked) return;
+    if (!ensureActiveLayerEditable()) return;
     if (activeLayer.cells.every((cell) => cell === null)) return;
     commitHistory();
     updateProject(withCells(project, Array.from({ length: project.width * project.height }, () => null)));
@@ -649,6 +727,7 @@ export default function App() {
     const width = clampInteger(canvasWidth, 8, MAX_PROJECT_DIMENSION);
     const height = clampInteger(canvasHeight, 8, MAX_PROJECT_DIMENSION);
     if (width === project.width && height === project.height) return;
+    if (resizeWouldCropProject(project, width, height) && !window.confirm(text.resizeCropConfirm)) return;
 
     commitHistory();
     const nextLayers = layers.map((layer) => ({
@@ -679,9 +758,11 @@ export default function App() {
     }
     if (!options.replacementConfirmed && !allowProjectReplacement()) return false;
     invalidateGeneration();
-    resetAdjustments(false);
+    resetProjectSession(projectRef.current);
     setManualEditsSinceGeneration(false);
     setPendingFile(file);
+    autoGenerationPendingRef.current = true;
+    setIsGenerating(true);
     setPendingImageUrl((current) => {
       if (current) URL.revokeObjectURL(current);
       return URL.createObjectURL(file);
@@ -725,13 +806,8 @@ export default function App() {
 
   async function generateFromImage(options: { recordHistory?: boolean; automatic?: boolean } = {}) {
     if (!pendingFile) return;
-    if (activeLayer.locked) {
-      setNotice(text.lockedCanvasHint);
-      return;
-    }
     const requestId = generationRequestRef.current + 1;
     generationRequestRef.current = requestId;
-    const targetLayerId = activeLayer.id;
     setIsGenerating(true);
     setNotice(language === 'zh' ? '正在本地更新拼豆图案...' : 'Updating bead pattern locally...');
     try {
@@ -750,7 +826,7 @@ export default function App() {
         autoGenerateShouldCommitRef.current = false;
         commitHistory();
       }
-      const nextProject = mergeGeneratedProject(projectRef.current, targetLayerId, result);
+      const nextProject = replaceGeneratedProject(projectRef.current, result);
       updateProject(nextProject, 'generated');
       setNotice(
         language === 'zh'
@@ -759,7 +835,7 @@ export default function App() {
       );
     } catch (error) {
       if (requestId !== generationRequestRef.current) return;
-      setNotice(error instanceof Error ? error.message : 'Could not generate this image.');
+      setNotice(codedUiError('IMAGE_CONVERSION', text.imageConversionFailed));
     } finally {
       if (requestId === generationRequestRef.current) {
         autoGenerationPendingRef.current = false;
@@ -769,40 +845,37 @@ export default function App() {
   }
 
   async function importJson(file: File): Promise<boolean> {
-    if (file.size > MAX_PROJECT_FILE_BYTES) throw new Error(text.invalidRecord);
-    let imported: BeadProject;
+    if (file.size > MAX_PROJECT_FILE_BYTES) throw new Error(codedUiError('IMPORT_TOO_LARGE', text.invalidRecord));
+    let imported: unknown;
     try {
       const text = await file.text();
-      imported = JSON.parse(text) as BeadProject;
+      imported = JSON.parse(text);
     } catch {
-      throw new Error(text.unreadableRecord);
+      throw new Error(codedUiError('IMPORT_JSON', text.unreadableRecord));
     }
     if (!isSafeProjectImport(imported, file.size)) {
-      throw new Error(text.invalidRecord);
+      throw new Error(codedUiError('IMPORT_INVALID', text.invalidRecord));
     }
     if (!allowProjectReplacement()) return false;
+    const nextProject = normalizeProject(imported);
     invalidateGeneration();
-    soloVisibilitySnapshotRef.current = null;
-    setProject(normalizeProject(imported));
+    resetProjectSession(nextProject);
+    setProject(nextProject);
     setPast([]);
     setFuture([]);
     setManualEditsSinceGeneration(false);
-    resetAdjustments(false);
-    setPendingFile(null);
-    setPendingImageUrl((current) => {
-      if (current) URL.revokeObjectURL(current);
-      return null;
-    });
     setNotice(text.recordImported);
     return true;
   }
 
   function exportUsageList() {
+    if (blockExportWhileGenerating()) return;
     downloadUsageWorkbook(project);
     setNotice(text.usageExported);
   }
 
   function exportEditRecord() {
+    if (blockExportWhileGenerating()) return;
     downloadProjectJson(project);
     setNotice(text.recordExported);
   }
@@ -814,12 +887,20 @@ export default function App() {
   }
 
   function addLayer() {
+    if (!hasLayerCapacity(layers.length)) {
+      setNotice(text.layerLimitReached);
+      return;
+    }
     commitHistory();
     const nextLayer = createLayer(project.width, project.height, `${text.layers} ${layers.length + 1}`);
     updateProject(withLayers(project, [...layers, nextLayer], nextLayer.id));
   }
 
   function duplicateLayer(layerId: string) {
+    if (!hasLayerCapacity(layers.length)) {
+      setNotice(text.layerLimitReached);
+      return;
+    }
     const sourceIndex = layers.findIndex((layer) => layer.id === layerId);
     const source = layers[sourceIndex];
     if (!source) return;
@@ -875,34 +956,10 @@ export default function App() {
   }
 
   function toggleActiveLayerOnly() {
-    const shouldEnable = !project.settings.showActiveLayerOnly;
-    if (shouldEnable) {
-      soloVisibilitySnapshotRef.current = Object.fromEntries(layers.map((layer) => [layer.id, layer.visible]));
-      const soloLayers = layers.map((layer) => ({
-        ...layer,
-        visible: layer.id === activeLayer.id,
-      }));
-      updateProject({
-        ...project,
-        settings: { ...project.settings, showActiveLayerOnly: true },
-        layers: soloLayers,
-        cells: composeVisibleCells(soloLayers, project.width, project.height),
-      });
-      return;
-    }
-
-    const snapshot = soloVisibilitySnapshotRef.current;
-    soloVisibilitySnapshotRef.current = null;
-    const restoredLayers = layers.map((layer) => ({
-      ...layer,
-      visible: snapshot?.[layer.id] ?? layer.visible,
-    }));
     updateProject({
       ...project,
-      settings: { ...project.settings, showActiveLayerOnly: false },
-      layers: restoredLayers,
-      cells: composeVisibleCells(restoredLayers, project.width, project.height),
-    });
+      settings: { ...project.settings, showActiveLayerOnly: !project.settings.showActiveLayerOnly },
+    }, 'settings');
   }
 
   function deleteLayer(layerId: string) {
@@ -929,6 +986,16 @@ export default function App() {
     updateProject(withLayers(project, nextDisplayLayers.reverse(), project.activeLayerId));
   }
 
+  function moveLayerBy(sourceId: string, direction: -1 | 1) {
+    const sourceIndex = layers.findIndex((layer) => layer.id === sourceId);
+    const targetIndex = sourceIndex + direction;
+    if (sourceIndex < 0 || targetIndex < 0 || targetIndex >= layers.length) return;
+    const nextLayers = layers.slice();
+    [nextLayers[sourceIndex], nextLayers[targetIndex]] = [nextLayers[targetIndex], nextLayers[sourceIndex]];
+    commitHistory();
+    updateProject(withLayers(project, nextLayers, project.activeLayerId));
+  }
+
   function dragTargetFromEvent(event: React.DragEvent<HTMLElement>, layerId: string): DragTarget {
     const rect = event.currentTarget.getBoundingClientRect();
     return {
@@ -938,20 +1005,7 @@ export default function App() {
   }
 
   function selectLayer(layerId: string) {
-    if (!project.settings.showActiveLayerOnly) {
-      updateProject({ ...project, activeLayerId: layerId });
-      return;
-    }
-    const soloLayers = layers.map((layer) => ({
-      ...layer,
-      visible: layer.id === layerId,
-    }));
-    updateProject({
-      ...project,
-      activeLayerId: layerId,
-      layers: soloLayers,
-      cells: composeVisibleCells(soloLayers, project.width, project.height),
-    });
+    updateProject({ ...project, activeLayerId: layerId }, 'settings');
   }
 
   function setBeadsPerPack(value: number) {
@@ -981,52 +1035,50 @@ export default function App() {
 
   const layers = project.layers?.length ? project.layers : createProject(project.width, project.height).layers;
   const activeLayer = layers.find((layer) => layer.id === project.activeLayerId) ?? layers[0];
+  const canEditActiveLayer = canEditLayer(activeLayer);
   const countedLayers = layers.filter((layer) => layer.includeInUsage);
   useEffect(() => {
     setCopySelectionIndices([]);
     setAdjustments(defaultAdjustments);
     adjustmentSessionRef.current = { layerId: null, baseCells: [] };
   }, [activeLayer.id, project.width, project.height]);
-  const displayProject = useMemo(() => {
-    if (!project.settings.showActiveLayerOnly) {
-      return project;
-    }
-    const displayLayers = layers.map((layer) => ({
-      ...layer,
-      visible: layer.id === activeLayer.id,
-    }));
-    return {
-      ...project,
-      layers: displayLayers,
-      cells: composeVisibleCells(displayLayers, project.width, project.height),
-    };
-  }, [activeLayer.id, layers, project]);
+  const displayProject = useMemo(() => projectForDisplay(project), [project]);
   const printableModel = useMemo(
-    () => buildPrintableModel(composePrintableGrid(displayProject)),
-    [displayProject],
+    () => buildPrintableModel(composePrintableGrid(previewProject)),
+    [previewProject],
   );
-  const printErrors = useMemo(() => validatePrintableModel(printableModel, false), [printableModel]);
+  const printErrors = useMemo(() => {
+    const errors = validatePrintableModel(printableModel, false);
+    return errors.length ? [codedUiError('EXPORT_INVALID', text.exportValidationFailed)] : [];
+  }, [printableModel, text.exportValidationFailed]);
 
-  function exportThreeMf() {
-    if (printErrors.length > 0) {
-      setNotice(printErrors[0]);
-      const errorRegion = document.getElementById('print-export-errors');
-      errorRegion?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      errorRegion?.focus({ preventScroll: true });
-      return;
-    }
+  async function exportThreeMf() {
+    if (blockExportWhileGenerating()) return;
+    if (isExporting) return;
+    setIsExporting(true);
+    setNotice(language === 'zh' ? '正在构建并压缩 3MF...' : 'Building and compressing 3MF...');
     try {
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+      const exportModel = buildPrintableModel(composePrintableGrid(projectRef.current));
+      const exportErrors = validatePrintableModel(exportModel, false);
+      if (exportErrors.length > 0) {
+        setNotice(codedUiError('EXPORT_INVALID', text.exportValidationFailed));
+        const errorRegion = document.getElementById('print-export-errors');
+        errorRegion?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        errorRegion?.focus({ preventScroll: true });
+        return;
+      }
       const stem = project.name
         .trim()
         .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, '-')
         .replace(/\s+/g, '-')
         .slice(0, 80) || 'beadrelief';
-      downloadThreeMf(printableModel, `${stem}.3mf`);
-      setNotice(language === 'zh'
-        ? '3MF 已导出，已包含 Bambu 项目耗材颜色和零件分配；打印前请确认实际 AMS 槽位。'
-        : '3MF exported with Bambu project-filament colors and part assignments included; confirm the physical AMS slots before printing.');
+      await downloadThreeMf(exportModel, `${stem}.3mf`);
+      setNotice(text.threeMfDownloaded);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : String(error));
+      setNotice(codedUiError('EXPORT_FAILED', text.exportFailed));
+    } finally {
+      setIsExporting(false);
     }
   }
   const shapeLabel = {
@@ -1044,18 +1096,9 @@ export default function App() {
     block: text.arrowBlock,
   } satisfies Record<ArrowKind, string>;
   const selectedSizePreset = sizePresets.find((item) => item.width === canvasWidth && item.height === canvasHeight)?.label ?? '';
-  const defaultPrintNickname = useMemo(() => {
-    const date = new Date();
-    const stamp = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}${String(date.getHours()).padStart(2, '0')}${String(date.getMinutes()).padStart(2, '0')}`;
-    return language === 'zh' ? `拼豆图纸_${stamp}` : `Perler_Beads_${stamp}`;
-  }, [language]);
-
   function exportPrintPattern() {
-    const exportOptions = {
-      ...printExportOptions,
-      projectName: printExportOptions.projectName?.trim() || defaultPrintNickname,
-      layerLabelPrefix: language === 'en' ? 'Layer' : '图层',
-    };
+    if (blockExportWhileGenerating()) return;
+    const exportOptions = printOptionsForProject(project, printExportOptions, language);
     if (printExportOptions.format === 'pdf') {
       downloadPrintPdf(project, exportOptions);
     } else {
@@ -1065,6 +1108,7 @@ export default function App() {
   }
 
   const imageLaunch = imageLaunchState(Boolean(pendingFile), project);
+  const exportDisabled = generationBlocksExport(isGenerating, autoGenerationPendingRef.current) || isExporting;
 
   return (
     <main
@@ -1159,6 +1203,7 @@ export default function App() {
                 type="button"
                 className="export-action-button primary-action"
                 title={text.exportThreeMf}
+                disabled={exportDisabled}
                 onClick={exportThreeMf}
               >
                 <ExportIcon />
@@ -1170,6 +1215,7 @@ export default function App() {
                   className="export-action-button print-export-button"
                   title={`${text.exportPatternTitle} PNG`}
                   aria-expanded={showPrintExportPanel}
+                  disabled={exportDisabled}
                   onClick={() => setShowPrintExportPanel((value) => !value)}
                 >
                   <ExportIcon />
@@ -1214,9 +1260,13 @@ export default function App() {
                     <label className="export-text-field">
                       <span>{text.projectNickname}</span>
                       <input
-                        value={printExportOptions.projectName ?? ''}
-                        placeholder={defaultPrintNickname}
-                        onChange={(event) => setPrintExportOptions((current) => ({ ...current, projectName: event.target.value }))}
+                        value={project.name}
+                        maxLength={80}
+                        onFocus={commitHistory}
+                        onChange={(event) => updateProject({ ...project, name: event.target.value }, 'settings')}
+                        onBlur={() => {
+                          if (!project.name.trim()) updateProject({ ...project, name: 'Untitled Pattern' }, 'settings');
+                        }}
                       />
                     </label>
                     <label className="export-text-field">
@@ -1243,14 +1293,14 @@ export default function App() {
                         onChange={(event) => setPrintExportOptions((current) => ({ ...current, showGuideLines: event.target.checked }))}
                       />
                     </label>
-                    <button className="export-submit-button" onClick={exportPrintPattern}>
+                    <button className="export-submit-button" disabled={exportDisabled} onClick={exportPrintPattern}>
                       {text.exportNow} {(printExportOptions.format ?? 'png').toUpperCase()}
                     </button>
                   </div>
                 )}
               </div>
-              <button className="export-action-button" title={text.exportUsageTitle} onClick={exportUsageList}>{text.exportUsageFull}</button>
-              <button className="export-action-button" title={text.exportRecordTitle} onClick={exportEditRecord}>{text.exportRecordFull}</button>
+              <button className="export-action-button" disabled={exportDisabled} title={text.exportUsageTitle} onClick={exportUsageList}>{text.exportUsageFull}</button>
+              <button className="export-action-button" disabled={exportDisabled} title={text.exportRecordTitle} onClick={exportEditRecord}>{text.exportRecordFull}</button>
               <button className="export-action-button" title={text.importRecordTitle} onClick={() => jsonInputRef.current?.click()}>{text.importRecordFull}</button>
             </div>
           </div>
@@ -1289,7 +1339,7 @@ export default function App() {
 
           {imageLaunch.showActions ? (
             <div className="image-empty-actions">
-              <button className="project-action-button primary-action" type="button" onClick={() => void startHeartSample().catch((error) => setNotice(error instanceof Error ? error.message : String(error)))}>
+              <button className="project-action-button primary-action" type="button" onClick={() => void startHeartSample().catch(() => setNotice(codedUiError('SAMPLE_LOAD', text.sampleLoadError)))}>
                 {text.trySample}
               </button>
               <button className="project-action-button" type="button" onClick={() => fileInputRef.current?.click()}>
@@ -1318,9 +1368,12 @@ export default function App() {
                 {text.width}
                 <span className="help-dot image-help-dot" {...imageHelpProps(text.heightFromRatio)}>?</span>
               </span>
-              <input aria-label="Output long side" type="number" min={8} max={50} value={convertWidth} onChange={(event) => setConvertWidth(Number(event.target.value))} />
+              <input aria-label="Output long side" type="number" min={8} max={50} value={convertWidth} onChange={(event) => {
+                markGenerationPending();
+                setConvertWidth(Number(event.target.value));
+              }} />
             </label>
-            <label className="image-range-field">
+            {backgroundMode === 'remove-white' && <label className="image-range-field">
               <span>
                 <span className="field-label-with-help">
                   {text.tolerance}
@@ -1328,8 +1381,11 @@ export default function App() {
                 </span>
                 <strong>{tolerance}</strong>
               </span>
-              <input aria-label="Background tolerance" type="range" min={0} max={120} step={1} value={tolerance} onChange={(event) => setTolerance(Number(event.target.value))} />
-            </label>
+              <input aria-label="Background tolerance" type="range" min={0} max={120} step={1} value={tolerance} onChange={(event) => {
+                markGenerationPending();
+                setTolerance(Number(event.target.value));
+              }} />
+            </label>}
           </div>
 
           <label className="stacked-field image-style-field">
@@ -1337,7 +1393,10 @@ export default function App() {
             <select
               aria-label="Generation style"
               value={generationStyle}
-              onChange={(event) => setGenerationStyle(event.target.value as GenerationStyle)}
+              onChange={(event) => {
+                markGenerationPending();
+                setGenerationStyle(event.target.value as GenerationStyle);
+              }}
             >
               <option value="cartoon">{text.generationStyleCartoon}</option>
               <option value="realistic">{text.generationStyleRealistic}</option>
@@ -1346,7 +1405,10 @@ export default function App() {
 
           <label className="stacked-field image-background-field">
             <span>{text.background}</span>
-            <select aria-label="Background handling" value={backgroundMode} onChange={(event) => setBackgroundMode(event.target.value as BackgroundMode)}>
+            <select aria-label="Background handling" value={backgroundMode} onChange={(event) => {
+              markGenerationPending();
+              setBackgroundMode(event.target.value as BackgroundMode);
+            }}>
               <option value="keep">{text.keepBackground}</option>
               <option value="remove-white">{text.removeWhite}</option>
             </select>
@@ -1361,6 +1423,7 @@ export default function App() {
           onChange={updatePrintProject}
           onCommit={commitHistory}
           onExport={exportThreeMf}
+          exportDisabled={exportDisabled}
         />
 
         <section className="left-card reference-card">
@@ -1393,7 +1456,7 @@ export default function App() {
           <label className="image-range-field reference-opacity-field">
             <span>
               <span>{text.referenceOpacity}</span>
-              <strong>{Math.round((1 - referenceOpacity) * 100)}%</strong>
+              <strong>{Math.round(referenceOpacity * 100)}%</strong>
             </span>
             <input
               aria-label="Reference opacity"
@@ -1401,9 +1464,9 @@ export default function App() {
               min={0.1}
               max={0.95}
               step={0.05}
-              value={1 - referenceOpacity}
+              value={referenceOpacity}
               disabled={!referenceImageUrl || !referenceVisible}
-              onChange={(event) => setReferenceOpacity(1 - Number(event.target.value))}
+              onChange={(event) => setReferenceOpacity(Number(event.target.value))}
             />
           </label>
 
@@ -1843,6 +1906,8 @@ export default function App() {
         referenceImageAdjusting={referenceAdjusting && referenceVisible && !isGenerating}
         referenceImagePlacement={referencePlacement}
         referenceAdjustHint={text.referenceAdjustHint}
+        canvasLabel={text.canvasKeyboardLabel}
+        coordinateLabel={text.cursorCoordinate}
         onReferenceOffsetChange={setReferenceOffset}
         onReferenceScaleChange={setReferenceScale}
         onCommitStart={() => {
@@ -1899,8 +1964,8 @@ export default function App() {
         }}
         onHover={setHoverCell}
         fitLabel={text.fit}
-        canEdit={!activeLayer.locked}
-        lockedHint={text.lockedCanvasHint}
+        canEdit={canEditActiveLayer}
+        lockedHint={activeLayer.locked ? text.lockedCanvasHint : text.hiddenCanvasHint}
       />
 
       <aside className="right-panel">
@@ -1963,6 +2028,7 @@ export default function App() {
             emptyLabel={text.previewEmpty}
             closeLabel={text.close}
             expandLabel={text.expandPreview}
+            webglErrorLabel={text.webglUnavailable}
           />
         </section>
 
@@ -2030,7 +2096,11 @@ export default function App() {
           <section className="panel-section panel-tab-body layers-section">
             <div className="layers-header">
               <h2>{text.layers}</h2>
-              <button onClick={addLayer}>{text.addLayer}</button>
+              <button
+                disabled={!hasLayerCapacity(layers.length)}
+                title={!hasLayerCapacity(layers.length) ? text.layerLimitReached : undefined}
+                onClick={addLayer}
+              >{text.addLayer}</button>
             </div>
             <button
               className={project.settings.showActiveLayerOnly ? 'layer-solo-toggle active' : 'layer-solo-toggle'}
@@ -2145,27 +2215,29 @@ export default function App() {
                         </label>
                       </form>
                     ) : (
-                      <div className="layer-main layer-main-static" onClick={() => selectLayer(layer.id)}>
+                      <div className="layer-main layer-main-static">
                         <div className="layer-title-row">
-                          <strong>
-                            <span>{displayName}</span>
-                            <button
-                              className="layer-rename-button"
-                              type="button"
-                              title={text.renameLayer}
-                              aria-label={text.renameLayer}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                startEditingLayer(layer, layerIndex);
-                              }}
-                            >
-                              <PencilIcon />
-                            </button>
-                          </strong>
+                          <button
+                            className="layer-select-button"
+                            type="button"
+                            aria-pressed={isActive}
+                            onClick={() => selectLayer(layer.id)}
+                          >
+                            <strong>{displayName}</strong>
+                            <span className="layer-meta">
+                              {layerMetaText(isActive, layer.visible, layer.locked, beadCount)}
+                            </span>
+                          </button>
+                          <button
+                            className="layer-rename-button"
+                            type="button"
+                            title={text.renameLayer}
+                            aria-label={text.renameLayer}
+                            onClick={() => startEditingLayer(layer, layerIndex)}
+                          >
+                            <PencilIcon />
+                          </button>
                         </div>
-                        <span className="layer-meta">
-                          {layerMetaText(isActive, layer.visible, layer.locked, beadCount)}
-                        </span>
                         <label className="checkline layer-count">
                           <input
                             type="checkbox"
@@ -2178,6 +2250,20 @@ export default function App() {
                     )}
                     <div className="layer-actions">
                       <button
+                        className="mini-icon-toggle"
+                        disabled={layerIndex === layers.length - 1}
+                        aria-label={text.moveLayerUp}
+                        title={text.moveLayerUp}
+                        onClick={() => moveLayerBy(layer.id, 1)}
+                      >↑</button>
+                      <button
+                        className="mini-icon-toggle"
+                        disabled={layerIndex === 0}
+                        aria-label={text.moveLayerDown}
+                        title={text.moveLayerDown}
+                        onClick={() => moveLayerBy(layer.id, -1)}
+                      >↓</button>
+                      <button
                         className={layer.locked ? 'mini-icon-toggle active' : 'mini-icon-toggle'}
                         aria-label={layer.locked ? text.unlock : text.lock}
                         title={layer.locked ? text.unlockHint : text.lockHint}
@@ -2187,8 +2273,9 @@ export default function App() {
                       </button>
                       <button
                         className="mini-icon-toggle"
+                        disabled={!hasLayerCapacity(layers.length)}
                         aria-label={text.duplicateLayer}
-                        title={text.duplicateLayer}
+                        title={!hasLayerCapacity(layers.length) ? text.layerLimitReached : text.duplicateLayer}
                         onClick={() => duplicateLayer(layer.id)}
                       >
                         <DuplicateIcon />
@@ -2379,13 +2466,13 @@ export default function App() {
             <div className="adjustment-effect-card">
               <strong>{text.effects}</strong>
               <div className="adjustment-effect-grid">
-                <button type="button" onClick={() => applyLayerEffect('invert', text.invertEffect)} disabled={activeLayer.locked}>
+              <button type="button" onClick={() => applyLayerEffect('invert', text.invertEffect)} disabled={!canEditActiveLayer}>
                   {text.invertEffect}
                 </button>
-                <button type="button" onClick={() => applyLayerEffect('grayscale', text.grayscaleEffect)} disabled={activeLayer.locked}>
+              <button type="button" onClick={() => applyLayerEffect('grayscale', text.grayscaleEffect)} disabled={!canEditActiveLayer}>
                   {text.grayscaleEffect}
                 </button>
-                <button type="button" onClick={() => applyLayerEffect('blackWhite', text.blackWhiteEffect)} disabled={activeLayer.locked}>
+              <button type="button" onClick={() => applyLayerEffect('blackWhite', text.blackWhiteEffect)} disabled={!canEditActiveLayer}>
                   {text.blackWhiteEffect}
                 </button>
               </div>
@@ -2405,7 +2492,7 @@ export default function App() {
                 value={colorCleanupStrength}
                 onChange={(event) => setColorCleanupStrength(Number(event.target.value))}
               />
-              <button type="button" onClick={applyColorCleanup} disabled={activeLayer.locked}>
+              <button type="button" onClick={applyColorCleanup} disabled={!canEditActiveLayer}>
                 {text.applyColorCleanup}
               </button>
             </div>
@@ -2424,7 +2511,7 @@ export default function App() {
                 value={layerColorLimit}
                 onChange={(event) => setLayerColorLimit(Number(event.target.value))}
               />
-              <button type="button" onClick={applyLayerColorLimit} disabled={activeLayer.locked}>
+              <button type="button" onClick={applyLayerColorLimit} disabled={!canEditActiveLayer}>
                 {text.applyColorLimit}
               </button>
             </div>

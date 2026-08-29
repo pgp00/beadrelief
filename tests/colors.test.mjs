@@ -15,9 +15,9 @@ import {
   replaceProjectColor,
 } from "../generated/dist/src/print/colors.js";
 
-const { createProject, hasEditableWork, normalizeProject, withCells } = projectApi;
+const { createProject, hasEditableWork, normalizeProject, withCells, withLayers } = projectApi;
 globalThis.React = React;
-const { autoGenerationPaletteKey, beginAutoGenerationEffect, mergeGeneratedProject, pendingGenerationAction, projectGridChanged, shouldAutoRegenerate } = await import("../generated/dist/src/App.js");
+const { autoGenerationPaletteKey, beginAutoGenerationEffect, canEditLayer, codedUiError, generationBlocksExport, hasLayerCapacity, pendingGenerationAction, printOptionsForProject, projectForDisplay, projectGridChanged, replaceGeneratedProject, resizeWouldCropProject, shouldAutoRegenerate } = await import("../generated/dist/src/App.js");
 const { resolveLanguage } = await import("../generated/dist/src/i18n.js");
 
 function findElements(element, predicate, found = []) {
@@ -30,7 +30,7 @@ function findElements(element, predicate, found = []) {
   return found;
 }
 
-function renderPrintSettings(project, onChange, onCommit, language = "en") {
+function renderPrintSettings(project, onChange, onCommit, language = "en", exportDisabled = false) {
   return PrintSettingsPanel({
     project,
     model: buildPrintableModel(composePrintableGrid(project)),
@@ -39,8 +39,14 @@ function renderPrintSettings(project, onChange, onCommit, language = "en") {
     onChange,
     onCommit,
     onExport() {},
+    exportDisabled,
   });
 }
+
+test("UI errors keep a stable code while localizing their message", () => {
+  assert.equal(codedUiError("EXPORT_FAILED", "Could not export."), "[EXPORT_FAILED] Could not export.");
+  assert.equal(codedUiError("EXPORT_FAILED", "无法导出。"), "[EXPORT_FAILED] 无法导出。");
+});
 
 test("AMS ids embed their slot and current color", () => {
   assert.equal(makeAmsColorId(2, "#FF8040"), "ams-2-ff8040");
@@ -160,32 +166,153 @@ test("automatic image generation keys ignore layered material edits only", () =>
   assert.notEqual(autoGenerationPaletteKey("solid", project.amsColors), autoGenerationPaletteKey("layered", project.amsColors));
 });
 
-test("in-flight generation merges cells into the latest project state", () => {
+test("image generation replaces the project with one fresh layer", () => {
   const started = createProject(2, 2);
+  const oldTopLayer = {
+    ...started.layers[0],
+    id: "old-top",
+    name: "Old top layer",
+    cells: [started.amsColors[2].id, null, null, null],
+  };
   const latest = {
-    ...started,
+    ...withLayers(started, [started.layers[0], oldTopLayer], oldTopLayer.id),
     name: "Accepted name",
     amsColors: started.amsColors.map((color, index) => index === 1
       ? { ...color, name: "Accepted AMS", tdMm: 2 }
       : color),
-    layers: started.layers.map((layer) => ({
-      ...layer,
-      name: "Accepted layer",
-      opacity: 0.5,
-    })),
+    settings: { ...started.settings, showGrid: false, showActiveLayerOnly: true },
+    layers: withLayers(started, [started.layers[0], oldTopLayer], oldTopLayer.id).layers.map((layer) => ({ ...layer, locked: true })),
   };
-  const merged = mergeGeneratedProject(latest, "base", {
+  const replaced = replaceGeneratedProject(latest, {
     width: 2,
     height: 1,
     cells: [latest.amsColors[0].id, latest.amsColors[1].id],
   });
 
-  assert.equal(merged.name, "Accepted name");
-  assert.equal(merged.amsColors[1].name, "Accepted AMS");
-  assert.equal(merged.amsColors[1].tdMm, 2);
-  assert.equal(merged.layers[0].name, "Accepted layer");
-  assert.equal(merged.layers[0].opacity, 0.5);
-  assert.deepEqual(merged.layers[0].cells, [latest.amsColors[0].id, latest.amsColors[1].id]);
+  assert.equal(replaced.name, "Accepted name");
+  assert.equal(replaced.amsColors[1].name, "Accepted AMS");
+  assert.equal(replaced.amsColors[1].tdMm, 2);
+  assert.equal(replaced.layers.length, 1);
+  assert.equal(replaced.layers[0].id, "base");
+  assert.equal(replaced.activeLayerId, "base");
+  assert.equal(replaced.settings.showGrid, false);
+  assert.equal(replaced.settings.showActiveLayerOnly, false);
+  assert.deepEqual(replaced.layers[0].cells, [latest.amsColors[0].id, latest.amsColors[1].id]);
+});
+
+test("hidden or locked layers cannot be edited", () => {
+  assert.equal(canEditLayer({ visible: true, locked: false }), true);
+  assert.equal(canEditLayer({ visible: false, locked: false }), false);
+  assert.equal(canEditLayer({ visible: true, locked: true }), false);
+});
+
+test("resize confirmation is needed only when nonempty cells would be cropped", () => {
+  const project = createProject(3, 2);
+  const top = { ...project.layers[0], id: "top", cells: [null, null, null, null, null, project.amsColors[1].id] };
+  const layered = withLayers(project, [project.layers[0], top]);
+  assert.equal(resizeWouldCropProject(layered, 2, 2), true);
+  assert.equal(resizeWouldCropProject(layered, 3, 1), true);
+  assert.equal(resizeWouldCropProject(layered, 3, 2), false);
+  assert.equal(resizeWouldCropProject(createProject(3, 2), 2, 1), false);
+});
+
+test("every print output uses the persisted project name", () => {
+  const project = { ...createProject(1, 1), name: "My persistent pattern" };
+  assert.equal(printOptionsForProject(project, { format: "png", projectName: "stale nickname" }, "en").projectName, project.name);
+  assert.equal(printOptionsForProject(project, { format: "pdf" }, "zh").layerLabelPrefix, "图层");
+});
+
+test("solo display derives visibility without changing the project", () => {
+  const initial = createProject(2, 1);
+  const top = {
+    ...initial.layers[0],
+    id: "top",
+    name: "Top",
+    visible: false,
+    cells: [null, initial.amsColors[1].id],
+  };
+  const project = {
+    ...withLayers(initial, [{ ...initial.layers[0], cells: [initial.amsColors[0].id, null] }, top], top.id),
+    settings: { ...initial.settings, showActiveLayerOnly: true },
+  };
+
+  const displayed = projectForDisplay(project);
+  assert.deepEqual(project.layers.map((layer) => layer.visible), [true, false]);
+  assert.deepEqual(displayed.layers.map((layer) => layer.visible), [false, true]);
+  assert.deepEqual(displayed.cells, [null, initial.amsColors[1].id]);
+
+  const regular = { ...project, settings: { ...project.settings, showActiveLayerOnly: false } };
+  assert.equal(projectForDisplay(regular), regular);
+});
+
+test("layer capacity stops at the project layer limit", () => {
+  assert.equal(hasLayerCapacity(63), true);
+  assert.equal(hasLayerCapacity(64), false);
+  assert.equal(hasLayerCapacity(65), false);
+});
+
+test("scheduled and running generation both block export", () => {
+  assert.equal(generationBlocksExport(false, false), false);
+  assert.equal(generationBlocksExport(false, true), true);
+  assert.equal(generationBlocksExport(true, false), true);
+});
+
+test("print settings clamp numeric input and can disable export while generating", () => {
+  const project = createProject(1, 1);
+  const changes = [];
+  const render = (current = project, exportDisabled = false) => renderPrintSettings(current, (next) => changes.push(next), () => {}, "en", exportDisabled);
+  const numberInputs = findElements(render(), (element) => element.type === "input" && element.props.type === "number");
+
+  assert.equal(numberInputs.length, 5);
+  numberInputs[0].props.onChange({ target: { value: "999" } });
+  assert.equal(changes.at(-1).printSettings.cellPitchMm, 10);
+  numberInputs[1].props.onChange({ target: { value: "-99" } });
+  assert.equal(changes.at(-1).printSettings.baseThicknessMm, 0.4);
+  numberInputs[2].props.onChange({ target: { value: "999" } });
+  assert.equal(changes.at(-1).printSettings.beadHeightMm, 4);
+  numberInputs[3].props.onChange({ target: { value: "999" } });
+  assert.equal(changes.at(-1).printSettings.dimpleDiameterMm, 4.8);
+  numberInputs[4].props.onChange({ target: { value: "999" } });
+  assert.ok(Math.abs(changes.at(-1).printSettings.dimpleDepthMm - 0.6) < Number.EPSILON * 2);
+
+  const exportButton = (tree) => findElements(tree, (element) => element.type === "button" && element.props.className === "primary print-export-button")[0];
+  assert.equal(exportButton(render(project, false)).props.disabled, false);
+  assert.equal(exportButton(render(project, true)).props.disabled, true);
+
+  const layered = { ...project, printSettings: { ...project.printSettings, mode: "layered" } };
+  const layeredInputs = findElements(render(layered), (element) => element.type === "input" && element.props.type === "number");
+  layeredInputs.find((input) => Number(input.props.min) === 0.4).props.onChange({ target: { value: "5" } });
+  assert.equal(changes.at(-1).printSettings.baseThicknessMm, 4.96);
+});
+
+test("continuous print-setting edits create one undo checkpoint per focus session", () => {
+  const project = createProject(1, 1);
+  const changes = [];
+  let commits = 0;
+  const tree = renderPrintSettings(project, (next) => changes.push(next), () => { commits += 1; });
+  const color = findElements(tree, (element) => element.type === "input" && element.props.type === "color")[0];
+  color.props.onFocus();
+  color.props.onChange({ target: { value: "#123456" } });
+  color.props.onChange({ target: { value: "#234567" } });
+  assert.equal(commits, 1);
+
+  const name = findElements(tree, (element) => element.type === "input" && element.props.type === "text")[0];
+  name.props.onFocus();
+  name.props.onChange({ target: { value: "Custom material" } });
+  const number = findElements(tree, (element) => element.type === "input" && element.props.type === "number")[0];
+  number.props.onFocus();
+  number.props.onChange({ target: { value: "6" } });
+  const baseColor = findElements(tree, (element) => element.type === "select")[0];
+  baseColor.props.onFocus();
+  baseColor.props.onChange({ target: { value: project.amsColors[1].id } });
+  assert.equal(commits, 4);
+  assert.equal(changes.at(-1).printSettings.baseColorId, project.amsColors[1].id);
+
+  const layered = { ...project, printSettings: { ...project.printSettings, mode: "layered" } };
+  const td = findElements(renderPrintSettings(layered, () => {}, () => { commits += 1; }), (element) => element.type === "input" && Number(element.props.min) === 0.01)[1];
+  td.props.onFocus();
+  td.props.onChange({ target: { value: "1.5" } });
+  assert.equal(commits, 5);
 });
 
 test("first-use language and replacement decisions are pure", () => {

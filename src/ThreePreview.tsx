@@ -10,7 +10,6 @@ type PreviewRefs = {
   renderer: THREE.WebGLRenderer;
   root: THREE.Group;
   content: THREE.Group;
-  frame: number;
   dragging: boolean;
   lastX: number;
   lastY: number;
@@ -22,11 +21,14 @@ type Props = {
   emptyLabel: string;
   closeLabel: string;
   expandLabel: string;
+  webglErrorLabel: string;
 };
 
-export default function ThreePreview({ model, title, emptyLabel, closeLabel, expandLabel }: Props) {
+export default function ThreePreview({ model, title, emptyLabel, closeLabel, expandLabel, webglErrorLabel }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const modalHostRef = useRef<HTMLDivElement | null>(null);
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const expandButtonRef = useRef<HTMLButtonElement | null>(null);
   const refs = useRef<PreviewRefs | null>(null);
   const controlsRef = useRef({
     yaw: -0.12,
@@ -37,6 +39,7 @@ export default function ThreePreview({ model, title, emptyLabel, closeLabel, exp
     targetY: 0,
   });
   const [expanded, setExpanded] = useState(false);
+  const [webglUnavailable, setWebglUnavailable] = useState(false);
   const beadCount = model.gridSize.width * model.gridSize.height;
 
   useEffect(() => {
@@ -51,9 +54,11 @@ export default function ThreePreview({ model, title, emptyLabel, closeLabel, exp
     try {
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
     } catch (error) {
+      setWebglUnavailable(true);
       console.warn('3D preview could not start.', error);
       return;
     }
+    setWebglUnavailable(false);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.5));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.setClearColor(PREVIEW_BACKGROUND, 0);
@@ -77,7 +82,6 @@ export default function ThreePreview({ model, title, emptyLabel, closeLabel, exp
       renderer,
       root,
       content,
-      frame: 0,
       dragging: false,
       lastX: 0,
       lastY: 0,
@@ -96,12 +100,6 @@ export default function ThreePreview({ model, title, emptyLabel, closeLabel, exp
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(container);
     resize();
-
-    function animate() {
-      renderer.render(scene, camera);
-      preview.frame = window.requestAnimationFrame(animate);
-    }
-    animate();
 
     function pointerDown(event: PointerEvent) {
       event.preventDefault();
@@ -145,7 +143,6 @@ export default function ThreePreview({ model, title, emptyLabel, closeLabel, exp
     renderer.domElement.addEventListener('wheel', wheel, { passive: false });
 
     return () => {
-      window.cancelAnimationFrame(preview.frame);
       resizeObserver.disconnect();
       renderer.domElement.removeEventListener('pointerdown', pointerDown);
       renderer.domElement.removeEventListener('pointermove', pointerMove);
@@ -175,6 +172,11 @@ export default function ThreePreview({ model, title, emptyLabel, closeLabel, exp
     updateCamera(preview, controlsRef.current);
   }, [model, expanded]);
 
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (expanded && dialog && !dialog.open) dialog.showModal();
+  }, [expanded]);
+
   return (
     <>
       <div className="three-preview" ref={hostRef} aria-label="Live 3D bead preview">
@@ -189,7 +191,8 @@ export default function ThreePreview({ model, title, emptyLabel, closeLabel, exp
             <p>{emptyLabel}</p>
           </div>
         )}
-        <button className="preview-expand-button" title={expandLabel} onClick={() => setExpanded(true)}>
+        {webglUnavailable && <p className="three-preview-error" role="status">{webglErrorLabel}</p>}
+        <button ref={expandButtonRef} className="preview-expand-button" title={expandLabel} onClick={() => setExpanded(true)}>
           <svg viewBox="0 0 20 20" aria-hidden="true">
             <path d="M7.5 3.5H3.5v4M12.5 3.5h4v4M7.5 16.5H3.5v-4M12.5 16.5h4v-4" />
             <path d="M3.8 3.8l4.4 4.4M16.2 3.8l-4.4 4.4M3.8 16.2l4.4-4.4M16.2 16.2l-4.4-4.4" />
@@ -197,11 +200,19 @@ export default function ThreePreview({ model, title, emptyLabel, closeLabel, exp
         </button>
       </div>
       {expanded && (
-        <div className="three-preview-modal" role="dialog" aria-modal="true" aria-label={title}>
+        <dialog
+          ref={dialogRef}
+          className="three-preview-modal"
+          aria-label={title}
+          onClose={() => {
+            setExpanded(false);
+            expandButtonRef.current?.focus();
+          }}
+        >
           <div className="three-preview-modal-panel">
             <div className="three-preview-modal-bar">
               <strong>{title}</strong>
-              <button onClick={() => setExpanded(false)}>{closeLabel}</button>
+              <button onClick={() => dialogRef.current?.close()}>{closeLabel}</button>
             </div>
             <div className="three-preview-modal-stage" ref={modalHostRef}>
               {beadCount === 0 && (
@@ -215,9 +226,10 @@ export default function ThreePreview({ model, title, emptyLabel, closeLabel, exp
                   <p>{emptyLabel}</p>
                 </div>
               )}
+              {webglUnavailable && <p className="three-preview-error" role="status">{webglErrorLabel}</p>}
             </div>
           </div>
-        </div>
+        </dialog>
       )}
     </>
   );
@@ -232,6 +244,7 @@ function updateCamera(preview: PreviewRefs, controls: { yaw: number; pitch: numb
     Math.cos(controls.yaw) * horizontal,
   );
   preview.camera.lookAt(0, controls.targetY, 0);
+  preview.renderer.render(preview.scene, preview.camera);
 }
 
 function wrapAngle(value: number): number {

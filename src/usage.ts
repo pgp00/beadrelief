@@ -6,6 +6,7 @@ import type { BeadProject, FilamentLayerUsageRow, UsageRow } from './types';
 
 export function summarizeUsage(project: BeadProject): UsageRow[] {
   const usageLayers = (project.layers ?? []).filter((layer) => layer.includeInUsage);
+  const amsColors = new Map(project.amsColors.map((color) => [color.id, amsColorToPaletteColor(color)]));
   const counts = new Map<string, number>();
   for (const layer of usageLayers) {
     for (const cell of layer.cells) {
@@ -16,7 +17,7 @@ export function summarizeUsage(project: BeadProject): UsageRow[] {
 
   return [...counts.entries()]
     .map(([id, count]) => {
-      const color = getColor(id);
+      const color = amsColors.get(id) ?? getColor(id);
       if (!color) return null;
       return {
         color,

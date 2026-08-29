@@ -1,7 +1,7 @@
 import { DEFAULT_AMS_COLORS, makeAmsColorId, replaceProjectColor } from './print/colors';
 import type { PrintableModel } from './print/model';
-import { PRINT_SETTING_LIMITS } from './print/settings';
-import type { StackTemplateId } from './print/stacking';
+import { PRINT_SETTING_LIMITS, normalizeLayeredBaseThickness, normalizePrintSetting, type NumericPrintSetting } from './print/settings';
+import { STACK_LAYER_HEIGHT_MM, type StackTemplateId } from './print/stacking';
 import { withLayeredMaterials, withPrintMode, withStackTemplate } from './project';
 import type { BeadProject, PrintMode, PrintSettings } from './types';
 
@@ -13,10 +13,11 @@ type Props = {
   onChange: (project: BeadProject) => void;
   onCommit: () => void;
   onExport: () => void;
+  exportDisabled?: boolean;
 };
 
 const numberFields: Array<{
-  key: keyof Pick<PrintSettings, 'cellPitchMm' | 'baseThicknessMm' | 'beadHeightMm' | 'dimpleDiameterMm' | 'dimpleDepthMm'>;
+  key: NumericPrintSetting;
   zh: string;
   en: string;
   min: number;
@@ -30,7 +31,7 @@ const numberFields: Array<{
   { key: 'dimpleDepthMm', zh: '中心凹点深度', en: 'Dimple depth', ...PRINT_SETTING_LIMITS.dimpleDepthMm, step: 0.1 },
 ];
 
-export default function PrintSettingsPanel({ project, model, errors, language, onChange, onCommit, onExport }: Props) {
+export default function PrintSettingsPanel({ project, model, errors, language, onChange, onCommit, onExport, exportDisabled = false }: Props) {
   const zh = language === 'zh';
 
   function setMode(mode: PrintMode) {
@@ -79,8 +80,18 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
     onChange({ ...remapped, amsColors: remapped.amsColors.slice(0, -1) });
   }
 
-  function updateNumber(key: keyof PrintSettings, value: number) {
-    onChange({ ...project, printSettings: { ...project.printSettings, [key]: value } });
+  function updateNumber(key: NumericPrintSetting, value: number) {
+    let normalized = normalizePrintSetting(key, value, project.printSettings[key]);
+    if (key === 'baseThicknessMm' && project.printSettings.mode === 'layered') {
+      normalized = normalizeLayeredBaseThickness(normalized, project.printSettings.baseThicknessMm);
+    }
+    const printSettings: PrintSettings = {
+      ...project.printSettings,
+      [key]: normalized,
+    };
+    printSettings.dimpleDiameterMm = Math.min(printSettings.dimpleDiameterMm, Math.max(0, printSettings.cellPitchMm - 0.2));
+    printSettings.dimpleDepthMm = Math.min(printSettings.dimpleDepthMm, Math.max(0, printSettings.beadHeightMm - 0.2));
+    onChange({ ...project, printSettings });
   }
 
   const visibleNumberFields = project.printSettings.mode === 'layered'
@@ -121,20 +132,21 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
           </div>
           <p className="stack-mode-note">
             {zh
-              ? '从底到顶 · 预计成色 · 0.08 mm/层 · 每种耗材 4 层。示例 TD 仅供预览；打印前请校准。'
-              : 'Bottom to top · estimated color · 0.08 mm/layer · 4 layers per filament. Template TD values are estimates; calibrate before printing.'}
+              ? '实验功能 · 从底到顶 · 预计成色 · 0.08 mm/层 · 每种耗材 4 层。示例 TD 仅供预览；打印前请校准。'
+              : 'Experimental · bottom to top · estimated color · 0.08 mm/layer · 4 layers per filament. Template TD values are estimates; calibrate before printing.'}
           </p>
         </>
       )}
 
       <div className="ams-color-list">
         {project.amsColors.map((color, index) => (
-          <div className="ams-color-row" key={color.id}>
+          <div className="ams-color-row" key={`ams-slot-${index + 1}`}>
             <span className="ams-slot">AMS {index + 1}</span>
             <input
               type="color"
               aria-label={`AMS ${index + 1} color`}
               value={color.hex}
+              onFocus={onCommit}
               onChange={(event) => updateColor(index, { hex: event.target.value })}
             />
             <input
@@ -142,6 +154,7 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
               aria-label={`AMS ${index + 1} name`}
               value={color.name}
               maxLength={32}
+              onFocus={onCommit}
               onChange={(event) => updateColor(index, { name: event.target.value })}
             />
             {project.printSettings.mode === 'layered' && (
@@ -155,6 +168,7 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
                   step="0.01"
                   disabled={index === 0}
                   value={color.tdMm}
+                  onFocus={onCommit}
                   onChange={(event) => updateColor(index, {
                     tdMm: Math.min(100, Math.max(0.01, Number(event.target.value) || 0.01)),
                   })}
@@ -191,8 +205,9 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
                 : field.key === 'dimpleDepthMm'
                   ? Math.max(0, project.printSettings.beadHeightMm - field.step)
                   : field.max}
-              step={field.key === 'baseThicknessMm' && project.printSettings.mode === 'layered' ? 0.08 : field.step}
+              step={field.key === 'baseThicknessMm' && project.printSettings.mode === 'layered' ? STACK_LAYER_HEIGHT_MM : field.step}
               value={project.printSettings[field.key]}
+              onFocus={onCommit}
               onChange={(event) => updateNumber(field.key, Number(event.target.value))}
             />
           </label>
@@ -209,6 +224,7 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
           <span>{zh ? '底板 / 背景颜色' : 'Base / background color'}</span>
           <select
             value={project.printSettings.baseColorId}
+            onFocus={onCommit}
             onChange={(event) => onChange({
               ...project,
               printSettings: { ...project.printSettings, baseColorId: event.target.value },
@@ -225,6 +241,9 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
         <span>{model.gridSize.width * model.gridSize.height} {zh ? '格' : 'cells'}</span>
         <strong>{model.sizeMm.x.toFixed(1)} × {model.sizeMm.y.toFixed(1)} × {model.sizeMm.z.toFixed(1)} mm</strong>
       </div>
+      <p className="stack-mode-note">
+        {zh ? '3MF 最多支持 32 × 32 格；更大的项目仍可导出 2D 图纸。' : '3MF supports up to 32 × 32 cells; larger projects can still use 2D exports.'}
+      </p>
 
       {model.layered && (
         <div className="stack-print-summary">
@@ -240,7 +259,7 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
         </ul>
       )}
 
-      <button type="button" className="primary print-export-button" disabled={errors.length > 0} onClick={onExport}>
+      <button type="button" className="primary print-export-button" disabled={errors.length > 0 || exportDisabled} onClick={onExport}>
         {zh ? '导出 AMS 分件 3MF' : 'Export AMS multi-part 3MF'}
       </button>
     </section>

@@ -13,8 +13,8 @@ fs.copyFileSync(path.join(root, 'src', 'styles.css'), path.join(dist, 'styles.cs
 fs.copyFileSync(path.join(root, 'samples', 'beadrelief-heart-source.png'), path.join(samples, 'beadrelief-heart-source.png'));
 fs.copyFileSync(path.join(root, 'node_modules', 'react', 'umd', 'react.production.min.js'), path.join(vendor, 'react.production.min.js'));
 fs.copyFileSync(path.join(root, 'node_modules', 'react-dom', 'umd', 'react-dom.production.min.js'), path.join(vendor, 'react-dom.production.min.js'));
-fs.copyFileSync(path.join(root, 'node_modules', 'three', 'build', 'three.module.js'), path.join(vendor, 'three.module.js'));
-fs.copyFileSync(path.join(root, 'node_modules', 'three', 'build', 'three.core.js'), path.join(vendor, 'three.core.js'));
+fs.copyFileSync(path.join(root, 'node_modules', 'three', 'build', 'three.module.min.js'), path.join(vendor, 'three.module.js'));
+fs.copyFileSync(path.join(root, 'node_modules', 'three', 'build', 'three.core.min.js'), path.join(vendor, 'three.core.min.js'));
 
 for (const filePath of walk(outSrc)) {
   if (!filePath.endsWith('.js')) continue;

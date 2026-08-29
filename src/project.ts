@@ -1,6 +1,6 @@
 import { getColor, paletteVersion } from './palette';
 import { DEFAULT_ACTIVE_AMS_COLORS, DEFAULT_AMS_COLORS, amsColorToPaletteColor, makeAmsColorId, nearestPaletteColorOklab, normalizeHex } from './print/colors';
-import { DEFAULT_PRINT_SETTINGS, PRINT_SETTING_LIMITS } from './print/settings';
+import { DEFAULT_PRINT_SETTINGS, PRINT_SETTING_LIMITS, normalizeLayeredBaseThickness, normalizePrintSetting, type NumericPrintSetting } from './print/settings';
 import { STACK_LAYERS_PER_FILAMENT, STACK_TEMPLATES, buildStackPalette, parseStackColorId, type StackTemplateId } from './print/stacking';
 import type { AmsColor, BeadLayer, BeadProject, PaletteColor, PrintMode } from './types';
 
@@ -161,82 +161,67 @@ function remapPrintCells(
   };
 }
 
-export function normalizeProject(project: BeadProject): BeadProject {
-  const width = isSafeDimension(project.width) ? project.width : 32;
-  const height = isSafeDimension(project.height) ? project.height : 32;
-  const fallback = createProject(width, height, project.name);
-  const amsColors = normalizeAmsColors(project.amsColors);
-  const importedPrintSettings = project.printSettings && typeof project.printSettings === 'object'
-    ? project.printSettings as Partial<BeadProject['printSettings']>
-    : {};
-  const cellPitchMm = finiteInRange(
-    importedPrintSettings.cellPitchMm,
-    DEFAULT_PRINT_SETTINGS.cellPitchMm,
-    PRINT_SETTING_LIMITS.cellPitchMm.min,
-    PRINT_SETTING_LIMITS.cellPitchMm.max,
-  );
-  const baseThicknessMm = finiteInRange(
-    importedPrintSettings.baseThicknessMm,
-    DEFAULT_PRINT_SETTINGS.baseThicknessMm,
-    PRINT_SETTING_LIMITS.baseThicknessMm.min,
-    PRINT_SETTING_LIMITS.baseThicknessMm.max,
-  );
-  const beadHeightMm = finiteInRange(
-    importedPrintSettings.beadHeightMm,
-    DEFAULT_PRINT_SETTINGS.beadHeightMm,
-    PRINT_SETTING_LIMITS.beadHeightMm.min,
-    PRINT_SETTING_LIMITS.beadHeightMm.max,
-  );
+export function normalizeProject(project: unknown): BeadProject {
+  const source = isRecord(project) ? project : {};
+  const width = isSafeDimension(source.width) ? source.width : 32;
+  const height = isSafeDimension(source.height) ? source.height : 32;
+  const name = typeof source.name === 'string' ? source.name : 'Untitled Pattern';
+  const fallback = createProject(width, height, name);
+  const amsColors = normalizeAmsColors(source.amsColors);
+  const importedAmsIds = importedAmsIdMap(source.amsColors, amsColors);
+  const importedPrintSettings = isRecord(source.printSettings) ? source.printSettings : {};
+  const cellPitchMm = normalizePrintSetting('cellPitchMm', importedPrintSettings.cellPitchMm);
+  let baseThicknessMm = normalizePrintSetting('baseThicknessMm', importedPrintSettings.baseThicknessMm);
+  const beadHeightMm = normalizePrintSetting('beadHeightMm', importedPrintSettings.beadHeightMm);
   const dimpleDiameterMm = Math.min(
-    finiteInRange(
-      importedPrintSettings.dimpleDiameterMm,
-      DEFAULT_PRINT_SETTINGS.dimpleDiameterMm,
-      PRINT_SETTING_LIMITS.dimpleDiameterMm.min,
-      PRINT_SETTING_LIMITS.dimpleDiameterMm.max,
-    ),
+    normalizePrintSetting('dimpleDiameterMm', importedPrintSettings.dimpleDiameterMm),
     cellPitchMm - 0.2,
   );
   const dimpleDepthMm = Math.min(
-    finiteInRange(
-      importedPrintSettings.dimpleDepthMm,
-      DEFAULT_PRINT_SETTINGS.dimpleDepthMm,
-      PRINT_SETTING_LIMITS.dimpleDepthMm.min,
-      PRINT_SETTING_LIMITS.dimpleDepthMm.max,
-    ),
+    normalizePrintSetting('dimpleDepthMm', importedPrintSettings.dimpleDepthMm),
     beadHeightMm - 0.2,
   );
   const mode = importedPrintSettings.mode === 'layered' && amsColors.length >= 2 ? 'layered' : 'solid';
-  const requestedBase = typeof importedPrintSettings.baseColorId === 'string' ? importedPrintSettings.baseColorId : '';
+  if (mode === 'layered') baseThicknessMm = normalizeLayeredBaseThickness(importedPrintSettings.baseThicknessMm);
+  const importedBase = typeof importedPrintSettings.baseColorId === 'string' ? importedPrintSettings.baseColorId : '';
+  const requestedBase = importedAmsIds.get(importedBase) ?? importedBase;
   const requestedSlot = Number(/^ams-([1-4])-/.exec(requestedBase)?.[1]);
   const baseColorId =
     amsColors.find((color) => color.id === requestedBase)?.id ??
     amsColors[requestedSlot - 1]?.id ??
     amsColors[0].id;
-  const settings = {
-    ...fallback.settings,
-    ...project.settings,
-    showColorCodes: Boolean(project.settings?.showColorCodes || project.settings?.beadDisplayMode === 'print'),
-    beadDisplayMode: project.settings?.beadDisplayMode === 'pixel' ? 'pixel' : 'bead',
+  const importedSettings = isRecord(source.settings) ? source.settings : {};
+  const settings: BeadProject['settings'] = {
+    showGrid: booleanOr(importedSettings.showGrid, fallback.settings.showGrid),
+    showCoordinates: booleanOr(importedSettings.showCoordinates, fallback.settings.showCoordinates),
+    showPegboardBoundaries: booleanOr(importedSettings.showPegboardBoundaries, fallback.settings.showPegboardBoundaries),
+    showLayerOverlap: booleanOr(importedSettings.showLayerOverlap, fallback.settings.showLayerOverlap),
+    showActiveLayerOnly: booleanOr(importedSettings.showActiveLayerOnly, fallback.settings.showActiveLayerOnly),
+    showColorCodes: booleanOr(importedSettings.showColorCodes, fallback.settings.showColorCodes) || importedSettings.beadDisplayMode === 'print',
+    beadDisplayMode: importedSettings.beadDisplayMode === 'pixel' ? 'pixel' : 'bead',
+    beadsPerPack: safeIntegerInRange(importedSettings.beadsPerPack, fallback.settings.beadsPerPack, 1, 10000),
+    rightClickAction: importedSettings.rightClickAction === 'erase' ? 'erase' : 'pan',
   } satisfies BeadProject['settings'];
-  const layers = normalizeLayers(
-    {
-      ...fallback,
-      ...project,
-      settings,
-      boardSettings: { ...fallback.boardSettings, ...project.boardSettings },
-      layers: project.layers?.length ? project.layers : fallback.layers,
-    },
-    width,
-    height,
-  );
+  const importedBoardSettings = isRecord(source.boardSettings) ? source.boardSettings : {};
+  const boardSettings: BeadProject['boardSettings'] = {
+    boardWidth: safeIntegerInRange(importedBoardSettings.boardWidth, fallback.boardSettings.boardWidth, 1, 1000),
+    boardHeight: safeIntegerInRange(importedBoardSettings.boardHeight, fallback.boardSettings.boardHeight, 1, 1000),
+    showBoardIds: booleanOr(importedBoardSettings.showBoardIds, fallback.boardSettings.showBoardIds),
+  };
+  const layers = normalizeLayers(source, width, height).map((layer) => ({
+    ...layer,
+    cells: layer.cells.map((cell) => cell ? importedAmsIds.get(cell) ?? cell : null),
+  }));
+  const requestedActiveLayerId = typeof source.activeLayerId === 'string' ? source.activeLayerId : '';
   const normalized: BeadProject = {
-    ...fallback,
-    ...project,
+    version: typeof source.version === 'string' ? source.version : fallback.version,
+    name,
     width,
     height,
     activeBrand: 'MARD',
+    paletteVersion,
     settings,
-    boardSettings: { ...fallback.boardSettings, ...project.boardSettings },
+    boardSettings,
     amsColors,
     printSettings: {
       cellPitchMm,
@@ -248,12 +233,181 @@ export function normalizeProject(project: BeadProject): BeadProject {
       mode,
     },
     layers,
-    activeLayerId: layers.some((layer) => layer.id === project.activeLayerId) ? project.activeLayerId : layers[0].id,
+    activeLayerId: layers.some((layer) => layer.id === requestedActiveLayerId) ? requestedActiveLayerId : layers[0].id,
     cells: composeVisibleCells(layers, width, height),
+    createdAt: typeof source.createdAt === 'string' ? source.createdAt : fallback.createdAt,
+    updatedAt: typeof source.updatedAt === 'string' ? source.updatedAt : fallback.updatedAt,
   };
   return mode === 'layered'
     ? remapPrintCells(normalized, amsColors, mode, buildStackPalette(amsColors))
     : normalized;
+}
+
+function normalizeAmsColors(colors: unknown): AmsColor[] {
+  const source = Array.isArray(colors) && colors.length ? colors.slice(0, 4) : DEFAULT_ACTIVE_AMS_COLORS;
+  return source.map((color, index) => {
+    const candidate = isRecord(color) ? color : {};
+    const fallback = DEFAULT_AMS_COLORS[index] ?? DEFAULT_AMS_COLORS[0];
+    let hex: string;
+    try {
+      hex = normalizeHex(typeof candidate.hex === 'string' ? candidate.hex : fallback.hex);
+    } catch {
+      hex = fallback.hex;
+    }
+    return {
+      id: makeAmsColorId(index + 1, hex),
+      name: typeof candidate.name === 'string' && candidate.name.trim() ? candidate.name.trim() : fallback.name,
+      hex,
+      tdMm: typeof candidate.tdMm === 'number' && Number.isFinite(candidate.tdMm) && candidate.tdMm > 0 && candidate.tdMm <= 100
+        ? candidate.tdMm
+        : fallback.tdMm,
+    };
+  });
+}
+
+function importedAmsIdMap(colors: unknown, normalized: AmsColor[]): Map<string, string> {
+  const result = new Map<string, string>();
+  if (!Array.isArray(colors)) return result;
+  colors.slice(0, normalized.length).forEach((value, index) => {
+    if (!isRecord(value) || typeof value.id !== 'string' || result.has(value.id)) return;
+    result.set(value.id, normalized[index].id);
+  });
+  return result;
+}
+
+function normalizeLayers(project: unknown, width: number, height: number): BeadLayer[] {
+  const source = isRecord(project) ? project : {};
+  const legacyCells = normalizeCells(source.cells, width, height);
+  const sourceLayers = Array.isArray(source.layers) && source.layers.length
+    ? source.layers
+    : [{ ...createProject(width, height).layers[0], cells: legacyCells }];
+  const usedIds = new Set<string>();
+  return sourceLayers.slice(0, MAX_PROJECT_LAYERS).map((value, index) => {
+    const layer = isRecord(value) ? value : {};
+    const requestedId = typeof layer.id === 'string' && layer.id.trim()
+      ? layer.id.trim()
+      : index === 0 ? 'base' : `layer-${index + 1}`;
+    let id = requestedId;
+    for (let suffix = 2; usedIds.has(id); suffix += 1) id = `${requestedId}-${suffix}`;
+    usedIds.add(id);
+    return {
+      id,
+      name: typeof layer.name === 'string' && layer.name.trim() ? layer.name : index === 0 ? 'Pattern' : `Layer ${index + 1}`,
+      customName: booleanOr(layer.customName, false),
+      visible: booleanOr(layer.visible, true),
+      locked: booleanOr(layer.locked, false),
+      includeInUsage: booleanOr(layer.includeInUsage, true),
+      opacity: finiteInRange(layer.opacity, 1, 0, 1),
+      cells: normalizeCells(layer.cells ?? (index === 0 ? legacyCells : []), width, height),
+    };
+  });
+}
+
+export function isSafeProjectImport(project: unknown, fileBytes: number): boolean {
+  if (!isRecord(project) || !Number.isSafeInteger(fileBytes) || fileBytes < 0 || fileBytes > MAX_PROJECT_FILE_BYTES) return false;
+  if (!isSafeDimension(project.width) || !isSafeDimension(project.height)) return false;
+  if (!isCellArray(project.cells, project.width * project.height)) return false;
+  if (!optionalString(project.version) || !optionalString(project.name)
+    || !optionalString(project.createdAt) || !optionalString(project.updatedAt)) return false;
+  if (project.amsColors !== undefined && !isSafeAmsColors(project.amsColors)) return false;
+  if (project.settings !== undefined && !isSafeProjectSettings(project.settings)) return false;
+  if (project.boardSettings !== undefined && !isSafeBoardSettings(project.boardSettings)) return false;
+  if (project.printSettings !== undefined && !isSafePrintSettings(project.printSettings)) return false;
+  if (isRecord(project.printSettings) && project.printSettings.mode === 'layered'
+    && (!Array.isArray(project.amsColors) || project.amsColors.length < 2)) return false;
+  if (project.layers === undefined) return project.activeLayerId === undefined || typeof project.activeLayerId === 'string';
+  if (!Array.isArray(project.layers) || project.layers.length < 1 || project.layers.length > MAX_PROJECT_LAYERS) return false;
+  const ids = new Set<string>();
+  for (const layer of project.layers) {
+    if (!isSafeLayer(layer, project.width * project.height) || ids.has(layer.id)) return false;
+    ids.add(layer.id);
+  }
+  return project.activeLayerId === undefined
+    || (typeof project.activeLayerId === 'string' && ids.has(project.activeLayerId));
+}
+
+function isSafeAmsColors(value: unknown): boolean {
+  const ids = new Set<string>();
+  return Array.isArray(value) && value.length >= 1 && value.length <= 4 && value.every((item) => {
+    if (!isRecord(item)) return false;
+    if (typeof item.id !== 'string' || item.id !== item.id.trim() || !item.id || ids.has(item.id)) return false;
+    ids.add(item.id);
+    return typeof item.name === 'string' && item.name.trim().length > 0 && item.name.length <= 32
+      && typeof item.hex === 'string' && /^#[0-9a-f]{6}$/i.test(item.hex)
+      && (item.tdMm === undefined || (typeof item.tdMm === 'number' && Number.isFinite(item.tdMm) && item.tdMm > 0 && item.tdMm <= 100));
+  });
+}
+
+function isSafeProjectSettings(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const booleanKeys = [
+    'showGrid',
+    'showCoordinates',
+    'showPegboardBoundaries',
+    'showLayerOverlap',
+    'showActiveLayerOnly',
+    'showColorCodes',
+  ];
+  if (booleanKeys.some((key) => value[key] !== undefined && typeof value[key] !== 'boolean')) return false;
+  if (value.beadDisplayMode !== undefined && !['pixel', 'bead', 'print'].includes(String(value.beadDisplayMode))) return false;
+  if (value.rightClickAction !== undefined && value.rightClickAction !== 'pan' && value.rightClickAction !== 'erase') return false;
+  return value.beadsPerPack === undefined || isSafeIntegerInRange(value.beadsPerPack, 1, 10000);
+}
+
+function isSafeBoardSettings(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (value.boardWidth === undefined || isSafeIntegerInRange(value.boardWidth, 1, 1000))
+    && (value.boardHeight === undefined || isSafeIntegerInRange(value.boardHeight, 1, 1000))
+    && (value.showBoardIds === undefined || typeof value.showBoardIds === 'boolean');
+}
+
+function isSafePrintSettings(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  for (const key of Object.keys(PRINT_SETTING_LIMITS) as NumericPrintSetting[]) {
+    const setting = value[key];
+    const limits = PRINT_SETTING_LIMITS[key];
+    if (setting !== undefined && (typeof setting !== 'number' || !Number.isFinite(setting) || setting < limits.min || setting > limits.max)) {
+      return false;
+    }
+  }
+  if (value.baseColorId !== undefined && typeof value.baseColorId !== 'string') return false;
+  if (value.mode !== undefined && value.mode !== 'solid' && value.mode !== 'layered') return false;
+  if (typeof value.dimpleDepthMm === 'number' && typeof value.beadHeightMm === 'number'
+    && value.dimpleDepthMm >= value.beadHeightMm) return false;
+  if (typeof value.dimpleDiameterMm === 'number' && typeof value.cellPitchMm === 'number'
+    && value.dimpleDiameterMm >= value.cellPitchMm - 0.1) return false;
+  return value.mode !== 'layered' || typeof value.baseThicknessMm !== 'number'
+    || Math.abs(value.baseThicknessMm / 0.08 - Math.round(value.baseThicknessMm / 0.08)) < 1e-6;
+}
+
+function isSafeLayer(value: unknown, maximumCells: number): value is Record<string, unknown> & { id: string } {
+  if (!isRecord(value)) return false;
+  return typeof value.id === 'string' && value.id === value.id.trim() && value.id.length > 0
+    && optionalString(value.name)
+    && (value.customName === undefined || typeof value.customName === 'boolean')
+    && (value.visible === undefined || typeof value.visible === 'boolean')
+    && (value.locked === undefined || typeof value.locked === 'boolean')
+    && (value.includeInUsage === undefined || typeof value.includeInUsage === 'boolean')
+    && (value.opacity === undefined || (typeof value.opacity === 'number' && Number.isFinite(value.opacity) && value.opacity >= 0 && value.opacity <= 1))
+    && isCellArray(value.cells, maximumCells);
+}
+
+function isCellArray(value: unknown, maximumLength: number): boolean {
+  return Array.isArray(value)
+    && value.length <= maximumLength
+    && value.every((cell) => cell === null || typeof cell === 'string');
+}
+
+function optionalString(value: unknown): boolean {
+  return value === undefined || typeof value === 'string';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function booleanOr(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback;
 }
 
 function finiteInRange(value: unknown, fallback: number, min: number, max: number): number {
@@ -262,42 +416,12 @@ function finiteInRange(value: unknown, fallback: number, min: number, max: numbe
     : fallback;
 }
 
-function normalizeAmsColors(colors: AmsColor[] | undefined): AmsColor[] {
-  const source = colors?.length ? colors.slice(0, 4) : DEFAULT_ACTIVE_AMS_COLORS;
-  return source.map((color, index) => {
-    const fallback = DEFAULT_AMS_COLORS[index] ?? DEFAULT_AMS_COLORS[0];
-    let hex: string;
-    try {
-      hex = normalizeHex(color?.hex ?? fallback.hex);
-    } catch {
-      hex = fallback.hex;
-    }
-    return {
-      id: makeAmsColorId(index + 1, hex),
-      name: color?.name?.trim() || fallback.name,
-      hex,
-      tdMm: Number.isFinite(color?.tdMm) && color.tdMm > 0 && color.tdMm <= 100 ? color.tdMm : fallback.tdMm,
-    };
-  });
+function safeIntegerInRange(value: unknown, fallback: number, min: number, max: number): number {
+  return isSafeIntegerInRange(value, min, max) ? value : fallback;
 }
 
-function normalizeLayers(project: BeadProject, width: number, height: number): BeadLayer[] {
-  const legacyCells = normalizeCells(project.cells, width, height);
-  const sourceLayers = project.layers?.length ? project.layers : createProject(width, height).layers;
-  return sourceLayers.slice(0, MAX_PROJECT_LAYERS).map((layer, index) => ({
-    ...layer,
-    customName: Boolean(layer.customName),
-    cells: normalizeCells(layer.cells ?? (index === 0 ? legacyCells : []), width, height),
-  }));
-}
-
-export function isSafeProjectImport(project: unknown, fileBytes: number): project is BeadProject {
-  if (!project || typeof project !== 'object' || fileBytes < 0 || fileBytes > MAX_PROJECT_FILE_BYTES) return false;
-  const candidate = project as Partial<BeadProject>;
-  return isSafeDimension(candidate.width)
-    && isSafeDimension(candidate.height)
-    && Array.isArray(candidate.cells)
-    && (!candidate.layers || (Array.isArray(candidate.layers) && candidate.layers.length <= MAX_PROJECT_LAYERS));
+function isSafeIntegerInRange(value: unknown, min: number, max: number): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= min && value <= max;
 }
 
 export function hasEditableWork(project: BeadProject): boolean {
@@ -321,9 +445,10 @@ function isSafeDimension(value: unknown): value is number {
     && value <= MAX_PROJECT_DIMENSION;
 }
 
-function normalizeCells(cells: ReadonlyArray<unknown> | undefined, width: number, height: number): Array<string | null> {
+function normalizeCells(cells: unknown, width: number, height: number): Array<string | null> {
   const length = width * height;
-  const next = Array.from({ length }, (_, index) => typeof cells?.[index] === 'string' ? cells[index] : null);
+  const source = Array.isArray(cells) ? cells : [];
+  const next = Array.from({ length }, (_, index) => typeof source[index] === 'string' ? source[index] : null);
   return next;
 }
 

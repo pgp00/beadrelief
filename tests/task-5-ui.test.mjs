@@ -9,11 +9,6 @@ const { ui } = await import("../generated/dist/src/i18n.js");
 const { imageLaunchState, loadHeartSample } = await import("../generated/dist/src/App.js");
 
 test("first-use launch and export copy stay localized", async () => {
-  const source = await readFile("src/App.tsx", "utf8");
-  assert.match(source, /Bambu project-filament colors and part assignments included/);
-  assert.match(source, /已包含 Bambu 项目耗材颜色和零件分配/);
-  assert.match(source, /confirm.*AMS/i);
-  assert.match(source, /确认.*AMS/);
   assert.equal(
     ui.en.threeMfDownloaded,
     "3MF exported with Bambu project-filament colors and part assignments included; confirm the physical AMS slots before printing.",

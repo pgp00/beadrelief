@@ -1,5 +1,7 @@
 # BeadRelief
 
+BeadRelief 目前优先支持桌面端；请使用至少 980 px 宽的浏览器窗口以访问完整编辑工作区。
+
 在浏览器本地把任意图片转换为可编辑、多色 3MF 拼豆浮雕。
 
 [打开在线演示](https://pgp00.github.io/beadrelief/) · [下载爱心 3MF](samples/beadrelief-heart-p2s.3mf) · [English](README.md)

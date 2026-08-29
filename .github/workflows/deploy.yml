@@ -6,10 +6,7 @@ on:
   pull_request:
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+permissions: {}
 
 concurrency:
   group: pages
@@ -17,6 +14,8 @@ concurrency:
 
 jobs:
   build:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -27,12 +26,16 @@ jobs:
       - run: npm ci
       - run: npm run verify
       - run: git diff --exit-code -- samples
+      - run: node scripts/generate-checksums.mjs --check
       - name: Verify 3MF ZIP integrity
         run: for file in samples/*.3mf; do unzip -t "$file"; done
       - uses: actions/upload-pages-artifact@v5
         with:
           path: generated/dist
   deploy:
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

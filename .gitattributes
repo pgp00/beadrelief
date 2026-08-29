@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.json text eol=lf
+samples/*.3mf binary
+samples/*.png binary

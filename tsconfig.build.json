@@ -5,7 +5,7 @@
     "outDir": "generated/dist/src",
     "rootDir": "src",
     "module": "ES2020",
-    "sourceMap": true
+    "sourceMap": false
   },
   "include": ["src"]
 }

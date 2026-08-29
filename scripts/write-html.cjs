@@ -12,6 +12,7 @@ const html = `<!doctype html>
     />
     <title>BeadRelief — Image to editable multicolor 3MF</title>
     <link rel="canonical" href="https://pgp00.github.io/beadrelief/" />
+    <link rel="icon" href="data:," />
     <link rel="stylesheet" href="./styles.css" />
     <script type="importmap">
       {

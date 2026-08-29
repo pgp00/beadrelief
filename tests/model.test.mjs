@@ -64,6 +64,34 @@ test("malformed layered stack IDs are reported by model validation", () => {
   assert.match(validatePrintableModel(model).join("\n"), /invalid layered stop color/);
 });
 
+test("unknown solid colors block export instead of becoming the base color", () => {
+  const project = createProject(1, 1);
+  project.layers[0].cells = ["future-color"];
+  const model = buildPrintableModel(composePrintableGrid(project));
+  assert.match(validatePrintableModel(model).join("\n"), /unknown color/);
+});
+
+test("print setting limits apply to directly constructed models", () => {
+  const invalidValues = {
+    cellPitchMm: 20,
+    baseThicknessMm: 100,
+    beadHeightMm: 100,
+    dimpleDiameterMm: 10,
+    dimpleDepthMm: 3,
+  };
+  for (const [key, value] of Object.entries(invalidValues)) {
+    const model = buildPrintableModel(composePrintableGrid(createProject(1, 1)));
+    model.settings[key] = value;
+    assert.match(validatePrintableModel(model, false).join("\n"), /must be between/);
+  }
+});
+
+test("non-finite vertex coordinates fail validation", () => {
+  const model = buildPrintableModel(composePrintableGrid(createProject(1, 1)));
+  model.parts[0].vertices[0] = Number.NaN;
+  assert.match(validatePrintableModel(model).join("\n"), /non-finite vertex/);
+});
+
 test("3MF export accepts 32 cells per side and rejects larger grids", () => {
   const accepted = buildPrintableModel(composePrintableGrid(createProject(32, 32)));
   const rejected = buildPrintableModel(composePrintableGrid(createProject(33, 32)));

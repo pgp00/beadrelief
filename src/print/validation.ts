@@ -1,4 +1,5 @@
 import type { PrintableModel, PrintablePart } from './model';
+import { PRINT_SETTING_LIMITS, type NumericPrintSetting } from './settings';
 import { STACK_LAYER_HEIGHT_MM } from './stacking';
 
 export const MAX_EXPORT_GRID_DIMENSION = 32;
@@ -6,10 +7,9 @@ export const MAX_EXPORT_GRID_DIMENSION = 32;
 export function closedEdgeErrors(part: PrintablePart): string[] {
   const counts = new Map<string, number>();
   for (let index = 0; index < part.triangles.length; index += 3) {
-    const triangle = part.triangles.slice(index, index + 3);
     for (let edge = 0; edge < 3; edge += 1) {
-      const a = triangle[edge];
-      const b = triangle[(edge + 1) % 3];
+      const a = part.triangles[index + edge];
+      const b = part.triangles[index + ((edge + 1) % 3)];
       const key = a < b ? `${a}:${b}` : `${b}:${a}`;
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
@@ -21,15 +21,20 @@ export function closedEdgeErrors(part: PrintablePart): string[] {
 
 export function validatePrintableModel(model: PrintableModel, checkTopology = true): string[] {
   const errors = [...model.inputErrors];
-  if (model.gridSize.width <= 0 || model.gridSize.height <= 0) errors.push('The printable grid is empty.');
-  if (
+  const validGridSize = Number.isSafeInteger(model.gridSize.width) && model.gridSize.width > 0
+    && Number.isSafeInteger(model.gridSize.height) && model.gridSize.height > 0;
+  if (!validGridSize) errors.push('The printable grid dimensions must be positive whole numbers.');
+  if (validGridSize && (
     model.gridSize.width > MAX_EXPORT_GRID_DIMENSION ||
     model.gridSize.height > MAX_EXPORT_GRID_DIMENSION
-  ) {
-    errors.push('3MF export supports up to 32 × 32 cells in v0.1.0.');
+  )) {
+    errors.push('3MF export supports up to 32 × 32 cells. Larger projects can still use 2D exports.');
   }
   if (model.materials.length < 1 || model.materials.length > 4) errors.push('Use between one and four materials.');
   if (model.materials.some((material) => !material.name.trim())) errors.push('Every material needs a name.');
+  if ([model.name, ...model.materials.map(({ name }) => name), ...model.parts.map(({ name }) => name)].some(hasInvalidXmlCharacters)) {
+    errors.push('Names contain characters that are not valid in XML 1.0.');
+  }
   if (model.materials.some((material) => !/^#[0-9a-f]{6}$/i.test(material.hex))) {
     errors.push('Every material needs a six-digit hex color.');
   }
@@ -44,12 +49,19 @@ export function validatePrintableModel(model: PrintableModel, checkTopology = tr
   if (model.sizeMm.x > 250 || model.sizeMm.y > 250) errors.push('Model X and Y must stay within 250 mm.');
 
   const settings = model.settings;
-  for (const [name, value] of [
-    ['Cell pitch', settings.cellPitchMm],
-    ['Base thickness', settings.baseThicknessMm],
-    ['Bead height', settings.beadHeightMm],
-  ] as const) {
-    if (!Number.isFinite(value) || value <= 0) errors.push(`${name} must be positive.`);
+  const labels: Record<NumericPrintSetting, string> = {
+    cellPitchMm: 'Cell pitch',
+    baseThicknessMm: 'Base thickness',
+    beadHeightMm: 'Bead height',
+    dimpleDiameterMm: 'Dimple diameter',
+    dimpleDepthMm: 'Dimple depth',
+  };
+  for (const key of Object.keys(PRINT_SETTING_LIMITS) as NumericPrintSetting[]) {
+    const value = settings[key];
+    const limits = PRINT_SETTING_LIMITS[key];
+    if (!Number.isFinite(value) || value < limits.min || value > limits.max) {
+      errors.push(`${labels[key]} must be between ${limits.min} and ${limits.max} mm.`);
+    }
   }
   if (!Number.isFinite(settings.dimpleDepthMm) || settings.dimpleDepthMm < 0 || settings.dimpleDepthMm >= settings.beadHeightMm) {
     errors.push('Dimple depth must be zero or less than bead height.');
@@ -98,6 +110,10 @@ export function validatePrintableModel(model: PrintableModel, checkTopology = tr
       errors.push(`${part.name} has incomplete geometry.`);
       continue;
     }
+    if (part.vertices.some((value) => !Number.isFinite(value))) {
+      errors.push(`${part.name} has a non-finite vertex coordinate.`);
+      continue;
+    }
     const vertexCount = part.vertices.length / 3;
     if ([...part.triangles].some((index) => !Number.isInteger(index) || index < 0 || index >= vertexCount)) {
       errors.push(`${part.name} has an invalid triangle index.`);
@@ -111,6 +127,10 @@ export function validatePrintableModel(model: PrintableModel, checkTopology = tr
     }
   }
   return errors;
+}
+
+function hasInvalidXmlCharacters(value: string): boolean {
+  return /[\u0000-\u0008\u000b\u000c\u000e-\u001f\ud800-\udfff\ufffe\uffff]/u.test(value);
 }
 
 function countDegenerateTriangles(part: PrintablePart): number {

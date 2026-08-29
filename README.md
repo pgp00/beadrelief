@@ -2,6 +2,8 @@
 
 Turn any image into an editable, multicolor 3MF bead relief — locally in your browser.
 
+BeadRelief is desktop-first. Use a viewport at least 980 px wide for the complete editing workspace.
+
 [Try the live demo](https://pgp00.github.io/beadrelief/) · [Download the heart 3MF](samples/beadrelief-heart-p2s.3mf) · [简体中文](README.zh-CN.md)
 
 ![BeadRelief heart source preview](samples/beadrelief-heart-source.png)
@@ -50,7 +52,7 @@ Open http://127.0.0.1:5174/ in your browser.
 
 ## Known limits
 
-- Solid mode exports one grouped relief; layered mode uses one global bottom-to-top filament order and is not Bambu Studio Mixed Filament metadata.
+- Solid mode exports one grouped relief. Layered mode is experimental, uses one global bottom-to-top filament order, and is not Bambu Studio Mixed Filament metadata.
 - A project uses up to four materials.
 - 3MF export is limited to 32 × 32 cells.
 - Exported project-filament colors and part assignments are included; confirm the physical AMS slot mapping in Bambu Studio before printing.

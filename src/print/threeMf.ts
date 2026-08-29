@@ -1,6 +1,6 @@
 import type { PrintableModel, PrintablePart } from './model';
 import { validatePrintableModel } from './validation';
-import { createStoredZip, type ZipEntry } from './zip';
+import { createDeflatedZip, createStoredZip, type ZipEntry } from './zip';
 
 const encoder = new TextEncoder();
 
@@ -20,8 +20,12 @@ export function createThreeMf(model: PrintableModel): Uint8Array {
   return createStoredZip(createThreeMfEntries(model));
 }
 
-export function downloadThreeMf(model: PrintableModel, filename: string): void {
-  const bytes = createThreeMf(model);
+export function createCompressedThreeMf(model: PrintableModel): Promise<Uint8Array> {
+  return createDeflatedZip(createThreeMfEntries(model));
+}
+
+export async function downloadThreeMf(model: PrintableModel, filename: string): Promise<void> {
+  const bytes = await createCompressedThreeMf(model);
   const buffer = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(buffer).set(bytes);
   const blob = new Blob([buffer], { type: 'model/3mf' });
@@ -86,6 +90,10 @@ function projectSettingsJson(model: PrintableModel): string {
     filament_colour: model.materials.map((material) => material.hex.toUpperCase()),
     filament_type: model.materials.map(() => 'PLA'),
     nozzle_diameter: ['0.4'],
+    ...(model.mode === 'layered' ? {
+      layer_height: '0.08',
+      initial_layer_print_height: '0.08',
+    } : {}),
   }, null, 4)}\n`;
 }
 
@@ -134,6 +142,7 @@ ${triangles.join('\n')}
 }
 
 function number(value: number): string {
+  if (!Number.isFinite(value)) throw new Error('3MF coordinates must be finite numbers.');
   return Number(value.toFixed(6)).toString();
 }
 

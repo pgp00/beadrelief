@@ -138,6 +138,8 @@ test("project settings include exactly one 0.4 mm nozzle entry", () => {
     readStoredEntries(createThreeMf(model)).get("Metadata/project_settings.config"),
   ));
   assert.deepEqual(settings.nozzle_diameter, ["0.4"]);
+  assert.equal(settings.layer_height, undefined);
+  assert.equal(settings.initial_layer_print_height, undefined);
 });
 
 test("default three-slot 3MF keeps White, Black, and Red assignments", () => {
@@ -168,6 +170,26 @@ test("3MF rejects missing material references and malformed material colors", ()
   assert.throws(() => createThreeMf(model), /six-digit hex color/);
 });
 
+test("3MF escapes XML names and rejects illegal XML control characters", () => {
+  const project = createProject(1, 1);
+  project.amsColors[0].name = "A&B";
+  let model = buildPrintableModel(composePrintableGrid(project));
+  const entries = readStoredEntries(createThreeMf(model));
+  assert.match(new TextDecoder().decode(entries.get("3D/3dmodel.model")), /A&amp;B/);
+
+  project.amsColors[0].name = "bad\u0001name";
+  model = buildPrintableModel(composePrintableGrid(project));
+  assert.throws(() => createThreeMf(model), /XML 1.0/);
+});
+
+test("3MF rejects non-integer or non-finite grid dimensions", () => {
+  for (const width of [Number.NaN, Number.POSITIVE_INFINITY, 1.5]) {
+    const model = buildPrintableModel(composePrintableGrid(createProject(1, 1)));
+    model.gridSize.width = width;
+    assert.throws(() => createThreeMf(model), /positive whole numbers/);
+  }
+});
+
 test("layered 3MF exports only physical material bands", async () => {
   const { withStackTemplate } = await import("../generated/dist/src/project.js");
   const { buildStackPalette } = await import("../generated/dist/src/print/stacking.js");
@@ -179,6 +201,9 @@ test("layered 3MF exports only physical material bands", async () => {
   const decoder = new TextDecoder();
   const xml = decoder.decode(entries.get("3D/3dmodel.model"));
   const modelSettings = decoder.decode(entries.get("Metadata/model_settings.config"));
+  const projectSettings = JSON.parse(decoder.decode(entries.get("Metadata/project_settings.config")));
+  assert.equal(projectSettings.layer_height, "0.08");
+  assert.equal(projectSettings.initial_layer_print_height, "0.08");
   assert.equal((xml.match(/<base /g) ?? []).length, 4);
   assert.equal((xml.match(/<component objectid=/g) ?? []).length, 4);
   assert.deepEqual(parseModelSettings(modelSettings), expectedPartAssignments(model, parseComponentObjectIds(xml)));
