@@ -1411,6 +1411,23 @@ button:focus-visible {
   background: transparent;
 }
 
+.print-feature-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.print-feature-grid label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.print-feature-grid label:has(span) {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 5px;
+}
+
 .three-preview-modal:not([open]) {
   display: none;
 }
@@ -1581,6 +1598,143 @@ button:focus-visible {
 .upload-zone span {
   color: #5c7170;
   font-size: var(--font-size-small);
+}
+
+.preview-layer-controls {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  gap: 14px;
+  align-items: center;
+  font-size: var(--font-size-small);
+}
+
+.preview-layer-controls label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.preview-layer-controls label:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.preview-layer-controls input[type='range'] {
+  width: 150px;
+}
+
+.image-crop-controls {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-cool);
+}
+
+.image-crop-controls summary {
+  cursor: pointer;
+  font-size: var(--font-size-control);
+  font-weight: var(--weight-semibold);
+}
+
+.image-crop-controls[open] summary {
+  margin-bottom: 9px;
+}
+
+.conversion-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--font-size-small);
+}
+
+.print-recipe-card {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-cool);
+}
+
+.print-recipe-slots {
+  display: grid;
+  gap: 6px;
+}
+
+.print-recipe-slots > div {
+  display: grid;
+  grid-template-columns: auto 52px minmax(0, 1fr);
+  gap: 7px;
+  align-items: center;
+}
+
+.print-recipe-slots small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.print-recipe-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--font-size-small);
+}
+
+.print-recipe-meta span:not(:last-child)::after {
+  margin-left: 6px;
+  content: '·';
+}
+
+.material-profile-card,
+.profile-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.calibration-panel {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.calibration-panel summary {
+  cursor: pointer;
+  font-weight: var(--weight-semibold);
+}
+
+.calibration-panel p {
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+}
+
+.calibration-colors {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.calibration-colors label {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+}
+
+.calibration-colors input {
+  min-width: 0;
+  width: 28px;
+}
+
+.profile-actions {
+  grid-template-columns: 1fr 1fr;
 }
 
 .field-label-with-help {

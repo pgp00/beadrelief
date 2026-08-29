@@ -72,14 +72,18 @@ test("3MF contains one assembly, named parts, and four or fewer base materials",
   const archive = createThreeMf(model);
   assert.deepEqual(archive, createThreeMf(model));
   const entries = readStoredEntries(archive);
+  const decoder = new TextDecoder();
   assert.deepEqual([...entries.keys()], [
     "[Content_Types].xml",
     "_rels/.rels",
     "3D/3dmodel.model",
     "Metadata/project_settings.config",
     "Metadata/model_settings.config",
+    "Metadata/beadrelief_recipe.config",
   ]);
-  const decoder = new TextDecoder();
+  const recipe = JSON.parse(decoder.decode(entries.get("Metadata/beadrelief_recipe.config")));
+  assert.equal(recipe.mode, "solid");
+  assert.deepEqual(recipe.slots.map(({ name, hex }) => [name, hex]), model.materials.map(({ name, hex }) => [name, hex]));
   const projectSettings = JSON.parse(decoder.decode(entries.get("Metadata/project_settings.config")));
   assert.deepEqual(projectSettings.filament_colour, model.materials.map((material) => material.hex.toUpperCase()));
   assert.deepEqual(projectSettings.filament_type, model.materials.map(() => "PLA"));
@@ -170,6 +174,16 @@ test("3MF rejects missing material references and malformed material colors", ()
   assert.throws(() => createThreeMf(model), /six-digit hex color/);
 });
 
+test("3MF nozzle metadata follows the project material profile", () => {
+  const project = createProject(1, 1);
+  project.materialProfile.nozzleDiameterMm = 0.6;
+  const settings = JSON.parse(new TextDecoder().decode(
+    readStoredEntries(createThreeMf(buildPrintableModel(composePrintableGrid(project))))
+      .get("Metadata/project_settings.config"),
+  ));
+  assert.deepEqual(settings.nozzle_diameter, ["0.6"]);
+});
+
 test("3MF escapes XML names and rejects illegal XML control characters", () => {
   const project = createProject(1, 1);
   project.amsColors[0].name = "A&B";
@@ -202,6 +216,7 @@ test("layered 3MF exports only physical material bands", async () => {
   const xml = decoder.decode(entries.get("3D/3dmodel.model"));
   const modelSettings = decoder.decode(entries.get("Metadata/model_settings.config"));
   const projectSettings = JSON.parse(decoder.decode(entries.get("Metadata/project_settings.config")));
+  const recipe = JSON.parse(decoder.decode(entries.get("Metadata/beadrelief_recipe.config")));
   assert.equal(projectSettings.layer_height, "0.08");
   assert.equal(projectSettings.initial_layer_print_height, "0.08");
   assert.equal((xml.match(/<base /g) ?? []).length, 4);
@@ -210,6 +225,8 @@ test("layered 3MF exports only physical material bands", async () => {
   assert.doesNotMatch(xml, /Estimated_/);
   assert.match(xml, /Base_and_Beads_Bambu_PLA_Basic_Blue/);
   assert.match(xml, /Stack_Bambu_PLA_Basic_White/);
+  assert.equal(recipe.mode, "layered");
+  assert.deepEqual(recipe.layers.map(({ slot }) => slot), [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4]);
 });
 
 test("heart sample keeps its deterministic 10 by 10 three-color footprint", async () => {

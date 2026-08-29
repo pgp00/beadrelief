@@ -1,6 +1,8 @@
 import { getColor, mappedCode } from './palette';
 import type { BeadLayer, BeadProject, UsageRow } from './types';
 import { summarizeLayeredUsage, summarizeUsage } from './usage';
+import { buildPrintRecipe } from './print/recipe';
+import { materialProfileFromProject } from './print/profile';
 
 export type PrintExportOptions = {
   format?: 'png' | 'pdf';
@@ -19,7 +21,7 @@ const MAX_EXPORT_CANVAS_SIDE = 12000;
 const PRINT_EXPORT_SCALE = PRINT_EXPORT_PPI / CSS_PIXEL_PPI;
 
 export function downloadProjectJson(project: BeadProject): void {
-  downloadBlob(`${safeName(project.name || '\u62fc\u8c46\u7f16\u8f91\u8bb0\u5f55')}-\u7f16\u8f91\u8bb0\u5f55_perler.json`, JSON.stringify(project, null, 2), 'application/json');
+  downloadBlob(`${safeName(project.name || '\u62fc\u8c46\u7f16\u8f91\u8bb0\u5f55')}-\u7f16\u8f91\u8bb0\u5f55_perler.json`, JSON.stringify({ ...project, printRecipe: buildPrintRecipe(project) }, null, 2), 'application/json');
 }
 
 export function downloadUsageCsv(project: BeadProject, usage: UsageRow[]): void {
@@ -391,11 +393,16 @@ function usageSheetRows(
   ];
 }
 
+export function downloadMaterialProfile(project: BeadProject): void {
+  downloadBlob(`${safeName(project.materialProfile.name)}.beadrelief-profile.json`, JSON.stringify(materialProfileFromProject(project), null, 2), 'application/json');
+}
+
 function layeredUsageSheetRows(
   project: BeadProject,
   sheetTitle: string,
   usage: ReturnType<typeof summarizeLayeredUsage>,
 ): UsageWorkbookRow[] {
+  const recipe = buildPrintRecipe(project);
   return [
     ['\u9879\u76ee\u540d\u79f0', project.name || '\u62fc\u8c46\u56fe\u7eb8'],
     ['\u8868\u683c', sheetTitle],
@@ -412,6 +419,16 @@ function layeredUsageSheetRows(
       row.color.name,
       row.color.hex,
       row.layerCells,
+    ]),
+    [],
+    ['Print recipe', 'Layer', 'AMS', 'Material', 'Z start (mm)', 'Z end (mm)'],
+    ...recipe.layers.map((layer) => [
+      'Layered',
+      layer.layer,
+      `AMS ${layer.slot}`,
+      layer.material,
+      layer.zStartMm,
+      layer.zEndMm,
     ]),
   ];
 }

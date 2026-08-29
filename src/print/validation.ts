@@ -55,6 +55,8 @@ export function validatePrintableModel(model: PrintableModel, checkTopology = tr
     beadHeightMm: 'Bead height',
     dimpleDiameterMm: 'Dimple diameter',
     dimpleDepthMm: 'Dimple depth',
+    borderWidthMm: 'Border width',
+    hangingHoleDiameterMm: 'Hanging hole diameter',
   };
   for (const key of Object.keys(PRINT_SETTING_LIMITS) as NumericPrintSetting[]) {
     const value = settings[key];
@@ -71,6 +73,9 @@ export function validatePrintableModel(model: PrintableModel, checkTopology = tr
   }
 
   if (model.mode === 'layered') {
+    if (Math.abs(model.materialProfile.layerHeightMm - STACK_LAYER_HEIGHT_MM) >= 1e-6) {
+      errors.push('Layered profiles currently require a 0.08 mm layer height.');
+    }
     if (model.materials.length < 2 || model.materials.length > 4) {
       errors.push('Layered mode needs two to four filaments.');
     }
@@ -81,7 +86,7 @@ export function validatePrintableModel(model: PrintableModel, checkTopology = tr
     if (Math.abs(baseLayers - Math.round(baseLayers)) >= 1e-6) {
       errors.push('Layered base thickness must be a multiple of 0.08 mm.');
     }
-    const spans = model.parts.map((part) => {
+    const spans = model.parts.filter((part) => /^(Base_and_Beads|Stack_)/.test(part.name)).map((part) => {
       let min = Infinity;
       let max = -Infinity;
       for (let index = 2; index < part.vertices.length; index += 3) {

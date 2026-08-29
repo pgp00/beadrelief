@@ -1,7 +1,7 @@
 ﻿import WorkspaceCanvas from './WorkspaceCanvas';
 import ThreePreview from './ThreePreview';
 import PrintSettingsPanel from './PrintSettingsPanel';
-import { downloadPrintPdf, downloadPrintPng, downloadProjectJson, downloadUsageWorkbook } from './exporters';
+import { downloadMaterialProfile, downloadPrintPdf, downloadPrintPng, downloadProjectJson, downloadUsageWorkbook } from './exporters';
 import type { PrintExportOptions } from './exporters';
 import { imageFileToBeads } from './imageToBeads';
 import { adjustLayerCells, applyEffectToLayer, defaultAdjustments, hasAdjustments, limitLayerColors, mergeCloseLayerColors } from './imageAdjustments';
@@ -10,13 +10,15 @@ import { languageKey, resolveLanguage, ui } from './i18n';
 import type { Language } from './i18n';
 import { amsColorToPaletteColor } from './print/colors';
 import { buildPrintableModel, composePrintableGrid } from './print/model';
-import { buildStackPalette } from './print/stacking';
+import { applyMeasuredStackColors, buildStackPalette } from './print/stacking';
+import { buildPrintRecipe } from './print/recipe';
+import { applyMaterialProfile, calibrationProject, MAX_PROFILE_FILE_BYTES } from './print/profile';
 import { downloadThreeMf } from './print/threeMf';
 import { validatePrintableModel } from './print/validation';
 import { basicPalette, completePalette, getColor } from './palette';
 import { MAX_PROJECT_DIMENSION, MAX_PROJECT_FILE_BYTES, MAX_PROJECT_LAYERS, composeVisibleCells, createLayer, createProject, hasEditableWork, isSafeProjectImport, loadDraft, normalizeProject, projectGridChanged, saveDraft, withCells, withLayers } from './project';
 import { findIsolatedBeads, summarizeLayeredUsage, summarizeUsage } from './usage';
-import type { ArrowKind, BackgroundMode, BeadProject, ClipboardPattern, ConvertResult, CopyMode, GenerationStyle, MirrorDirection, MoveMode, RemoveMode, RightClickAction, ShapeFillMode, ShapeKind, TextDirection, ToolId } from './types';
+import type { ArrowKind, BackgroundMode, BeadProject, ClipboardPattern, ConvertResult, CopyMode, CropAspect, GenerationStyle, MirrorDirection, MoveMode, RemoveMode, RightClickAction, ShapeFillMode, ShapeKind, TextDirection, ToolId } from './types';
 
 const { useEffect, useMemo, useRef, useState } = React;
 
@@ -152,6 +154,10 @@ const defaultImportSettings = {
   backgroundMode: 'keep' as BackgroundMode,
   tolerance: 32,
   speckleReduction: 0,
+  cropAspect: 'original' as CropAspect,
+  cropZoom: 1,
+  cropOffsetX: 0,
+  cropOffsetY: 0,
 };
 
 const defaultColorId = 'ams-1-1c1c1c';
@@ -170,6 +176,7 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const referenceInputRef = useRef<HTMLInputElement | null>(null);
   const jsonInputRef = useRef<HTMLInputElement | null>(null);
+  const profileInputRef = useRef<HTMLInputElement | null>(null);
   const autoGenerateShouldCommitRef = useRef(false);
   const generationRequestRef = useRef(0);
   const autoGenerationPendingRef = useRef(false);
@@ -252,6 +259,10 @@ export default function App() {
   const [generationStyle, setGenerationStyle] = useState<GenerationStyle>(defaultImportSettings.generationStyle);
   const [backgroundMode, setBackgroundMode] = useState<BackgroundMode>(defaultImportSettings.backgroundMode);
   const [tolerance, setTolerance] = useState(defaultImportSettings.tolerance);
+  const [cropAspect, setCropAspect] = useState<CropAspect>(defaultImportSettings.cropAspect);
+  const [cropZoom, setCropZoom] = useState(defaultImportSettings.cropZoom);
+  const [cropOffsetX, setCropOffsetX] = useState(defaultImportSettings.cropOffsetX);
+  const [cropOffsetY, setCropOffsetY] = useState(defaultImportSettings.cropOffsetY);
   const [autoGenerationRestartToken, setAutoGenerationRestartToken] = useState(0);
   const [manualEditsSinceGeneration, setManualEditsSinceGeneration] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -277,6 +288,7 @@ export default function App() {
     project.printSettings.mode === 'layered' ? summarizeLayeredUsage(project) : []
   ), [project]);
   const layeredOutput = outputMode === 'three-d' && project.printSettings.mode === 'layered';
+  const printRecipe = useMemo(() => buildPrintRecipe(project), [project]);
   const totalBeads = usage.reduce((sum, row) => sum + row.count, 0);
   const totalPacks = usage.reduce((sum, row) => sum + row.packs, 0);
   const boardCount =
@@ -291,8 +303,10 @@ export default function App() {
   const selectedColor = getColor(selectedColorId);
   const solidPalette = useMemo(() => project.amsColors.map(amsColorToPaletteColor), [project.amsColors]);
   const stackPalette = useMemo(() => (
-    project.printSettings.mode === 'layered' ? buildStackPalette(project.amsColors) : []
-  ), [project.amsColors, project.printSettings.mode]);
+    project.printSettings.mode === 'layered'
+      ? applyMeasuredStackColors(buildStackPalette(project.amsColors), project.materialProfile.measuredColors)
+      : []
+  ), [project.amsColors, project.materialProfile.measuredColors, project.printSettings.mode]);
   const activePalette = outputMode === 'pattern'
     ? paletteMode === 'basic' ? basicPalette : completePalette
     : project.printSettings.mode === 'layered' ? stackPalette : solidPalette;
@@ -487,7 +501,7 @@ export default function App() {
       void generateFromImageRef.current({ recordHistory: shouldCommit, automatic: true });
     }, 420);
     return () => window.clearTimeout(timer);
-  }, [pendingFile, convertWidth, generationStyle, backgroundMode, tolerance, autoGenerationKey, autoGenerationRestartToken, manualEditsSinceGeneration]);
+  }, [pendingFile, convertWidth, generationStyle, backgroundMode, tolerance, cropAspect, cropZoom, cropOffsetX, cropOffsetY, autoGenerationKey, autoGenerationRestartToken, manualEditsSinceGeneration]);
 
   function commitHistory() {
     setPast((items) => [...items.slice(-39), projectRef.current]);
@@ -582,6 +596,10 @@ export default function App() {
     setGenerationStyle(defaultImportSettings.generationStyle);
     setBackgroundMode(defaultImportSettings.backgroundMode);
     setTolerance(defaultImportSettings.tolerance);
+    setCropAspect(defaultImportSettings.cropAspect);
+    setCropZoom(defaultImportSettings.cropZoom);
+    setCropOffsetX(defaultImportSettings.cropOffsetX);
+    setCropOffsetY(defaultImportSettings.cropOffsetY);
   }
 
   function resetReferenceTransform() {
@@ -844,6 +862,7 @@ export default function App() {
         backgroundColor: [255, 255, 255],
         tolerance,
         speckleReduction: defaultImportSettings.speckleReduction,
+        crop: { aspect: cropAspect, zoom: cropZoom, offsetX: cropOffsetX, offsetY: cropOffsetY },
       });
       if (requestId !== generationRequestRef.current) return;
       if (options.recordHistory) {
@@ -1010,6 +1029,19 @@ export default function App() {
     updateProject(withLayers(project, nextDisplayLayers.reverse(), project.activeLayerId));
   }
 
+  async function importProfile(file: File) {
+    if (file.size < 1 || file.size > MAX_PROFILE_FILE_BYTES) throw new Error(text.invalidProfile);
+    let value: unknown;
+    try {
+      value = JSON.parse(await file.text());
+    } catch {
+      throw new Error(text.invalidProfile);
+    }
+    commitHistory();
+    updatePrintProject(applyMaterialProfile(projectRef.current, value));
+    setNotice(text.profileImported);
+  }
+
   function moveLayerBy(sourceId: string, direction: -1 | 1) {
     const sourceIndex = layers.findIndex((layer) => layer.id === sourceId);
     const targetIndex = sourceIndex + direction;
@@ -1105,6 +1137,30 @@ export default function App() {
       setIsExporting(false);
     }
   }
+
+  async function exportCalibrationThreeMf() {
+    const calibration = calibrationProject(projectRef.current);
+    const model = buildPrintableModel(composePrintableGrid(calibration));
+    const errors = validatePrintableModel(model);
+    if (errors.length) {
+      setNotice(codedUiError('EXPORT_INVALID', text.exportValidationFailed));
+      return;
+    }
+    await downloadThreeMf(model, 'beadrelief-layered-calibration.3mf');
+    setNotice(language === 'zh' ? '校准色阶 3MF 已下载。' : 'Calibration swatch 3MF downloaded.');
+  }
+
+  function setMeasuredStackColor(stopLevel: number, hex: string) {
+    commitHistory();
+    const measuredColors = project.materialProfile.measuredColors
+      .filter((color) => color.stopLevel !== stopLevel)
+      .concat({ stopLevel, hex })
+      .sort((left, right) => left.stopLevel - right.stopLevel);
+    updateProject({
+      ...project,
+      materialProfile: { ...project.materialProfile, verified: false, measuredColors },
+    }, 'settings');
+  }
   const shapeLabel = {
     line: text.shapeLine,
     rectangle: text.shapeRectangle,
@@ -1178,6 +1234,17 @@ export default function App() {
             void importJson(file).catch((error) => setNotice(error.message));
           }
           input.value = '';
+        }}
+      />
+      <input
+        ref={profileInputRef}
+        className="hidden-input"
+        type="file"
+        accept="application/json,.json"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          if (file) void importProfile(file).catch(() => setNotice(codedUiError('PROFILE_IMPORT', text.invalidProfile)));
+          event.currentTarget.value = '';
         }}
       />
 
@@ -1462,10 +1529,50 @@ export default function App() {
                 setGenerationStyle(event.target.value as GenerationStyle);
               }}
             >
+              <option value="pixel">{text.generationStylePixel}</option>
               <option value="cartoon">{text.generationStyleCartoon}</option>
               <option value="realistic">{text.generationStyleRealistic}</option>
             </select>
           </label>
+
+          {pendingFile && <details className="image-crop-controls">
+            <summary>{text.cropImage}</summary>
+            <label className="stacked-field">
+              <span>{text.cropAspect}</span>
+              <select aria-label="Crop aspect" value={cropAspect} onChange={(event) => {
+                markGenerationPending();
+                setCropAspect(event.target.value as CropAspect);
+              }}>
+                <option value="original">{text.cropOriginal}</option>
+                <option value="square">{text.cropSquare}</option>
+                <option value="portrait">{text.cropPortrait}</option>
+                <option value="landscape">{text.cropLandscape}</option>
+              </select>
+            </label>
+            <label className="image-range-field">
+              <span><span>{text.cropZoom}</span><strong>{cropZoom.toFixed(1)}×</strong></span>
+              <input aria-label="Crop zoom" type="range" min={1} max={3} step={0.1} value={cropZoom} onChange={(event) => {
+                markGenerationPending();
+                setCropZoom(Number(event.target.value));
+              }} />
+            </label>
+            <div className="image-field-grid">
+              <label className="image-range-field">
+                <span><span>{text.cropHorizontal}</span><strong>{Math.round(cropOffsetX * 100)}</strong></span>
+                <input aria-label="Crop horizontal position" type="range" min={-1} max={1} step={0.05} value={cropOffsetX} onChange={(event) => {
+                  markGenerationPending();
+                  setCropOffsetX(Number(event.target.value));
+                }} />
+              </label>
+              <label className="image-range-field">
+                <span><span>{text.cropVertical}</span><strong>{Math.round(cropOffsetY * 100)}</strong></span>
+                <input aria-label="Crop vertical position" type="range" min={-1} max={1} step={0.05} value={cropOffsetY} onChange={(event) => {
+                  markGenerationPending();
+                  setCropOffsetY(Number(event.target.value));
+                }} />
+              </label>
+            </div>
+          </details>}
 
           <label className="stacked-field image-background-field">
             <span>{text.background}</span>
@@ -1477,7 +1584,89 @@ export default function App() {
               <option value="remove-white">{text.removeWhite}</option>
             </select>
           </label>
+
+          {pendingFile && <div className="conversion-summary" aria-label={text.conversionSummary}>
+            <strong>{project.width} × {project.height}</strong>
+            <span>{text.conversionSummaryText(usage.length, totalBeads, isolatedBeads)}</span>
+          </div>}
         </section>
+
+        {outputMode === 'three-d' && <section className="left-card material-profile-card">
+          <div className="left-card-header">
+            <div>
+              <strong>{text.materialProfile}</strong>
+              <span>{project.materialProfile.verified ? text.profileVerified : text.profileUnverified}</span>
+            </div>
+          </div>
+          <label className="stacked-field">
+            <span>{text.profileName}</span>
+            <input value={project.materialProfile.name} maxLength={80} onFocus={commitHistory} onChange={(event) => updateProject({
+              ...project,
+              materialProfile: { ...project.materialProfile, name: event.target.value },
+            }, 'settings')} />
+          </label>
+          <label className="stacked-field">
+            <span>{text.printer}</span>
+            <input value={project.materialProfile.printer} maxLength={80} onFocus={commitHistory} onChange={(event) => updateProject({
+              ...project,
+              materialProfile: { ...project.materialProfile, printer: event.target.value },
+            }, 'settings')} />
+          </label>
+          <div className="image-field-grid">
+            <label className="stacked-field">
+              <span>{text.nozzle}</span>
+              <select value={project.materialProfile.nozzleDiameterMm} onFocus={commitHistory} onChange={(event) => updateProject({
+                ...project,
+                materialProfile: { ...project.materialProfile, nozzleDiameterMm: Number(event.target.value) as 0.2 | 0.4 | 0.6 | 0.8 },
+              }, 'settings')}>
+                {[0.2, 0.4, 0.6, 0.8].map((value) => <option key={value} value={value}>{value} mm</option>)}
+              </select>
+            </label>
+            <label className="stacked-field">
+              <span>{text.profileLayerHeight}</span>
+              <input type="number" min={0.04} max={0.4} step={0.01} value={project.materialProfile.layerHeightMm} onFocus={commitHistory} onChange={(event) => updateProject({
+                ...project,
+                materialProfile: { ...project.materialProfile, layerHeightMm: Number(event.target.value) },
+              }, 'settings')} />
+            </label>
+          </div>
+          <label className="switch-row">
+            <span>{text.physicallyVerified}</span>
+            <input type="checkbox" checked={project.materialProfile.verified} onChange={(event) => {
+              commitHistory();
+              updateProject({ ...project, materialProfile: { ...project.materialProfile, verified: event.target.checked } }, 'settings');
+            }} />
+          </label>
+          {project.amsColors.length >= 2 && <details className="calibration-panel">
+            <summary>{language === 'zh' ? '分层成色校准' : 'Layered color calibration'}</summary>
+            <p>{language === 'zh'
+              ? '下载色阶并实物打印；将每格实测颜色录入后，分层预览会立即更新。'
+              : 'Print the swatch, then enter each measured color to update layered previews.'}</p>
+            <button type="button" onClick={() => void exportCalibrationThreeMf()}>
+              {language === 'zh' ? '下载校准 3MF' : 'Download calibration 3MF'}
+            </button>
+            <div className="calibration-colors">
+              {buildStackPalette(project.amsColors).map((color) => (
+                <label key={color.stopLevel}>
+                  <span>L{color.stopLevel}</span>
+                  <input
+                    type="color"
+                    aria-label={`Measured color L${color.stopLevel}`}
+                    value={project.materialProfile.measuredColors.find((item) => item.stopLevel === color.stopLevel)?.hex ?? color.hex}
+                    onChange={(event) => setMeasuredStackColor(color.stopLevel, event.target.value)}
+                  />
+                </label>
+              ))}
+            </div>
+          </details>}
+          <div className="profile-actions">
+            <button type="button" onClick={() => profileInputRef.current?.click()}>{text.importProfile}</button>
+            <button type="button" onClick={() => {
+              downloadMaterialProfile(project);
+              setNotice(text.profileExported);
+            }}>{text.exportProfile}</button>
+          </div>
+        </section>}
 
         {outputMode === 'three-d' && <PrintSettingsPanel
           project={project}
@@ -2089,6 +2278,7 @@ export default function App() {
           {outputMode === 'pattern' ? (
             <ThreePreview
               project={displayProject}
+              language={language}
               title={text.beadPreview}
               emptyLabel={text.previewEmpty}
               closeLabel={text.close}
@@ -2098,6 +2288,7 @@ export default function App() {
           ) : (
             <ThreePreview
               model={printableModel}
+              language={language}
               title={text.preview3d}
               emptyLabel={text.previewEmpty}
               closeLabel={text.close}
@@ -2399,6 +2590,26 @@ export default function App() {
                   : totalPacks}</strong>
               </div>
             </div>
+            {layeredOutput && <div className="print-recipe-card">
+              <div className="usage-summary-head">
+                <strong>{text.printRecipe}</strong>
+                <span>{text.bottomToTop}</span>
+              </div>
+              <div className="print-recipe-slots">
+                {printRecipe.slots.map((slot) => (
+                  <div key={slot.id}>
+                    <span className="usage-chip" style={{ backgroundColor: slot.hex }} />
+                    <strong>AMS {slot.slot}</strong>
+                    <small>{slot.name}</small>
+                  </div>
+                ))}
+              </div>
+              <div className="print-recipe-meta">
+                <span>{text.recipeLayers(printRecipe.layers.length)}</span>
+                <span>{text.recipeStops(printRecipe.stops.length)}</span>
+                <span>{printRecipe.layerHeightMm} mm</span>
+              </div>
+            </div>}
             {!layeredOutput && (
               <label className="usage-pack-setting">
                 <span>{text.beadsPerPack}</span>

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   normalizeImageMimeType,
+  planImageCrop,
   planImageConversion,
   rgbaToBeads,
 } from "../generated/dist/src/imageToBeads.js";
@@ -58,4 +59,21 @@ test("image/jpg normalizes to JPEG and unsupported MIME types fail", () => {
   assert.equal(normalizeImageMimeType("IMAGE/JPEG"), "image/jpeg");
   assert.equal(planImageConversion("image/jpg", 10, 10, 8, 3, 3).width, 8);
   assert.throws(() => normalizeImageMimeType("image/gif"), /JPG, PNG, or WebP/);
+});
+
+test("crop planning preserves the source and supports aspect, zoom, and framing", () => {
+  assert.deepEqual(planImageCrop(1200, 800), { x: 0, y: 0, width: 1200, height: 800 });
+  assert.deepEqual(planImageCrop(1200, 800, { aspect: "square", zoom: 1, offsetX: 0, offsetY: 0 }), {
+    x: 200,
+    y: 0,
+    width: 800,
+    height: 800,
+  });
+  assert.deepEqual(planImageCrop(1200, 800, { aspect: "square", zoom: 2, offsetX: 1, offsetY: -1 }), {
+    x: 800,
+    y: 0,
+    width: 400,
+    height: 400,
+  });
+  assert.throws(() => planImageCrop(1200, 800, { aspect: "square", zoom: 0, offsetX: 0, offsetY: 0 }), /crop/);
 });

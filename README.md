@@ -33,11 +33,21 @@ The live demo has two explicit workflows that share the same editable canvas:
 
 Open the [live demo](https://pgp00.github.io/beadrelief/), choose **Bead pattern** or **3D print**, then upload a JPG, PNG, or WebP image.
 
+## From image to print, without guesswork
+
+| 1 · Frame | 2 · Build | 3 · Inspect | 4 · Calibrate |
+|:---:|:---:|:---:|:---:|
+| Crop, zoom, reposition, and clean the background. | Choose solid or layered color and add a border, detachable backplate, hanging loop, or recessed back text. | Scrub through print layers, isolate a layer, or explode the stack; the same mesh is used for preview and export. | Print the generated swatch, enter measured colors, then save the printer/nozzle/material profile for reuse. |
+
+Every project JSON, layered workbook, and 3MF carries the bottom-to-top print recipe. The 3MF also embeds the selected nozzle and material assignments.
+
 ## Open it in Bambu Studio
 
 1. Import the exported `.3mf`.
 2. Select the Bambu Lab P2S and `0.4 mm` nozzle.
 3. Review the included project-filament colors and part assignments, map them to the physical AMS slots, then slice and inspect the color preview.
+
+For layered work, open **Material profile → Layered color calibration**, download the calibration 3MF, print it with the same printer/nozzle/filaments, and enter the measured swatch colors before marking the profile as physically verified.
 
 > [!IMPORTANT]
 > The checked-in heart file has not yet been physically printed. Always confirm the AMS mapping and slice preview before printing.

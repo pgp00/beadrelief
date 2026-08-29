@@ -257,6 +257,15 @@
       "tdMm": 1
     }
   ],
+  "materialProfile": {
+    "version": "1.0.0",
+    "name": "Default example",
+    "printer": "Bambu Lab P2S",
+    "nozzleDiameterMm": 0.4,
+    "layerHeightMm": 0.08,
+    "verified": false,
+    "measuredColors": []
+  },
   "printSettings": {
     "cellPitchMm": 2.5,
     "baseThicknessMm": 1.2,
@@ -264,7 +273,11 @@
     "dimpleDiameterMm": 1.2,
     "dimpleDepthMm": 0.2,
     "baseColorId": "ams-1-f4f1e8",
-    "mode": "solid"
+    "mode": "solid",
+    "borderWidthMm": 0,
+    "separateBase": false,
+    "hangingHoleDiameterMm": 0,
+    "backText": ""
   },
   "createdAt": "2026-08-27T00:00:00.000Z",
   "updatedAt": "2026-08-27T00:00:00.000Z"

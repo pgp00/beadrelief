@@ -13,6 +13,7 @@ export function createThreeMfEntries(model: PrintableModel): ZipEntry[] {
     { name: '3D/3dmodel.model', data: encoder.encode(modelXml(model)) },
     { name: 'Metadata/project_settings.config', data: encoder.encode(projectSettingsJson(model)) },
     { name: 'Metadata/model_settings.config', data: encoder.encode(modelSettingsXml(model)) },
+    { name: 'Metadata/beadrelief_recipe.config', data: encoder.encode(`${JSON.stringify(model.recipe, null, 2)}\n`) },
   ];
 }
 
@@ -89,7 +90,7 @@ function projectSettingsJson(model: PrintableModel): string {
   return `${JSON.stringify({
     filament_colour: model.materials.map((material) => material.hex.toUpperCase()),
     filament_type: model.materials.map(() => 'PLA'),
-    nozzle_diameter: ['0.4'],
+    nozzle_diameter: [String(model.materialProfile.nozzleDiameterMm)],
     ...(model.mode === 'layered' ? {
       layer_height: '0.08',
       initial_layer_print_height: '0.08',

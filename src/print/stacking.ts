@@ -1,4 +1,4 @@
-import type { AmsColor, PaletteColor } from '../types';
+import type { AmsColor, MeasuredStackColor, PaletteColor } from '../types';
 import { makeAmsColorId, normalizeHex } from './colors';
 
 export const STACK_LAYER_HEIGHT_MM = 0.08;
@@ -70,6 +70,14 @@ export function buildStackPalette(materials: AmsColor[]): StackPaletteColor[] {
     }
   }
   return result;
+}
+
+export function applyMeasuredStackColors(palette: StackPaletteColor[], measured: MeasuredStackColor[]): StackPaletteColor[] {
+  const colors = new Map(measured.map(({ stopLevel, hex }) => [stopLevel, normalizeHex(hex)]));
+  return palette.map((color) => {
+    const hex = colors.get(color.stopLevel);
+    return hex ? { ...color, hex, rgb: hexToRgb(hex) } : color;
+  });
 }
 
 function toPaletteColor(stopLevel: number, materialIndex: number, name: string, hex: string): StackPaletteColor {

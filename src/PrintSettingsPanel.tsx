@@ -29,6 +29,8 @@ const numberFields: Array<{
   { key: 'beadHeightMm', zh: '拼豆浮雕', en: 'Relief', ...PRINT_SETTING_LIMITS.beadHeightMm, step: 0.2 },
   { key: 'dimpleDiameterMm', zh: '中心凹点直径', en: 'Dimple Ø', ...PRINT_SETTING_LIMITS.dimpleDiameterMm, step: 0.1 },
   { key: 'dimpleDepthMm', zh: '中心凹点深度', en: 'Dimple depth', ...PRINT_SETTING_LIMITS.dimpleDepthMm, step: 0.1 },
+  { key: 'borderWidthMm', zh: '边框宽度', en: 'Border', ...PRINT_SETTING_LIMITS.borderWidthMm, step: 0.5 },
+  { key: 'hangingHoleDiameterMm', zh: '挂孔直径', en: 'Hanging hole', ...PRINT_SETTING_LIMITS.hangingHoleDiameterMm, step: 0.5 },
 ];
 
 export default function PrintSettingsPanel({ project, model, errors, language, onChange, onCommit, onExport, exportDisabled = false }: Props) {
@@ -212,6 +214,36 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
             />
           </label>
         ))}
+      </div>
+
+      <div className="print-feature-grid">
+        <label>
+          <input
+            type="checkbox"
+            checked={project.printSettings.separateBase}
+            onChange={(event) => {
+              onCommit();
+              onChange({ ...project, printSettings: { ...project.printSettings, separateBase: event.target.checked } });
+            }}
+          />
+          {zh ? '底板独立成件' : 'Separate backplate'}
+        </label>
+        <label>
+          <span>{zh ? '背面凹字（A–Z / 0–9）' : 'Recessed back text (A–Z / 0–9)'}</span>
+          <input
+            type="text"
+            value={project.printSettings.backText}
+            maxLength={12}
+            onFocus={onCommit}
+            onChange={(event) => onChange({
+              ...project,
+              printSettings: {
+                ...project.printSettings,
+                backText: event.target.value.toUpperCase().replace(/[^A-Z0-9 -]/g, '').slice(0, 12),
+              },
+            })}
+          />
+        </label>
       </div>
 
       {project.printSettings.mode === 'layered' ? (

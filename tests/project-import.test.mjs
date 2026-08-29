@@ -30,6 +30,10 @@ test("project import normalizes malformed print settings to safe values", () => 
     dimpleDepthMm: 0,
     baseColorId: normalized.amsColors[0].id,
     mode: "solid",
+    borderWidthMm: 0,
+    separateBase: false,
+    hangingHoleDiameterMm: 0,
+    backText: "",
   });
 });
 

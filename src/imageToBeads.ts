@@ -1,5 +1,5 @@
 import { colorDistance, nearestPaletteColor, palette } from './palette';
-import type { ConvertOptions, ConvertResult, GenerationStyle, PaletteColor } from './types';
+import type { ConvertOptions, ConvertResult, GenerationStyle, ImageCrop, PaletteColor } from './types';
 
 type StyleProfile = {
   sampleSide: number;
@@ -18,6 +18,15 @@ type SampledCell = {
 };
 
 const styleProfiles: Record<GenerationStyle, StyleProfile> = {
+  pixel: {
+    sampleSide: 1,
+    backgroundThreshold: 0.5,
+    dominanceThreshold: 0.5,
+    candidateTargetRatio: 1,
+    candidateDistanceFactor: 0.5,
+    postStrengthBias: -2,
+    useAverageFallback: false,
+  },
   cartoon: {
     sampleSide: 7,
     backgroundThreshold: 0.72,
@@ -43,6 +52,40 @@ export const MAX_DECODED_IMAGE_PIXELS = 100_000_000;
 export const MAX_PALETTE_COLORS = 512;
 export const MAX_OUTPUT_COLORS = 512;
 export const MAX_OUTPUT_DIMENSION = 180;
+
+const cropRatios = {
+  original: null,
+  square: 1,
+  portrait: 4 / 5,
+  landscape: 5 / 4,
+} as const;
+
+export function planImageCrop(
+  naturalWidth: number,
+  naturalHeight: number,
+  crop: ImageCrop = { aspect: 'original', zoom: 1, offsetX: 0, offsetY: 0 },
+): { x: number; y: number; width: number; height: number } {
+  if (!Number.isFinite(naturalWidth) || !Number.isFinite(naturalHeight) || naturalWidth <= 0 || naturalHeight <= 0
+    || naturalWidth * naturalHeight > MAX_DECODED_IMAGE_PIXELS
+    || !(crop.aspect in cropRatios) || !Number.isFinite(crop.zoom) || crop.zoom < 1 || crop.zoom > 3
+    || !Number.isFinite(crop.offsetX) || Math.abs(crop.offsetX) > 1
+    || !Number.isFinite(crop.offsetY) || Math.abs(crop.offsetY) > 1) {
+    throw new Error('Invalid image crop settings.');
+  }
+  const targetRatio = cropRatios[crop.aspect] ?? naturalWidth / naturalHeight;
+  let baseWidth = naturalWidth;
+  let baseHeight = naturalHeight;
+  if (naturalWidth / naturalHeight > targetRatio) baseWidth = naturalHeight * targetRatio;
+  else baseHeight = naturalWidth / targetRatio;
+  const width = baseWidth / crop.zoom;
+  const height = baseHeight / crop.zoom;
+  return {
+    x: (naturalWidth - width) * (crop.offsetX + 1) / 2,
+    y: (naturalHeight - height) * (crop.offsetY + 1) / 2,
+    width,
+    height,
+  };
+}
 
 export function validateImageFileSize(size: number): void {
   if (!Number.isSafeInteger(size) || size < 1 || size > MAX_IMAGE_FILE_BYTES) {
@@ -94,10 +137,11 @@ export async function imageFileToBeads(file: File, options: ConvertOptions): Pro
   const mimeType = normalizeImageMimeType(file.type);
   const image = await loadImage(file);
   const activePalette = options.palette ?? palette;
+  const crop = planImageCrop(image.naturalWidth, image.naturalHeight, options.crop);
   const plan = planImageConversion(
     mimeType,
-    image.naturalWidth,
-    image.naturalHeight,
+    crop.width,
+    crop.height,
     options.width,
     activePalette.length,
     options.maxColors,
@@ -109,7 +153,7 @@ export async function imageFileToBeads(file: File, options: ConvertOptions): Pro
   const context = canvas.getContext('2d', { willReadFrequently: true });
   if (!context) throw new Error('Canvas is not available.');
   context.imageSmoothingEnabled = true;
-  context.drawImage(image, 0, 0, sourceWidth, sourceHeight);
+  context.drawImage(image, crop.x, crop.y, crop.width, crop.height, 0, 0, sourceWidth, sourceHeight);
   const data = context.getImageData(0, 0, sourceWidth, sourceHeight).data;
   const effectiveOptions = { ...options, maxColors };
   return rgbaToBeads(data, sourceWidth, sourceHeight, width, height, effectiveOptions);

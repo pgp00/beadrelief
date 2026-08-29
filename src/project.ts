@@ -2,12 +2,22 @@ import { getColor, paletteVersion } from './palette';
 import { DEFAULT_ACTIVE_AMS_COLORS, DEFAULT_AMS_COLORS, amsColorToPaletteColor, makeAmsColorId, nearestPaletteColorOklab, normalizeHex } from './print/colors';
 import { DEFAULT_PRINT_SETTINGS, PRINT_SETTING_LIMITS, normalizeLayeredBaseThickness, normalizePrintSetting, type NumericPrintSetting } from './print/settings';
 import { STACK_LAYERS_PER_FILAMENT, STACK_TEMPLATES, buildStackPalette, parseStackColorId, type StackTemplateId } from './print/stacking';
-import type { AmsColor, BeadLayer, BeadProject, PaletteColor, PrintMode } from './types';
+import type { AmsColor, BeadLayer, BeadProject, MaterialProfileMeta, PaletteColor, PrintMode } from './types';
 
 export const autosaveKey = 'perler-beads-generator:draft';
 export const MAX_PROJECT_DIMENSION = 180;
 export const MAX_PROJECT_LAYERS = 64;
 export const MAX_PROJECT_FILE_BYTES = 20 * 1024 * 1024;
+
+export const DEFAULT_MATERIAL_PROFILE: MaterialProfileMeta = {
+  version: '1.0.0',
+  name: 'Default example',
+  printer: 'Bambu Lab P2S',
+  nozzleDiameterMm: 0.4,
+  layerHeightMm: 0.08,
+  verified: false,
+  measuredColors: [],
+};
 
 export function createProject(width = 32, height = 32, name = 'Untitled Pattern'): BeadProject {
   const now = new Date().toISOString();
@@ -50,6 +60,7 @@ export function createProject(width = 32, height = 32, name = 'Untitled Pattern'
       showBoardIds: true,
     },
     amsColors: DEFAULT_ACTIVE_AMS_COLORS.map((color) => ({ ...color })),
+    materialProfile: { ...DEFAULT_MATERIAL_PROFILE, measuredColors: [] },
     printSettings: { ...DEFAULT_PRINT_SETTINGS, baseColorId: DEFAULT_ACTIVE_AMS_COLORS[0].id },
     createdAt: now,
     updatedAt: now,
@@ -123,6 +134,17 @@ export function withLayeredMaterials(project: BeadProject, materials: AmsColor[]
   return remapPrintCells(project, nextMaterials, 'layered', buildStackPalette(nextMaterials));
 }
 
+export function withMaterials(project: BeadProject, materials: AmsColor[]): BeadProject {
+  if (materials.length < 1 || materials.length > 4 || (project.printSettings.mode === 'layered' && materials.length < 2)) {
+    throw new Error('A material profile needs one to four filaments; Layered mode needs at least two.');
+  }
+  const nextMaterials = materials.map((material) => ({ ...material }));
+  const palette = project.printSettings.mode === 'layered'
+    ? buildStackPalette(nextMaterials)
+    : nextMaterials.map(amsColorToPaletteColor);
+  return remapPrintCells(project, nextMaterials, project.printSettings.mode, palette);
+}
+
 export function withStackTemplate(project: BeadProject, id: StackTemplateId): BeadProject {
   return withLayeredMaterials(project, STACK_TEMPLATES[id].map((material) => ({ ...material })));
 }
@@ -181,6 +203,8 @@ export function normalizeProject(project: unknown): BeadProject {
     normalizePrintSetting('dimpleDepthMm', importedPrintSettings.dimpleDepthMm),
     beadHeightMm - 0.2,
   );
+  const borderWidthMm = normalizePrintSetting('borderWidthMm', importedPrintSettings.borderWidthMm);
+  const hangingHoleDiameterMm = normalizePrintSetting('hangingHoleDiameterMm', importedPrintSettings.hangingHoleDiameterMm);
   const mode = importedPrintSettings.mode === 'layered' && amsColors.length >= 2 ? 'layered' : 'solid';
   if (mode === 'layered') baseThicknessMm = normalizeLayeredBaseThickness(importedPrintSettings.baseThicknessMm);
   const importedBase = typeof importedPrintSettings.baseColorId === 'string' ? importedPrintSettings.baseColorId : '';
@@ -208,6 +232,7 @@ export function normalizeProject(project: unknown): BeadProject {
     boardHeight: safeIntegerInRange(importedBoardSettings.boardHeight, fallback.boardSettings.boardHeight, 1, 1000),
     showBoardIds: booleanOr(importedBoardSettings.showBoardIds, fallback.boardSettings.showBoardIds),
   };
+  const materialProfile = normalizeMaterialProfileMeta(source.materialProfile);
   const layers = normalizeLayers(source, width, height).map((layer) => ({
     ...layer,
     cells: layer.cells.map((cell) => cell ? importedAmsIds.get(cell) ?? cell : null),
@@ -223,6 +248,7 @@ export function normalizeProject(project: unknown): BeadProject {
     settings,
     boardSettings,
     amsColors,
+    materialProfile,
     printSettings: {
       cellPitchMm,
       baseThicknessMm,
@@ -231,6 +257,12 @@ export function normalizeProject(project: unknown): BeadProject {
       dimpleDepthMm,
       baseColorId,
       mode,
+      borderWidthMm,
+      separateBase: booleanOr(importedPrintSettings.separateBase, false),
+      hangingHoleDiameterMm,
+      backText: typeof importedPrintSettings.backText === 'string'
+        ? importedPrintSettings.backText.toUpperCase().replace(/[^A-Z0-9 -]/g, '').slice(0, 12)
+        : '',
     },
     layers,
     activeLayerId: layers.some((layer) => layer.id === requestedActiveLayerId) ? requestedActiveLayerId : layers[0].id,
@@ -263,6 +295,29 @@ function normalizeAmsColors(colors: unknown): AmsColor[] {
         : fallback.tdMm,
     };
   });
+}
+
+function normalizeMaterialProfileMeta(value: unknown): MaterialProfileMeta {
+  if (!isRecord(value)) return { ...DEFAULT_MATERIAL_PROFILE, measuredColors: [] };
+  const nozzle = [0.2, 0.4, 0.6, 0.8].includes(Number(value.nozzleDiameterMm))
+    ? Number(value.nozzleDiameterMm) as MaterialProfileMeta['nozzleDiameterMm']
+    : DEFAULT_MATERIAL_PROFILE.nozzleDiameterMm;
+  const measuredColors = Array.isArray(value.measuredColors) ? value.measuredColors.flatMap((item) => {
+    if (!isRecord(item) || !Number.isSafeInteger(item.stopLevel) || Number(item.stopLevel) < 4 || Number(item.stopLevel) > 16
+      || typeof item.hex !== 'string' || !/^#[0-9a-f]{6}$/i.test(item.hex)) return [];
+    return [{ stopLevel: Number(item.stopLevel), hex: item.hex.toLowerCase() }];
+  }) : [];
+  return {
+    version: '1.0.0',
+    name: typeof value.name === 'string' && value.name.trim() ? value.name.trim().slice(0, 80) : DEFAULT_MATERIAL_PROFILE.name,
+    printer: typeof value.printer === 'string' && value.printer.trim() ? value.printer.trim().slice(0, 80) : DEFAULT_MATERIAL_PROFILE.printer,
+    nozzleDiameterMm: nozzle,
+    layerHeightMm: typeof value.layerHeightMm === 'number' && Number.isFinite(value.layerHeightMm) && value.layerHeightMm >= 0.04 && value.layerHeightMm <= 0.4
+      ? value.layerHeightMm
+      : DEFAULT_MATERIAL_PROFILE.layerHeightMm,
+    verified: value.verified === true,
+    measuredColors,
+  };
 }
 
 function importedAmsIdMap(colors: unknown, normalized: AmsColor[]): Map<string, string> {
@@ -313,6 +368,7 @@ export function isSafeProjectImport(project: unknown, fileBytes: number): boolea
   if (project.settings !== undefined && !isSafeProjectSettings(project.settings)) return false;
   if (project.boardSettings !== undefined && !isSafeBoardSettings(project.boardSettings)) return false;
   if (project.printSettings !== undefined && !isSafePrintSettings(project.printSettings)) return false;
+  if (project.materialProfile !== undefined && !isSafeMaterialProfileMeta(project.materialProfile)) return false;
   if (isRecord(project.printSettings) && project.printSettings.mode === 'layered'
     && (!Array.isArray(project.amsColors) || project.amsColors.length < 2)) return false;
   if (project.layers === undefined) return project.activeLayerId === undefined || typeof project.activeLayerId === 'string';
@@ -324,6 +380,18 @@ export function isSafeProjectImport(project: unknown, fileBytes: number): boolea
   }
   return project.activeLayerId === undefined
     || (typeof project.activeLayerId === 'string' && ids.has(project.activeLayerId));
+}
+
+function isSafeMaterialProfileMeta(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (value.version !== '1.0.0' || typeof value.name !== 'string' || !value.name.trim() || value.name.length > 80
+    || typeof value.printer !== 'string' || !value.printer.trim() || value.printer.length > 80
+    || ![0.2, 0.4, 0.6, 0.8].includes(Number(value.nozzleDiameterMm))
+    || typeof value.layerHeightMm !== 'number' || !Number.isFinite(value.layerHeightMm) || value.layerHeightMm < 0.04 || value.layerHeightMm > 0.4
+    || typeof value.verified !== 'boolean' || !Array.isArray(value.measuredColors) || value.measuredColors.length > 13) return false;
+  return value.measuredColors.every((item) => isRecord(item)
+    && Number.isSafeInteger(item.stopLevel) && Number(item.stopLevel) >= 4 && Number(item.stopLevel) <= 16
+    && typeof item.hex === 'string' && /^#[0-9a-f]{6}$/i.test(item.hex));
 }
 
 function isSafeAmsColors(value: unknown): boolean {
@@ -372,6 +440,8 @@ function isSafePrintSettings(value: unknown): boolean {
   }
   if (value.baseColorId !== undefined && typeof value.baseColorId !== 'string') return false;
   if (value.mode !== undefined && value.mode !== 'solid' && value.mode !== 'layered') return false;
+  if (value.separateBase !== undefined && typeof value.separateBase !== 'boolean') return false;
+  if (value.backText !== undefined && (typeof value.backText !== 'string' || value.backText.length > 12 || /[^A-Z0-9 -]/i.test(value.backText))) return false;
   if (typeof value.dimpleDepthMm === 'number' && typeof value.beadHeightMm === 'number'
     && value.dimpleDepthMm >= value.beadHeightMm) return false;
   if (typeof value.dimpleDiameterMm === 'number' && typeof value.cellPitchMm === 'number'

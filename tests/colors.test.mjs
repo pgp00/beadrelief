@@ -265,7 +265,7 @@ test("print settings clamp numeric input and can disable export while generating
   const render = (current = project, exportDisabled = false) => renderPrintSettings(current, (next) => changes.push(next), () => {}, "en", exportDisabled);
   const numberInputs = findElements(render(), (element) => element.type === "input" && element.props.type === "number");
 
-  assert.equal(numberInputs.length, 5);
+  assert.equal(numberInputs.length, 7);
   numberInputs[0].props.onChange({ target: { value: "999" } });
   assert.equal(changes.at(-1).printSettings.cellPitchMm, 10);
   numberInputs[1].props.onChange({ target: { value: "-99" } });

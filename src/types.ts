@@ -68,6 +68,25 @@ export type AmsColor = {
   tdMm: number;
 };
 
+export type MeasuredStackColor = {
+  stopLevel: number;
+  hex: string;
+};
+
+export type MaterialProfileMeta = {
+  version: '1.0.0';
+  name: string;
+  printer: string;
+  nozzleDiameterMm: 0.2 | 0.4 | 0.6 | 0.8;
+  layerHeightMm: number;
+  verified: boolean;
+  measuredColors: MeasuredStackColor[];
+};
+
+export type MaterialProfile = MaterialProfileMeta & {
+  materials: AmsColor[];
+};
+
 export type PrintSettings = {
   cellPitchMm: number;
   baseThicknessMm: number;
@@ -76,6 +95,10 @@ export type PrintSettings = {
   dimpleDepthMm: number;
   baseColorId: string;
   mode: PrintMode;
+  borderWidthMm: number;
+  separateBase: boolean;
+  hangingHoleDiameterMm: number;
+  backText: string;
 };
 
 export type BeadProject = {
@@ -91,6 +114,7 @@ export type BeadProject = {
   settings: ProjectSettings;
   boardSettings: BoardSettings;
   amsColors: AmsColor[];
+  materialProfile: MaterialProfileMeta;
   printSettings: PrintSettings;
   createdAt: string;
   updatedAt: string;
@@ -108,7 +132,15 @@ export type FilamentLayerUsageRow = {
 };
 
 export type BackgroundMode = 'keep' | 'remove-white';
-export type GenerationStyle = 'cartoon' | 'realistic';
+export type GenerationStyle = 'pixel' | 'cartoon' | 'realistic';
+export type CropAspect = 'original' | 'square' | 'portrait' | 'landscape';
+
+export type ImageCrop = {
+  aspect: CropAspect;
+  zoom: number;
+  offsetX: number;
+  offsetY: number;
+};
 
 export type ConvertOptions = {
   width: number;
@@ -119,6 +151,7 @@ export type ConvertOptions = {
   tolerance: number;
   speckleReduction: number;
   generationStyle: GenerationStyle;
+  crop?: ImageCrop;
 };
 
 export type ConvertResult = {

@@ -11,7 +11,8 @@ export type MeshData = {
   triangles: Uint32Array;
 };
 
-export function createBaseMesh(widthMm: number, heightMm: number, thicknessMm: number): MeshData {
+export function createBaseMesh(widthMm: number, heightMm: number, thicknessMm: number, backText = ''): MeshData {
+  if (backText) return createRecessedTextBase(widthMm, heightMm, thicknessMm, backText);
   const vertices = new Float32Array([
     0, 0, 0,
     widthMm, 0, 0,
@@ -31,6 +32,86 @@ export function createBaseMesh(widthMm: number, heightMm: number, thicknessMm: n
     3, 0, 4, 3, 4, 7,
   ]);
   return { vertices, triangles };
+}
+
+export function appendBox(target: MutableMesh, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): void {
+  if (x1 <= x0 || y1 <= y0 || z1 <= z0) return;
+  const first = target.vertices.length / 3;
+  target.vertices.push(
+    x0, y0, z0, x1, y0, z0, x1, y1, z0, x0, y1, z0,
+    x0, y0, z1, x1, y0, z1, x1, y1, z1, x0, y1, z1,
+  );
+  target.triangles.push(
+    first, first + 2, first + 1, first, first + 3, first + 2,
+    first + 4, first + 5, first + 6, first + 4, first + 6, first + 7,
+    first, first + 1, first + 5, first, first + 5, first + 4,
+    first + 1, first + 2, first + 6, first + 1, first + 6, first + 5,
+    first + 2, first + 3, first + 7, first + 2, first + 7, first + 6,
+    first + 3, first, first + 4, first + 3, first + 4, first + 7,
+  );
+}
+
+export function appendRing(
+  target: MutableMesh,
+  centerX: number,
+  centerY: number,
+  innerRadius: number,
+  outerRadius: number,
+  height: number,
+  segments = 32,
+): void {
+  const rings = createRings(target, centerX, centerY, [
+    [outerRadius, 0], [outerRadius, height], [innerRadius, height], [innerRadius, 0],
+  ], segments, 0);
+  connectRings(target, rings);
+  connectRingPair(target, rings[3], rings[0]);
+}
+
+const FONT_3X5: Record<string, string> = {
+  A: '010/101/111/101/101', B: '110/101/110/101/110', C: '011/100/100/100/011', D: '110/101/101/101/110',
+  E: '111/100/110/100/111', F: '111/100/110/100/100', G: '011/100/101/101/011', H: '101/101/111/101/101',
+  I: '111/010/010/010/111', J: '001/001/001/101/010', K: '101/101/110/101/101', L: '100/100/100/100/111',
+  M: '101/111/111/101/101', N: '101/111/111/111/101', O: '010/101/101/101/010', P: '110/101/110/100/100',
+  Q: '010/101/101/111/011', R: '110/101/110/101/101', S: '011/100/010/001/110', T: '111/010/010/010/010',
+  U: '101/101/101/101/111', V: '101/101/101/101/010', W: '101/101/111/111/101', X: '101/101/010/101/101',
+  Y: '101/101/010/010/010', Z: '111/001/010/100/111',
+  0: '111/101/101/101/111', 1: '010/110/010/010/111', 2: '110/001/010/100/111', 3: '110/001/010/001/110',
+  4: '101/101/111/001/001', 5: '111/100/110/001/110', 6: '011/100/111/101/111', 7: '111/001/010/010/010',
+  8: '111/101/111/101/111', 9: '111/101/111/001/110', '-': '000/000/111/000/000', ' ': '000/000/000/000/000',
+};
+
+function createRecessedTextBase(widthMm: number, heightMm: number, thicknessMm: number, value: string): MeshData {
+  const text = value.toUpperCase().replace(/[^A-Z0-9 -]/g, '').slice(0, 12);
+  const pixel = Math.min(1.2, (widthMm - 4) / Math.max(1, text.length * 4 - 1), (heightMm - 4) / 5);
+  if (!text || pixel < 0.35) return createBaseMesh(widthMm, heightMm, thicknessMm);
+  const depth = Math.min(0.3, thicknessMm / 3);
+  const mesh: MutableMesh = { vertices: [], triangles: [] };
+  appendBox(mesh, 0, 0, depth, widthMm, heightMm, thicknessMm);
+  const textWidth = (text.length * 4 - 1) * pixel;
+  const originX = (widthMm - textWidth) / 2;
+  const originY = (heightMm - 5 * pixel) / 2;
+  appendBox(mesh, 0, 0, 0, widthMm, originY, depth);
+  appendBox(mesh, 0, originY + 5 * pixel, 0, widthMm, heightMm, depth);
+  for (let row = 0; row < 5; row += 1) {
+    const holes: Array<[number, number]> = [];
+    [...text].forEach((char, index) => {
+      const bits = (FONT_3X5[char] ?? FONT_3X5[' ']).split('/')[4 - row];
+      [...bits].forEach((bit, column) => {
+        if (bit === '1') holes.push([
+          originX + (index * 4 + column) * pixel,
+          originX + (index * 4 + column + 1) * pixel,
+        ]);
+      });
+    });
+    holes.sort((left, right) => left[0] - right[0]);
+    let cursor = 0;
+    for (const [start, end] of holes) {
+      appendBox(mesh, cursor, originY + row * pixel, 0, start, originY + (row + 1) * pixel, depth);
+      cursor = Math.max(cursor, end);
+    }
+    appendBox(mesh, cursor, originY + row * pixel, 0, widthMm, originY + (row + 1) * pixel, depth);
+  }
+  return { vertices: new Float32Array(mesh.vertices), triangles: new Uint32Array(mesh.triangles) };
 }
 
 export function appendFusedBead(

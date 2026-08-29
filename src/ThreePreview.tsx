@@ -18,6 +18,7 @@ type PreviewRefs = {
 };
 
 type CommonProps = {
+  language: 'zh' | 'en';
   title: string;
   emptyLabel: string;
   closeLabel: string;
@@ -27,7 +28,7 @@ type CommonProps = {
 
 type Props = CommonProps & ({ model: PrintableModel; project?: never } | { project: BeadProject; model?: never });
 
-export default function ThreePreview({ model, project, title, emptyLabel, closeLabel, expandLabel, webglErrorLabel }: Props) {
+export default function ThreePreview({ model, project, language, title, emptyLabel, closeLabel, expandLabel, webglErrorLabel }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const modalHostRef = useRef<HTMLDivElement | null>(null);
   const dialogRef = useRef<HTMLDialogElement | null>(null);
@@ -43,6 +44,10 @@ export default function ThreePreview({ model, project, title, emptyLabel, closeL
   });
   const [expanded, setExpanded] = useState(false);
   const [webglUnavailable, setWebglUnavailable] = useState(false);
+  const maximumLayer = model?.recipe.layers.length ?? 0;
+  const [previewLayer, setPreviewLayer] = useState(maximumLayer);
+  const [singleLayer, setSingleLayer] = useState(false);
+  const [exploded, setExploded] = useState(false);
   const beadCount = project
     ? project.layers.filter((layer) => layer.visible).reduce((sum, layer) => sum + layer.cells.filter(Boolean).length, 0)
     : model.gridSize.width * model.gridSize.height;
@@ -67,6 +72,7 @@ export default function ThreePreview({ model, project, title, emptyLabel, closeL
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.5));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.setClearColor(PREVIEW_BACKGROUND, 0);
+    renderer.localClippingEnabled = true;
     renderer.shadowMap.enabled = false;
     container.appendChild(renderer.domElement);
 
@@ -167,7 +173,11 @@ export default function ThreePreview({ model, project, title, emptyLabel, closeL
 
     disposeGroup(preview.content);
     preview.content.clear();
-    preview.content.add(project ? createPatternPreviewGroup(project) : createPreviewGroup(model));
+    preview.content.add(project ? createPatternPreviewGroup(project) : createPreviewGroup(model, {
+      layer: previewLayer || maximumLayer,
+      singleLayer,
+      exploded,
+    }));
 
     const span = project
       ? Math.max(project.width, project.height, 8) * 0.72
@@ -179,7 +189,13 @@ export default function ThreePreview({ model, project, title, emptyLabel, closeL
       ? Math.max(0, (project.layers.filter((layer) => layer.visible).length - 1) * 0.31)
       : model.sizeMm.z / 2;
     updateCamera(preview, controlsRef.current);
-  }, [model, project, expanded]);
+  }, [model, project, expanded, previewLayer, maximumLayer, singleLayer, exploded]);
+
+  useEffect(() => {
+    setPreviewLayer(maximumLayer);
+    setSingleLayer(false);
+    setExploded(false);
+  }, [maximumLayer, model?.mode]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -221,6 +237,21 @@ export default function ThreePreview({ model, project, title, emptyLabel, closeL
           <div className="three-preview-modal-panel">
             <div className="three-preview-modal-bar">
               <strong>{title}</strong>
+              {maximumLayer > 0 && <div className="preview-layer-controls">
+                <label>
+                  <span>{language === 'zh' ? '预览层' : 'Preview layer'} {previewLayer}/{maximumLayer}</span>
+                  <input
+                    aria-label={language === 'zh' ? '预览层' : 'Preview layer'}
+                    type="range"
+                    min={1}
+                    max={maximumLayer}
+                    value={Math.min(maximumLayer, Math.max(1, previewLayer))}
+                    onChange={(event) => setPreviewLayer(Number(event.target.value))}
+                  />
+                </label>
+                <label><input type="checkbox" checked={singleLayer} onChange={(event) => setSingleLayer(event.target.checked)} /> {language === 'zh' ? '仅当前层' : 'Single layer'}</label>
+                <label><input type="checkbox" checked={exploded} onChange={(event) => setExploded(event.target.checked)} /> {language === 'zh' ? '爆炸视图' : 'Exploded'}</label>
+              </div>}
               <button onClick={() => dialogRef.current?.close()}>{closeLabel}</button>
             </div>
             <div className="three-preview-modal-stage" ref={modalHostRef}>
@@ -273,21 +304,29 @@ export function toBufferGeometry(part: { vertices: Float32Array; triangles: Uint
   return geometry;
 }
 
-export function createPreviewGroup(model: PrintableModel): THREE.Group {
+export function createPreviewGroup(
+  model: PrintableModel,
+  options: { layer?: number; singleLayer?: boolean; exploded?: boolean } = {},
+): THREE.Group {
   const group = new THREE.Group();
   group.rotation.x = -Math.PI / 2;
   group.position.set(-model.sizeMm.x / 2, 0, model.sizeMm.y / 2);
   for (const part of model.parts) {
     const color = model.materials.find((material) => material.id === part.materialId);
     if (!color) continue;
+    const materialIndex = model.materials.findIndex((material) => material.id === part.materialId);
+    const clippingPlanes = previewClippingPlanes(model, options.layer, options.singleLayer);
     const mesh = new THREE.Mesh(
       toBufferGeometry(part),
-      new THREE.MeshStandardMaterial({ color: color.hex, roughness: 0.72, metalness: 0 }),
+      new THREE.MeshStandardMaterial({ color: color.hex, roughness: 0.72, metalness: 0, clippingPlanes }),
     );
     mesh.name = part.name;
+    if (options.exploded) mesh.position.z = materialIndex * model.settings.cellPitchMm * 0.18;
     group.add(mesh);
   }
   for (const part of model.previewParts ?? []) {
+    const stopLevel = Number(/L(\d+)$/.exec(part.name)?.[1]);
+    if (options.layer && Number.isFinite(stopLevel) && stopLevel > options.layer) continue;
     const mesh = new THREE.Mesh(
       toBufferGeometry(part),
       new THREE.MeshStandardMaterial({ color: part.color, roughness: 0.72, metalness: 0 }),
@@ -340,6 +379,17 @@ export function createPatternPreviewGroup(project: BeadProject): THREE.Group {
   });
   if (byColor.size === 0) geometry.dispose();
   return group;
+}
+
+function previewClippingPlanes(model: PrintableModel, layer?: number, singleLayer?: boolean): THREE.Plane[] {
+  if (model.mode !== 'layered' || !model.recipe.layerHeightMm || !layer) return [];
+  const upper = model.recipe.baseThicknessMm + layer * model.recipe.layerHeightMm;
+  const result = [new THREE.Plane(new THREE.Vector3(0, -1, 0), upper)];
+  if (singleLayer) {
+    const lower = model.recipe.baseThicknessMm + (layer - 1) * model.recipe.layerHeightMm;
+    result.push(new THREE.Plane(new THREE.Vector3(0, 1, 0), -lower));
+  }
+  return result;
 }
 
 function createRoundBeadGeometry(radius: number, height: number): THREE.BufferGeometry {

@@ -3,7 +3,7 @@ import { STACK_LAYER_HEIGHT_MM } from './stacking';
 
 export type NumericPrintSetting = keyof Pick<
   PrintSettings,
-  'cellPitchMm' | 'baseThicknessMm' | 'beadHeightMm' | 'dimpleDiameterMm' | 'dimpleDepthMm'
+  'cellPitchMm' | 'baseThicknessMm' | 'beadHeightMm' | 'dimpleDiameterMm' | 'dimpleDepthMm' | 'borderWidthMm' | 'hangingHoleDiameterMm'
 >;
 
 export const PRINT_SETTING_LIMITS = {
@@ -12,6 +12,8 @@ export const PRINT_SETTING_LIMITS = {
   beadHeightMm: { min: 0.2, max: 4 },
   dimpleDiameterMm: { min: 0, max: 5 },
   dimpleDepthMm: { min: 0, max: 2 },
+  borderWidthMm: { min: 0, max: 5 },
+  hangingHoleDiameterMm: { min: 0, max: 12 },
 } as const;
 
 export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
@@ -22,6 +24,10 @@ export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
   dimpleDepthMm: 0.2,
   baseColorId: 'ams-1-1c1c1c',
   mode: 'solid',
+  borderWidthMm: 0,
+  separateBase: false,
+  hangingHoleDiameterMm: 0,
+  backText: '',
 };
 
 export function normalizePrintSetting(
