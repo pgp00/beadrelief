@@ -40,6 +40,11 @@ function parseModelSettings(settings) {
   });
 }
 
+function parseComponentObjectIds(modelXml) {
+  return [...modelXml.matchAll(/<component\b[^>]*\bobjectid="(\d+)"[^>]*\/>/g)]
+    .map(([, id]) => Number(id));
+}
+
 function decodeXml(value) {
   return value.replace(/&(amp|lt|gt|quot|apos);/g, (_, entity) => ({
     amp: '&',
@@ -50,11 +55,12 @@ function decodeXml(value) {
   })[entity]);
 }
 
-function expectedPartAssignments(model) {
+function expectedPartAssignments(model, componentObjectIds) {
+  assert.equal(componentObjectIds.length, model.parts.length);
   return model.parts.map((part, index) => {
     const materialIndex = model.materials.findIndex((material) => material.id === part.materialId);
     assert.notEqual(materialIndex, -1);
-    return { id: index + 1, name: part.name, extruder: materialIndex + 1 };
+    return { id: componentObjectIds[index], name: part.name, extruder: materialIndex + 1 };
   });
 }
 
@@ -78,10 +84,10 @@ test("3MF contains one assembly, named parts, and four or fewer base materials",
   assert.deepEqual(projectSettings.filament_colour, model.materials.map((material) => material.hex.toUpperCase()));
   assert.deepEqual(projectSettings.filament_type, model.materials.map(() => "PLA"));
   const modelSettings = decoder.decode(entries.get("Metadata/model_settings.config"));
-  assert.deepEqual(parseModelSettings(modelSettings), expectedPartAssignments(model));
   const relationships = decoder.decode(entries.get("_rels/.rels"));
   assert.match(relationships, /Target="\/3D\/3dmodel\.model"/);
   const xml = decoder.decode(entries.get("3D/3dmodel.model"));
+  assert.deepEqual(parseModelSettings(modelSettings), expectedPartAssignments(model, parseComponentObjectIds(xml)));
   assert.match(xml, /unit="millimeter"/);
   assert.match(xml, /name="Base"/);
   assert.match(xml, /name="Beads_Black"/);
@@ -112,6 +118,18 @@ test("3MF contains one assembly, named parts, and four or fewer base materials",
   assert.equal(new TextDecoder().decode(archive.slice(-22, -18)), "PK\u0005\u0006");
 });
 
+test("model settings part IDs match assembly component object IDs", () => {
+  const project = createProject(1, 1);
+  project.layers[0].cells = [project.amsColors[1].id];
+  const model = buildPrintableModel(composePrintableGrid(project));
+  const entries = readStoredEntries(createThreeMf(model));
+  const decoder = new TextDecoder();
+  const componentObjectIds = parseComponentObjectIds(decoder.decode(entries.get("3D/3dmodel.model")));
+  const partIds = parseModelSettings(decoder.decode(entries.get("Metadata/model_settings.config")))
+    .map(({ id }) => id);
+  assert.deepEqual(partIds, componentObjectIds);
+});
+
 test("project settings include exactly one 0.4 mm nozzle entry", () => {
   const project = createProject(1, 1);
   project.layers[0].cells = [project.amsColors[1].id];
@@ -131,9 +149,10 @@ test("default three-slot 3MF keeps White, Black, and Red assignments", () => {
   const projectSettings = JSON.parse(decoder.decode(entries.get("Metadata/project_settings.config")));
   assert.deepEqual(projectSettings.filament_colour, ["#F4F1E8", "#1C1C1C", "#ED2B2B"]);
   assert.deepEqual(projectSettings.filament_colour, fresh.amsColors.map((material) => material.hex.toUpperCase()));
+  const modelXml = decoder.decode(entries.get("3D/3dmodel.model"));
   assert.deepEqual(
     parseModelSettings(decoder.decode(entries.get("Metadata/model_settings.config"))),
-    expectedPartAssignments(model),
+    expectedPartAssignments(model, parseComponentObjectIds(modelXml)),
   );
 });
 
@@ -162,7 +181,7 @@ test("layered 3MF exports only physical material bands", async () => {
   const modelSettings = decoder.decode(entries.get("Metadata/model_settings.config"));
   assert.equal((xml.match(/<base /g) ?? []).length, 4);
   assert.equal((xml.match(/<component objectid=/g) ?? []).length, 4);
-  assert.deepEqual(parseModelSettings(modelSettings), expectedPartAssignments(model));
+  assert.deepEqual(parseModelSettings(modelSettings), expectedPartAssignments(model, parseComponentObjectIds(xml)));
   assert.doesNotMatch(xml, /Estimated_/);
   assert.match(xml, /Base_and_Beads_Bambu_PLA_Basic_Blue/);
   assert.match(xml, /Stack_Bambu_PLA_Basic_White/);

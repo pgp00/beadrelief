@@ -94,7 +94,7 @@ function modelSettingsXml(model: PrintableModel): string {
   const parts = model.parts.map((part, index) => {
     const materialIndex = model.materials.findIndex((material) => material.id === part.materialId);
     if (materialIndex < 0) throw new Error(`${part.name} references a missing material.`);
-    return `    <part id="${index + 1}" subtype="normal_part">
+    return `    <part id="${2 + index}" subtype="normal_part">
       <metadata key="name" value="${escapeXml(part.name)}"/>
       <metadata key="extruder" value="${materialIndex + 1}"/>
     </part>`;
