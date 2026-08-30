@@ -1,6 +1,6 @@
-import type { PrintableModel, PrintablePart } from './model';
-import { validatePrintableModel } from './validation';
-import { createDeflatedZip, createStoredZip, type ZipEntry } from './zip';
+import type { PrintableModel, PrintablePart } from './model.js';
+import { validatePrintableModel } from './validation.js';
+import { createDeflatedZip, createStoredZip, type ZipEntry } from './zip.js';
 
 const encoder = new TextEncoder();
 

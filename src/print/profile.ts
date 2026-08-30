@@ -1,7 +1,7 @@
-import { withMaterials } from '../project';
-import type { BeadProject, MaterialProfile } from '../types';
-import { normalizeHex } from './colors';
-import { buildStackPalette } from './stacking';
+import { withMaterials } from '../project.js';
+import type { BeadProject, MaterialProfile } from '../types.js';
+import { normalizeHex } from './colors.js';
+import { buildStackPalette, hasCompleteStackCalibration } from './stacking.js';
 
 export const MAX_PROFILE_FILE_BYTES = 1024 * 1024;
 
@@ -37,20 +37,8 @@ export function materialProfileFromProject(project: BeadProject): MaterialProfil
 }
 
 export function applyMaterialProfile(project: BeadProject, value: unknown): BeadProject {
-  const profile = parseMaterialProfile(value);
-  const remapped = withMaterials(project, profile.materials);
-  return {
-    ...remapped,
-    materialProfile: {
-      version: '1.0.0',
-      name: profile.name,
-      printer: profile.printer,
-      nozzleDiameterMm: profile.nozzleDiameterMm,
-      layerHeightMm: profile.layerHeightMm,
-      verified: profile.verified,
-      measuredColors: profile.measuredColors.map((color) => ({ ...color })),
-    },
-  };
+  const { materials, ...materialProfile } = parseMaterialProfile(value);
+  return { ...withMaterials(project, materials), materialProfile };
 }
 
 export function parseMaterialProfile(value: unknown): MaterialProfile {
@@ -75,8 +63,7 @@ export function parseMaterialProfile(value: unknown): MaterialProfile {
   });
   const measuredStops = new Set(measuredColors.map(({ stopLevel }) => stopLevel));
   if (measuredStops.size !== measuredColors.length) throw new Error('Invalid material profile.');
-  if (value.verified && materials.length >= 2
-    && Array.from({ length: materials.length * 4 - 3 }, (_, index) => index + 4).some((stop) => !measuredStops.has(stop))) {
+  if (value.verified && !hasCompleteStackCalibration(materials.length, measuredColors)) {
     throw new Error('A verified layered profile needs every calibration stop.');
   }
   return {

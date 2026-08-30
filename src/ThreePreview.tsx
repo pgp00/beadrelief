@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { getColor } from './palette';
-import type { PrintableModel } from './print/model';
-import type { BeadProject } from './types';
+import { getColor } from './palette.js';
+import type { PrintableModel } from './print/model.js';
+import type { BeadProject } from './types.js';
 
 const { useEffect, useRef, useState } = React;
 const PREVIEW_BACKGROUND = 0x242422;
@@ -324,7 +324,7 @@ export function createPreviewGroup(
     if (options.exploded) mesh.position.z = materialIndex * model.settings.cellPitchMm * 0.18;
     group.add(mesh);
   }
-  for (const part of model.previewParts ?? []) {
+  for (const part of model.previewParts) {
     const stopLevel = Number(/L(\d+)$/.exec(part.name)?.[1]);
     if (options.layer && Number.isFinite(stopLevel) && stopLevel > options.layer) continue;
     const mesh = new THREE.Mesh(

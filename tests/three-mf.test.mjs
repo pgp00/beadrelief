@@ -1,30 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { createProject } from "../generated/dist/src/project.js";
+import { createProject, withStackTemplate } from "../generated/dist/src/project.js";
 import { DEFAULT_AMS_COLORS } from "../generated/dist/src/print/colors.js";
 import { composePrintableGrid, buildPrintableModel, meshBounds } from "../generated/dist/src/print/model.js";
+import { buildStackPalette } from "../generated/dist/src/print/stacking.js";
 import { createThreeMf } from "../generated/dist/src/print/threeMf.js";
-
-function readStoredEntries(archive) {
-  const view = new DataView(archive.buffer, archive.byteOffset, archive.byteLength);
-  const decoder = new TextDecoder();
-  const entries = new Map();
-  let offset = 0;
-  while (view.getUint32(offset, true) === 0x04034b50) {
-    assert.equal(view.getUint16(offset + 8, true), 0);
-    const size = view.getUint32(offset + 18, true);
-    const nameLength = view.getUint16(offset + 26, true);
-    const extraLength = view.getUint16(offset + 28, true);
-    const nameStart = offset + 30;
-    const dataStart = nameStart + nameLength + extraLength;
-    const name = decoder.decode(archive.slice(nameStart, nameStart + nameLength));
-    entries.set(name, archive.slice(dataStart, dataStart + size));
-    offset = dataStart + size;
-  }
-  assert.equal(view.getUint32(offset, true), 0x02014b50);
-  return entries;
-}
+import { readZipEntries } from "./helpers/zip.mjs";
 
 function parseModelSettings(settings) {
   return [...settings.matchAll(/(<part\b[^>]*>)([\s\S]*?)<\/part>/g)].map(([, opening, body]) => {
@@ -71,7 +53,7 @@ test("3MF contains one assembly, named parts, and four or fewer base materials",
   const model = buildPrintableModel(composePrintableGrid(project));
   const archive = createThreeMf(model);
   assert.deepEqual(archive, createThreeMf(model));
-  const entries = readStoredEntries(archive);
+  const entries = readZipEntries(archive);
   const decoder = new TextDecoder();
   assert.deepEqual([...entries.keys()], [
     "[Content_Types].xml",
@@ -126,7 +108,7 @@ test("model settings part IDs match assembly component object IDs", () => {
   const project = createProject(1, 1);
   project.layers[0].cells = [project.amsColors[1].id];
   const model = buildPrintableModel(composePrintableGrid(project));
-  const entries = readStoredEntries(createThreeMf(model));
+  const entries = readZipEntries(createThreeMf(model));
   const decoder = new TextDecoder();
   const componentObjectIds = parseComponentObjectIds(decoder.decode(entries.get("3D/3dmodel.model")));
   const partIds = parseModelSettings(decoder.decode(entries.get("Metadata/model_settings.config")))
@@ -139,7 +121,7 @@ test("project settings include exactly one 0.4 mm nozzle entry", () => {
   project.layers[0].cells = [project.amsColors[1].id];
   const model = buildPrintableModel(composePrintableGrid(project));
   const settings = JSON.parse(new TextDecoder().decode(
-    readStoredEntries(createThreeMf(model)).get("Metadata/project_settings.config"),
+    readZipEntries(createThreeMf(model)).get("Metadata/project_settings.config"),
   ));
   assert.deepEqual(settings.nozzle_diameter, ["0.4"]);
   assert.equal(settings.layer_height, undefined);
@@ -150,7 +132,7 @@ test("default three-slot 3MF keeps White, Black, and Red assignments", () => {
   const fresh = createProject(1, 1);
   fresh.layers[0].cells = [fresh.amsColors[1].id];
   const model = buildPrintableModel(composePrintableGrid(fresh));
-  const entries = readStoredEntries(createThreeMf(model));
+  const entries = readZipEntries(createThreeMf(model));
   const decoder = new TextDecoder();
   const projectSettings = JSON.parse(decoder.decode(entries.get("Metadata/project_settings.config")));
   assert.deepEqual(projectSettings.filament_colour, ["#F4F1E8", "#1C1C1C", "#ED2B2B"]);
@@ -178,7 +160,7 @@ test("3MF nozzle metadata follows the project material profile", () => {
   const project = createProject(1, 1);
   project.materialProfile.nozzleDiameterMm = 0.6;
   const settings = JSON.parse(new TextDecoder().decode(
-    readStoredEntries(createThreeMf(buildPrintableModel(composePrintableGrid(project))))
+    readZipEntries(createThreeMf(buildPrintableModel(composePrintableGrid(project))))
       .get("Metadata/project_settings.config"),
   ));
   assert.deepEqual(settings.nozzle_diameter, ["0.6"]);
@@ -188,7 +170,7 @@ test("3MF escapes XML names and rejects illegal XML control characters", () => {
   const project = createProject(1, 1);
   project.amsColors[0].name = "A&B";
   let model = buildPrintableModel(composePrintableGrid(project));
-  const entries = readStoredEntries(createThreeMf(model));
+  const entries = readZipEntries(createThreeMf(model));
   assert.match(new TextDecoder().decode(entries.get("3D/3dmodel.model")), /A&amp;B/);
 
   project.amsColors[0].name = "bad\u0001name";
@@ -204,14 +186,12 @@ test("3MF rejects non-integer or non-finite grid dimensions", () => {
   }
 });
 
-test("layered 3MF exports only physical material bands", async () => {
-  const { withStackTemplate } = await import("../generated/dist/src/project.js");
-  const { buildStackPalette } = await import("../generated/dist/src/print/stacking.js");
+test("layered 3MF exports only physical material bands", () => {
   const project = withStackTemplate(createProject(4, 1), "rybw");
   const palette = buildStackPalette(project.amsColors);
   project.layers[0].cells = [palette[0].id, palette[4].id, palette[8].id, palette[12].id];
   const model = buildPrintableModel(composePrintableGrid(project));
-  const entries = readStoredEntries(createThreeMf(model));
+  const entries = readZipEntries(createThreeMf(model));
   const decoder = new TextDecoder();
   const xml = decoder.decode(entries.get("3D/3dmodel.model"));
   const modelSettings = decoder.decode(entries.get("Metadata/model_settings.config"));
@@ -260,7 +240,7 @@ test("committed samples include Bambu color and part-assignment metadata", async
     "samples/beadrelief-p2s-sample.3mf",
     "samples/beadrelief-p2s-layered-sample.3mf",
   ]) {
-    const entries = readStoredEntries(await readFile(filename));
+    const entries = readZipEntries(await readFile(filename));
     assert.ok(entries.has("Metadata/project_settings.config"), `${filename} is missing project settings`);
     assert.ok(entries.has("Metadata/model_settings.config"), `${filename} is missing model settings`);
   }

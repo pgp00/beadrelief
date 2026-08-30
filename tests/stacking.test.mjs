@@ -10,7 +10,7 @@ import {
 import { getColor } from "../generated/dist/src/palette.js";
 import { nearestPaletteColorOklab } from "../generated/dist/src/print/colors.js";
 import { composePrintableGrid } from "../generated/dist/src/print/model.js";
-import { createLayer, createProject, normalizeProject, withLayeredMaterials, withLayers, withPrintMode, withStackTemplate } from "../generated/dist/src/project.js";
+import { createLayer, createProject, normalizeProject, withLayers, withMaterials, withPrintMode, withStackTemplate } from "../generated/dist/src/project.js";
 import { summarizeLayeredUsage } from "../generated/dist/src/usage.js";
 
 test("one TD leaves five percent transmission", () => {
@@ -103,7 +103,7 @@ test("mode changes remap cells and layered TD changes preserve stop levels", () 
   layered.layers[0].cells = [palette[1].id, palette[12].id];
   const levels = layered.layers[0].cells.map((id) => parseStackColorId(id).stopLevel);
   const materials = layered.amsColors.map((color, index) => ({ ...color, tdMm: index === 1 ? 1.7 : color.tdMm }));
-  const recalibrated = withLayeredMaterials(layered, materials);
+  const recalibrated = withMaterials(layered, materials);
   assert.deepEqual(recalibrated.layers[0].cells.map((id) => parseStackColorId(id).stopLevel), levels);
   assert.ok(recalibrated.layers[0].cells.some((id, index) => id !== layered.layers[0].cells[index]));
   assert.ok(withPrintMode(recalibrated, "solid").layers[0].cells.every((id) => id?.startsWith("ams-")));

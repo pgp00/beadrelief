@@ -1,11 +1,11 @@
-import { getColor } from './palette';
-import { amsColorToPaletteColor } from './print/colors';
-import { composePrintableGrid } from './print/model';
-import { STACK_LAYERS_PER_FILAMENT } from './print/stacking';
-import type { BeadProject, FilamentLayerUsageRow, UsageRow } from './types';
+import { getColor } from './palette.js';
+import { amsColorToPaletteColor } from './print/colors.js';
+import { composePrintableGrid } from './print/model.js';
+import { STACK_LAYERS_PER_FILAMENT } from './print/stacking.js';
+import type { BeadProject, FilamentLayerUsageRow, UsageRow } from './types.js';
 
 export function summarizeUsage(project: BeadProject): UsageRow[] {
-  const usageLayers = (project.layers ?? []).filter((layer) => layer.includeInUsage);
+  const usageLayers = project.layers.filter((layer) => layer.includeInUsage);
   const amsColors = new Map(project.amsColors.map((color) => [color.id, amsColorToPaletteColor(color)]));
   const counts = new Map<string, number>();
   for (const layer of usageLayers) {
@@ -31,7 +31,7 @@ export function summarizeUsage(project: BeadProject): UsageRow[] {
 
 export function summarizeLayeredUsage(project: BeadProject): FilamentLayerUsageRow[] {
   const totals = project.amsColors.map(() => 0);
-  const layers = (project.layers ?? []).filter((layer) => layer.includeInUsage);
+  const layers = project.layers.filter((layer) => layer.includeInUsage);
   if (layers.length > 0) {
     const grid = composePrintableGrid({ ...project, layers: layers.map((layer) => ({ ...layer, visible: true })) });
     if (grid.mode === 'layered') {
@@ -50,7 +50,7 @@ export function summarizeLayeredUsage(project: BeadProject): FilamentLayerUsageR
 }
 
 export function findIsolatedBeads(project: BeadProject): Array<{ layerId: string; index: number }> {
-  const usageLayers = (project.layers ?? []).filter((layer) => layer.includeInUsage);
+  const usageLayers = project.layers.filter((layer) => layer.includeInUsage);
   const isolated: Array<{ layerId: string; index: number }> = [];
   for (const layer of usageLayers) {
     const cells = layer.cells;

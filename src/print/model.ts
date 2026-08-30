@@ -1,7 +1,7 @@
-import { getColor } from '../palette';
-import { DEFAULT_MATERIAL_PROFILE, composeVisibleCells } from '../project';
-import type { AmsColor, BeadProject, PrintMode, PrintSettings } from '../types';
-import { amsColorToPaletteColor, nearestPaletteColorOklab } from './colors';
+import { getColor } from '../palette.js';
+import { composeVisibleCells } from '../project.js';
+import type { AmsColor, BeadProject, PrintMode, PrintSettings } from '../types.js';
+import { amsColorToPaletteColor, nearestPaletteColorOklab } from './colors.js';
 import {
   appendFusedBead,
   appendFusedBeadBase,
@@ -11,7 +11,7 @@ import {
   appendRing,
   createBaseMesh,
   type MutableMesh,
-} from './geometry';
+} from './geometry.js';
 import {
   buildStackPalette,
   applyMeasuredStackColors,
@@ -19,9 +19,8 @@ import {
   STACK_LAYER_HEIGHT_MM,
   STACK_LAYERS_PER_FILAMENT,
   type StackPaletteColor,
-} from './stacking';
-import { buildGridPrintRecipe, type PrintRecipe } from './recipe';
-import { DEFAULT_PRINT_SETTINGS } from './settings';
+} from './stacking.js';
+import { buildGridPrintRecipe, type PrintRecipe } from './recipe.js';
 
 export type PrintablePart = {
   name: string;
@@ -82,8 +81,8 @@ export type PrintableModel = {
 };
 
 export function composePrintableGrid(project: BeadProject): PrintableGrid {
-  const materialProfile = project.materialProfile ?? DEFAULT_MATERIAL_PROFILE;
-  const printSettings = { ...DEFAULT_PRINT_SETTINGS, ...project.printSettings };
+  const materialProfile = project.materialProfile;
+  const printSettings = project.printSettings;
   if (printSettings.mode === 'layered') {
     const stackPalette = applyMeasuredStackColors(buildStackPalette(project.amsColors), materialProfile.measuredColors);
     const inputErrors: string[] = [];

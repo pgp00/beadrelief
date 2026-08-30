@@ -1,5 +1,5 @@
-import type { AmsColor, MeasuredStackColor, PaletteColor } from '../types';
-import { makeAmsColorId, normalizeHex } from './colors';
+import type { AmsColor, MeasuredStackColor, PaletteColor } from '../types.js';
+import { hexToRgb, makeAmsColorId, normalizeHex } from './colors.js';
 
 export const STACK_LAYER_HEIGHT_MM = 0.08;
 export const STACK_LAYERS_PER_FILAMENT = 4;
@@ -80,6 +80,15 @@ export function applyMeasuredStackColors(palette: StackPaletteColor[], measured:
   });
 }
 
+export function hasCompleteStackCalibration(materialCount: number, measured: MeasuredStackColor[]): boolean {
+  if (materialCount < 2) return true;
+  const stops = new Set(measured.map(({ stopLevel }) => stopLevel));
+  return Array.from(
+    { length: materialCount * STACK_LAYERS_PER_FILAMENT - (STACK_LAYERS_PER_FILAMENT - 1) },
+    (_, index) => index + STACK_LAYERS_PER_FILAMENT,
+  ).every((stopLevel) => stops.has(stopLevel));
+}
+
 function toPaletteColor(stopLevel: number, materialIndex: number, name: string, hex: string): StackPaletteColor {
   return {
     id: makeStackColorId(stopLevel, hex),
@@ -93,11 +102,6 @@ function toPaletteColor(stopLevel: number, materialIndex: number, name: string, 
     stopLevel,
     materialIndex,
   };
-}
-
-function hexToRgb(hex: string): [number, number, number] {
-  const value = Number.parseInt(normalizeHex(hex).slice(1), 16);
-  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
 }
 
 function rgbToHex(rgb: [number, number, number]): string {

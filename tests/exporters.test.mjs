@@ -6,31 +6,13 @@ import { buildPrintableModel, composePrintableGrid } from "../generated/dist/src
 import { createThreeMf } from "../generated/dist/src/print/threeMf.js";
 import { downloadPrintPdf, downloadPrintPng, downloadUsageWorkbook } from "../generated/dist/src/exporters.js";
 import { summarizeLayeredUsage, summarizeUsage } from "../generated/dist/src/usage.js";
+import { readZipEntries } from "./helpers/zip.mjs";
 
 const decoder = new TextDecoder();
 const pngBytes = Uint8Array.from(Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
   "base64",
 ));
-
-function readStoredEntries(archive) {
-  const view = new DataView(archive.buffer, archive.byteOffset, archive.byteLength);
-  const entries = new Map();
-  let offset = 0;
-  while (view.getUint32(offset, true) === 0x04034b50) {
-    assert.equal(view.getUint16(offset + 8, true), 0);
-    const size = view.getUint32(offset + 18, true);
-    const nameLength = view.getUint16(offset + 26, true);
-    const extraLength = view.getUint16(offset + 28, true);
-    const nameStart = offset + 30;
-    const dataStart = nameStart + nameLength + extraLength;
-    const name = decoder.decode(archive.slice(nameStart, nameStart + nameLength));
-    entries.set(name, archive.slice(dataStart, dataStart + size));
-    offset = dataStart + size;
-  }
-  assert.equal(view.getUint32(offset, true), 0x02014b50);
-  return entries;
-}
 
 function noopContext() {
   const noop = () => {};
@@ -46,6 +28,7 @@ function noopContext() {
     moveTo: noop,
     lineTo: noop,
     quadraticCurveTo: noop,
+    roundRect: noop,
     fill: noop,
     stroke: noop,
   };
@@ -121,7 +104,7 @@ test("custom AMS names agree across usage, XLSX, and 3MF while sheet names remai
 
   assert.equal(summarizeUsage(project)[0].color.name, "Studio & Cyan");
   downloadUsageWorkbook(project);
-  const workbook = readStoredEntries(await downloadedBytes(downloads[0]));
+  const workbook = readZipEntries(await downloadedBytes(downloads[0]));
   assert.deepEqual([...workbook.keys()], [
     "[Content_Types].xml",
     "_rels/.rels",
@@ -141,7 +124,7 @@ test("custom AMS names agree across usage, XLSX, and 3MF while sheet names remai
   assert.ok(sheetNames.every((name) => !name.startsWith("'") && !name.endsWith("'") && name.toLowerCase() !== "history"));
   assert.match(decoder.decode(workbook.get("xl/worksheets/sheet1.xml")), /Studio &amp; Cyan/);
 
-  const modelXml = decoder.decode(readStoredEntries(createThreeMf(buildPrintableModel(composePrintableGrid(project)))).get("3D/3dmodel.model"));
+  const modelXml = decoder.decode(readZipEntries(createThreeMf(buildPrintableModel(composePrintableGrid(project)))).get("3D/3dmodel.model"));
   assert.match(modelXml, /name="Studio &amp; Cyan"/);
 });
 
@@ -156,7 +139,7 @@ test("Layered XLSX reports AMS order and layer cells without bead-pack estimates
 
   assert.deepEqual(summarizeLayeredUsage(project).map((row) => row.layerCells), [8, 8, 4, 0]);
   downloadUsageWorkbook(project);
-  const workbook = readStoredEntries(await downloadedBytes(downloads[0]));
+  const workbook = readZipEntries(await downloadedBytes(downloads[0]));
   const sheet = decoder.decode(workbook.get("xl/worksheets/sheet1.xml"));
   assert.match(sheet, />AMS</);
   assert.match(sheet, />\u987a\u5e8f</);
@@ -169,7 +152,7 @@ test("Layered XLSX reports AMS order and layer cells without bead-pack estimates
   assert.doesNotMatch(sheet, /\u9884\u8ba1\u5305\u6570|\u6bcf\u5305\u6570\u91cf|\u603b\u9897\u6570/);
 
   downloadUsageWorkbook(project, false);
-  const patternWorkbook = readStoredEntries(await downloadedBytes(downloads[1]));
+  const patternWorkbook = readZipEntries(await downloadedBytes(downloads[1]));
   const patternSheet = decoder.decode(patternWorkbook.get("xl/worksheets/sheet1.xml"));
   assert.match(patternSheet, /\u603b\u9897\u6570/);
   assert.doesNotMatch(patternSheet, />Layer cells</);

@@ -1,4 +1,4 @@
-import type { AmsColor, BeadProject, PaletteColor } from '../types';
+import type { AmsColor, PaletteColor } from '../types.js';
 
 export const DEFAULT_AMS_COLORS: AmsColor[] = [
   { id: 'ams-1-f4f1e8', name: 'White', hex: '#f4f1e8', tdMm: 1 },
@@ -20,15 +20,18 @@ export function makeAmsColorId(slot: number, hex: string): string {
   return `ams-${slot}-${normalizeHex(hex).slice(1)}`;
 }
 
+export function hexToRgb(hex: string): [number, number, number] {
+  const value = Number.parseInt(normalizeHex(hex).slice(1), 16);
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+}
+
 export function amsColorToPaletteColor(color: AmsColor): PaletteColor {
   const hex = normalizeHex(color.hex);
-  const value = Number.parseInt(hex.slice(1), 16);
-  const rgb: [number, number, number] = [(value >> 16) & 255, (value >> 8) & 255, value & 255];
   return {
     id: color.id,
     name: color.name,
     hex,
-    rgb,
+    rgb: hexToRgb(hex),
     primaryBrand: 'MARD',
     primaryCode: color.name,
     codes: { MARD: color.name },
@@ -66,8 +69,7 @@ export function oklabDistance(a: [number, number, number], b: [number, number, n
 
 export function nearestPaletteColorOklab(hex: string, palette: PaletteColor[]): PaletteColor {
   if (!palette.length) throw new Error('At least one AMS color is required');
-  const value = Number.parseInt(normalizeHex(hex).slice(1), 16);
-  const rgb: [number, number, number] = [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+  const rgb = hexToRgb(hex);
   return palette.reduce(
     (best, color) => {
       const distance = oklabDistance(rgb, color.rgb);
@@ -75,19 +77,4 @@ export function nearestPaletteColorOklab(hex: string, palette: PaletteColor[]): 
     },
     { color: palette[0], distance: Number.POSITIVE_INFINITY },
   ).color;
-}
-
-export function replaceProjectColor(project: BeadProject, from: string, to: string): BeadProject {
-  return {
-    ...project,
-    cells: project.cells.map((cell) => (cell === from ? to : cell)),
-    layers: project.layers.map((layer) => ({
-      ...layer,
-      cells: layer.cells.map((cell) => (cell === from ? to : cell)),
-    })),
-    printSettings: {
-      ...project.printSettings,
-      baseColorId: project.printSettings.baseColorId === from ? to : project.printSettings.baseColorId,
-    },
-  };
 }

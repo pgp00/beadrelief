@@ -56,7 +56,6 @@ export type BeadLayer = {
 export type BoardSettings = {
   boardWidth: number;
   boardHeight: number;
-  showBoardIds: boolean;
 };
 
 export type PrintMode = 'solid' | 'layered';

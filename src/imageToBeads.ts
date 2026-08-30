@@ -1,5 +1,5 @@
-import { colorDistance, nearestPaletteColor, palette } from './palette';
-import type { ConvertOptions, ConvertResult, GenerationStyle, ImageCrop, PaletteColor } from './types';
+import { colorDistance, nearestPaletteColor, palette } from './palette.js';
+import type { ConvertOptions, ConvertResult, GenerationStyle, ImageCrop, PaletteColor } from './types.js';
 
 type StyleProfile = {
   sampleSide: number;

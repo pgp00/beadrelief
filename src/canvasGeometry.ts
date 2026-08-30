@@ -1,4 +1,4 @@
-import type { ArrowKind } from "./types";
+import type { ArrowKind } from "./types.js";
 
 export function linePoints(x0: number, y0: number, x1: number, y1: number): Array<{ x: number; y: number }> {
   const points: Array<{ x: number; y: number }> = [];

@@ -1,7 +1,4 @@
-const fs = require('fs');
-const path = require('path');
-
-const html = `<!doctype html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -29,6 +26,3 @@ const html = `<!doctype html>
     <script type="module" src="./src/main.js"></script>
   </body>
 </html>
-`;
-
-fs.writeFileSync(path.join(process.cwd(), 'generated', 'dist', 'index.html'), html);

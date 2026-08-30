@@ -234,8 +234,7 @@
   },
   "boardSettings": {
     "boardWidth": 52,
-    "boardHeight": 52,
-    "showBoardIds": true
+    "boardHeight": 52
   },
   "amsColors": [
     {

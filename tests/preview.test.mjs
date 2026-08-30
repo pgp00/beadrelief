@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createProject } from "../generated/dist/src/project.js";
+import { createProject, withStackTemplate } from "../generated/dist/src/project.js";
 import { composePrintableGrid, buildPrintableModel } from "../generated/dist/src/print/model.js";
+import { buildStackPalette } from "../generated/dist/src/print/stacking.js";
 
 globalThis.React = {
   useEffect() {},
@@ -28,9 +29,7 @@ test("3D preview meshes reuse the exact printable vertices, indices, and colors"
   });
 });
 
-test("layered preview adds estimated top colors without replacing print bands", async () => {
-  const { withStackTemplate } = await import("../generated/dist/src/project.js");
-  const { buildStackPalette } = await import("../generated/dist/src/print/stacking.js");
+test("layered preview adds estimated top colors without replacing print bands", () => {
   const project = withStackTemplate(createProject(2, 1), "rybw");
   const palette = buildStackPalette(project.amsColors);
   project.layers[0].cells = [palette[0].id, palette[12].id];

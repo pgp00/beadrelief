@@ -1,30 +1,12 @@
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, statSync } from 'node:fs';
-import { inflateRawSync } from 'node:zlib';
 import test from 'node:test';
 import { MAX_IMAGE_FILE_BYTES, planImageConversion, validateImageFileSize } from '../generated/dist/src/imageToBeads.js';
 import { buildPrintableModel, composePrintableGrid } from '../generated/dist/src/print/model.js';
 import { buildStackPalette } from '../generated/dist/src/print/stacking.js';
 import { createCompressedThreeMf } from '../generated/dist/src/print/threeMf.js';
 import { createProject, withStackTemplate } from '../generated/dist/src/project.js';
-
-function readZipEntries(archive) {
-  const entries = new Map();
-  const view = new DataView(archive.buffer, archive.byteOffset, archive.byteLength);
-  for (let offset = 0; offset + 30 <= archive.length && view.getUint32(offset, true) === 0x04034b50;) {
-    const method = view.getUint16(offset + 8, true);
-    const size = view.getUint32(offset + 18, true);
-    const nameLength = view.getUint16(offset + 26, true);
-    const extraLength = view.getUint16(offset + 28, true);
-    const nameStart = offset + 30;
-    const dataStart = nameStart + nameLength + extraLength;
-    const name = new TextDecoder().decode(archive.subarray(nameStart, nameStart + nameLength));
-    const payload = archive.subarray(dataStart, dataStart + size);
-    entries.set(name, method === 8 ? inflateRawSync(payload) : payload);
-    offset = dataStart + size;
-  }
-  return entries;
-}
+import { readZipEntries } from './helpers/zip.mjs';
 
 test('native raw-DEFLATE keeps a full 32x32 Layered 3MF below 10 MB', async () => {
   const project = withStackTemplate(createProject(32, 32, 'Layered performance'), 'rybw');

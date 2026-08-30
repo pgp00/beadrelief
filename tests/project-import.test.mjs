@@ -39,6 +39,7 @@ test("project import normalizes malformed print settings to safe values", () => 
 
 test("project import rejects unsafe dimensions, layer counts, and file sizes", () => {
   const project = createProject(1, 1);
+  assert.equal(isSafeProjectImport({ ...project, width: 1.5 }, 100), false);
   assert.equal(isSafeProjectImport({ ...project, width: 181, height: 10 }, 100), false);
   assert.equal(isSafeProjectImport({
     ...project,

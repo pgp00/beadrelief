@@ -1,24 +1,24 @@
-﻿import WorkspaceCanvas from './WorkspaceCanvas';
-import ThreePreview from './ThreePreview';
-import PrintSettingsPanel from './PrintSettingsPanel';
-import { downloadMaterialProfile, downloadPrintPdf, downloadPrintPng, downloadProjectJson, downloadUsageWorkbook } from './exporters';
-import type { PrintExportOptions } from './exporters';
-import { imageFileToBeads } from './imageToBeads';
-import { adjustLayerCells, applyEffectToLayer, defaultAdjustments, hasAdjustments, limitLayerColors, mergeCloseLayerColors, mergeIsolatedLayerColors } from './imageAdjustments';
-import type { AdjustmentSettings, LayerEffect } from './imageAdjustments';
-import { languageKey, resolveLanguage, ui } from './i18n';
-import type { Language } from './i18n';
-import { amsColorToPaletteColor } from './print/colors';
-import { buildPrintableModel, composePrintableGrid } from './print/model';
-import { applyMeasuredStackColors, buildStackPalette } from './print/stacking';
-import { buildPrintRecipe } from './print/recipe';
-import { applyMaterialProfile, calibrationProject, MAX_PROFILE_FILE_BYTES } from './print/profile';
-import { downloadThreeMf } from './print/threeMf';
-import { validatePrintableModel } from './print/validation';
-import { basicPalette, completePalette, getColor } from './palette';
-import { MAX_PROJECT_DIMENSION, MAX_PROJECT_FILE_BYTES, MAX_PROJECT_LAYERS, composeVisibleCells, createLayer, createProject, hasEditableWork, isSafeProjectImport, loadDraft, normalizeProject, projectGridChanged, saveDraft, withCells, withLayers } from './project';
-import { findIsolatedBeads, summarizeLayeredUsage, summarizeUsage } from './usage';
-import type { ArrowKind, BackgroundMode, BeadProject, ClipboardPattern, ConvertResult, CopyMode, CropAspect, GenerationStyle, MirrorDirection, MoveMode, RemoveMode, RightClickAction, ShapeFillMode, ShapeKind, TextDirection, ToolId } from './types';
+﻿import WorkspaceCanvas from './WorkspaceCanvas.js';
+import ThreePreview from './ThreePreview.js';
+import PrintSettingsPanel from './PrintSettingsPanel.js';
+import { downloadMaterialProfile, downloadPrintPdf, downloadPrintPng, downloadProjectJson, downloadUsageWorkbook } from './exporters.js';
+import type { PrintExportOptions } from './exporters.js';
+import { imageFileToBeads } from './imageToBeads.js';
+import { adjustLayerCells, applyEffectToLayer, defaultAdjustments, hasAdjustments, limitLayerColors, mergeCloseLayerColors, mergeIsolatedLayerColors } from './imageAdjustments.js';
+import type { AdjustmentSettings, LayerEffect } from './imageAdjustments.js';
+import { languageKey, resolveLanguage, ui } from './i18n.js';
+import type { Language } from './i18n.js';
+import { amsColorToPaletteColor } from './print/colors.js';
+import { buildPrintableModel, composePrintableGrid } from './print/model.js';
+import { applyMeasuredStackColors, buildStackPalette, hasCompleteStackCalibration } from './print/stacking.js';
+import { buildPrintRecipe } from './print/recipe.js';
+import { applyMaterialProfile, calibrationProject, MAX_PROFILE_FILE_BYTES } from './print/profile.js';
+import { downloadThreeMf } from './print/threeMf.js';
+import { validatePrintableModel } from './print/validation.js';
+import { basicPalette, completePalette, getColor } from './palette.js';
+import { MAX_PROJECT_DIMENSION, MAX_PROJECT_FILE_BYTES, MAX_PROJECT_LAYERS, composeVisibleCells, createLayer, createProject, hasEditableWork, isSafeProjectImport, loadDraft, normalizeProject, projectGridChanged, saveDraft, withCells, withLayers } from './project.js';
+import { findIsolatedBeads, summarizeLayeredUsage, summarizeUsage } from './usage.js';
+import type { ArrowKind, BackgroundMode, BeadProject, ClipboardPattern, ConvertResult, CopyMode, CropAspect, GenerationStyle, MirrorDirection, MoveMode, RemoveMode, RightClickAction, ShapeFillMode, ShapeKind, TextDirection, ToolId } from './types.js';
 
 const { useEffect, useMemo, useRef, useState } = React;
 
@@ -123,22 +123,22 @@ export function projectForDisplay(project: BeadProject): BeadProject {
   };
 }
 
-export { projectGridChanged } from './project';
+export { projectGridChanged } from './project.js';
 
-const tools: Array<{ id: ToolId }> = [
-  { id: 'pencil' },
-  { id: 'eraser' },
-  { id: 'fill' },
-  { id: 'remove' },
-  { id: 'recolor' },
-  { id: 'eyedropper' },
-  { id: 'move' },
-  { id: 'copy' },
-  { id: 'paste' },
-  { id: 'mirror' },
-  { id: 'shape' },
-  { id: 'text' },
-  { id: 'pan' },
+const tools: ToolId[] = [
+  'pencil',
+  'eraser',
+  'fill',
+  'remove',
+  'recolor',
+  'eyedropper',
+  'move',
+  'copy',
+  'paste',
+  'mirror',
+  'shape',
+  'text',
+  'pan',
 ];
 
 const sizePresets = [
@@ -231,15 +231,7 @@ export default function App() {
     showGuideLines: true,
     authorName: '',
   });
-  const [showPencilOptions, setShowPencilOptions] = useState(false);
-  const [showEraserOptions, setShowEraserOptions] = useState(false);
-  const [showRemoveOptions, setShowRemoveOptions] = useState(false);
-  const [showMoveOptions, setShowMoveOptions] = useState(false);
-  const [showMirrorOptions, setShowMirrorOptions] = useState(false);
-  const [showShapeOptions, setShowShapeOptions] = useState(false);
-  const [showTextOptions, setShowTextOptions] = useState(false);
-  const [showClipboardOptions, setShowClipboardOptions] = useState(false);
-  const [showPanOptions, setShowPanOptions] = useState(false);
+  const [openToolOptions, setOpenToolOptions] = useState<ToolId | null>(null);
   const [clipboardPattern, setClipboardPattern] = useState<ClipboardPattern | null>(null);
   const [copyMode, setCopyMode] = useState<CopyMode>('connected');
   const [copySelectionIndices, setCopySelectionIndices] = useState<number[]>([]);
@@ -255,14 +247,8 @@ export default function App() {
   const [referencePlacement, setReferencePlacement] = useState<ReferencePlacement>('below');
   const [canvasWidth, setCanvasWidth] = useState(project.width);
   const [canvasHeight, setCanvasHeight] = useState(project.height);
-  const [convertWidth, setConvertWidth] = useState(defaultImportSettings.width);
-  const [generationStyle, setGenerationStyle] = useState<GenerationStyle>(defaultImportSettings.generationStyle);
-  const [backgroundMode, setBackgroundMode] = useState<BackgroundMode>(defaultImportSettings.backgroundMode);
-  const [tolerance, setTolerance] = useState(defaultImportSettings.tolerance);
-  const [cropAspect, setCropAspect] = useState<CropAspect>(defaultImportSettings.cropAspect);
-  const [cropZoom, setCropZoom] = useState(defaultImportSettings.cropZoom);
-  const [cropOffsetX, setCropOffsetX] = useState(defaultImportSettings.cropOffsetX);
-  const [cropOffsetY, setCropOffsetY] = useState(defaultImportSettings.cropOffsetY);
+  const [importSettings, setImportSettings] = useState(defaultImportSettings);
+  const { width: convertWidth, generationStyle, backgroundMode, tolerance, speckleReduction, cropAspect, cropZoom, cropOffsetX, cropOffsetY } = importSettings;
   const [autoGenerationRestartToken, setAutoGenerationRestartToken] = useState(0);
   const [manualEditsSinceGeneration, setManualEditsSinceGeneration] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -311,8 +297,8 @@ export default function App() {
     () => project.amsColors.length >= 2 ? buildStackPalette(project.amsColors) : [],
     [project.amsColors],
   );
-  const calibrationComplete = calibrationPalette.length > 0 && calibrationPalette.every((color) =>
-    project.materialProfile.measuredColors.some((measured) => measured.stopLevel === color.stopLevel));
+  const calibrationComplete = project.amsColors.length >= 2
+    && hasCompleteStackCalibration(project.amsColors.length, project.materialProfile.measuredColors);
   const activePalette = outputMode === 'pattern'
     ? paletteMode === 'basic' ? basicPalette : completePalette
     : project.printSettings.mode === 'layered' ? stackPalette : solidPalette;
@@ -507,7 +493,7 @@ export default function App() {
       void generateFromImageRef.current({ recordHistory: shouldCommit, automatic: true });
     }, 420);
     return () => window.clearTimeout(timer);
-  }, [pendingFile, convertWidth, generationStyle, backgroundMode, tolerance, cropAspect, cropZoom, cropOffsetX, cropOffsetY, autoGenerationKey, autoGenerationRestartToken, manualEditsSinceGeneration]);
+  }, [pendingFile, importSettings, autoGenerationKey, autoGenerationRestartToken, manualEditsSinceGeneration]);
 
   function commitHistory() {
     setPast((items) => [...items.slice(-39), projectRef.current]);
@@ -541,6 +527,11 @@ export default function App() {
     setIsGenerating(true);
   }
 
+  function updateImportSetting<K extends keyof typeof defaultImportSettings>(key: K, value: (typeof defaultImportSettings)[K]) {
+    markGenerationPending();
+    setImportSettings((current) => ({ ...current, [key]: value }));
+  }
+
   function blockExportWhileGenerating(): boolean {
     if (!generationBlocksExport(isGenerating, autoGenerationPendingRef.current)) return false;
     setNotice(language === 'zh' ? '图案更新完成后才能导出。' : 'Wait for the pattern update before exporting.');
@@ -559,7 +550,9 @@ export default function App() {
   function selectOutputMode(next: OutputMode) {
     if (next === outputMode) return;
     setOutputMode(next);
-    if (next === 'three-d') setConvertWidth((current) => Math.min(current, MAX_PRINT_WORKSPACE_DIMENSION));
+    if (next === 'three-d') {
+      setImportSettings((current) => ({ ...current, width: Math.min(current.width, MAX_PRINT_WORKSPACE_DIMENSION) }));
+    }
     setShowPrintExportPanel(false);
     setNotice(next === 'pattern'
       ? (language === 'zh' ? '拼豆图纸模式：使用完整 MARD 色板。' : 'Bead pattern mode: using the full MARD palette.')
@@ -573,17 +566,14 @@ export default function App() {
   }
 
   function activateTool(nextTool: ToolId) {
-    const closingTextOptions = nextTool === 'text' && tool === 'text' && showTextOptions;
     setTool(nextTool);
-    setShowPencilOptions(nextTool === 'pencil');
-    setShowEraserOptions(nextTool === 'eraser');
-    setShowRemoveOptions(nextTool === 'remove');
-    setShowMoveOptions(nextTool === 'move');
-    setShowMirrorOptions(nextTool === 'mirror');
-    setShowShapeOptions(nextTool === 'shape');
-    setShowTextOptions(nextTool === 'text' && !closingTextOptions);
-    setShowClipboardOptions(nextTool === 'copy' || nextTool === 'paste');
-    setShowPanOptions(nextTool === 'pan');
+    setOpenToolOptions(
+      nextTool === 'text' && tool === 'text' && openToolOptions === 'text'
+        ? null
+        : nextTool === 'fill' || nextTool === 'recolor' || nextTool === 'eyedropper'
+          ? null
+          : nextTool,
+    );
   }
 
   function updateCells(cells: Array<string | null>) {
@@ -598,14 +588,7 @@ export default function App() {
   }
 
   function resetImportSettings() {
-    setConvertWidth(defaultImportSettings.width);
-    setGenerationStyle(defaultImportSettings.generationStyle);
-    setBackgroundMode(defaultImportSettings.backgroundMode);
-    setTolerance(defaultImportSettings.tolerance);
-    setCropAspect(defaultImportSettings.cropAspect);
-    setCropZoom(defaultImportSettings.cropZoom);
-    setCropOffsetX(defaultImportSettings.cropOffsetX);
-    setCropOffsetY(defaultImportSettings.cropOffsetY);
+    setImportSettings(defaultImportSettings);
   }
 
   function resetReferenceTransform() {
@@ -620,15 +603,7 @@ export default function App() {
     setRecentColorIds(colorIds.slice(0, 2));
     setPaletteGroup('all');
     setTool('pencil');
-    setShowPencilOptions(false);
-    setShowEraserOptions(false);
-    setShowRemoveOptions(false);
-    setShowMoveOptions(false);
-    setShowMirrorOptions(false);
-    setShowShapeOptions(false);
-    setShowTextOptions(false);
-    setShowClipboardOptions(false);
-    setShowPanOptions(false);
+    setOpenToolOptions(null);
     setClipboardPattern(null);
     setCopySelectionIndices([]);
     setShowPrintExportPanel(false);
@@ -670,34 +645,32 @@ export default function App() {
     updateProject(withLayers(project, layers.map((layer) => (layer.id === activeLayer.id ? { ...layer, cells: adjustedCells } : layer))));
   }
 
+  function applyActiveLayerResult(result: { cells: Array<string | null>; changed: number }, message: string) {
+    if (result.changed > 0) {
+      commitHistory();
+      updateProject(withLayers(project, layers.map((layer) => (
+        layer.id === activeLayer.id ? { ...layer, cells: result.cells } : layer
+      ))));
+    }
+    setNotice(message);
+  }
+
   function applyColorCleanup() {
     if (!ensureActiveLayerEditable()) return;
-    const { cells, changed } = mergeCloseLayerColors(activeLayer.cells, activePalette, colorCleanupStrength);
-    if (changed > 0) {
-      commitHistory();
-      updateProject(withLayers(project, layers.map((layer) => (layer.id === activeLayer.id ? { ...layer, cells } : layer))));
-    }
-    setNotice(text.layerColorsCleaned(changed));
+    const result = mergeCloseLayerColors(activeLayer.cells, activePalette, colorCleanupStrength);
+    applyActiveLayerResult(result, text.layerColorsCleaned(result.changed));
   }
 
   function applyLayerColorLimit() {
     if (!ensureActiveLayerEditable()) return;
-    const { cells, changed } = limitLayerColors(activeLayer.cells, activePalette, layerColorLimit);
-    if (changed > 0) {
-      commitHistory();
-      updateProject(withLayers(project, layers.map((layer) => (layer.id === activeLayer.id ? { ...layer, cells } : layer))));
-    }
-    setNotice(text.layerColorsLimited(changed, layerColorLimit));
+    const result = limitLayerColors(activeLayer.cells, activePalette, layerColorLimit);
+    applyActiveLayerResult(result, text.layerColorsLimited(result.changed, layerColorLimit));
   }
 
   function applyLayerEffect(effect: LayerEffect, label: string) {
     if (!ensureActiveLayerEditable()) return;
-    const { cells, changed } = applyEffectToLayer(activeLayer.cells, activePalette, effect);
-    if (changed > 0) {
-      commitHistory();
-      updateProject(withLayers(project, layers.map((layer) => (layer.id === activeLayer.id ? { ...layer, cells } : layer))));
-    }
-    setNotice(text.effectApplied(label, changed));
+    const result = applyEffectToLayer(activeLayer.cells, activePalette, effect);
+    applyActiveLayerResult(result, text.effectApplied(label, result.changed));
   }
 
   function replaceColor(sourceColorId: string) {
@@ -764,12 +737,8 @@ export default function App() {
 
   function applyIsolatedColorCleanup() {
     if (!ensureActiveLayerEditable()) return;
-    const { cells, changed } = mergeIsolatedLayerColors(activeLayer.cells, project.width, project.height);
-    if (changed > 0) {
-      commitHistory();
-      updateProject(withLayers(project, layers.map((layer) => (layer.id === activeLayer.id ? { ...layer, cells } : layer))));
-    }
-    setNotice(text.isolatedColorsCleaned(changed));
+    const result = mergeIsolatedLayerColors(activeLayer.cells, project.width, project.height);
+    applyActiveLayerResult(result, text.isolatedColorsCleaned(result.changed));
   }
 
   function clearCanvas() {
@@ -840,10 +809,7 @@ export default function App() {
     if (!allowProjectReplacement()) return;
     const sampleSettings = imageLaunchState(false, project).sampleSettings;
     const file = await loadHeartSample(fetch, text.sampleLoadError);
-    setConvertWidth(sampleSettings.width);
-    setGenerationStyle(sampleSettings.generationStyle);
-    setBackgroundMode(sampleSettings.backgroundMode);
-    setTolerance(sampleSettings.tolerance);
+    setImportSettings((current) => ({ ...current, ...sampleSettings }));
     handleImageFile(file, { replacementConfirmed: true });
   }
 
@@ -877,7 +843,7 @@ export default function App() {
         backgroundMode,
         backgroundColor: [255, 255, 255],
         tolerance,
-        speckleReduction: defaultImportSettings.speckleReduction,
+        speckleReduction,
         crop: { aspect: cropAspect, zoom: cropZoom, offsetX: cropOffsetX, offsetY: cropOffsetY },
       });
       if (requestId !== generationRequestRef.current) return;
@@ -982,10 +948,10 @@ export default function App() {
     const suffix = language === 'zh' ? '复制' : 'copy ';
     const existingNames = new Set(layers.map((layer, index) => layerDisplayName(layer, index)));
     for (let index = 1; index < 1000; index += 1) {
-      const candidate = language === 'zh' ? `${baseName}-${suffix}${index}` : `${baseName}-${suffix}${index}`;
+      const candidate = `${baseName}-${suffix}${index}`;
       if (!existingNames.has(candidate)) return candidate;
     }
-    return language === 'zh' ? `${baseName}-${suffix}${Date.now()}` : `${baseName}-${suffix}${Date.now()}`;
+    return `${baseName}-${suffix}${Date.now()}`;
   }
 
   function updateLayer(layerId: string, changes: Partial<BeadProject['layers'][number]>) {
@@ -1105,7 +1071,7 @@ export default function App() {
     setBeadsPerPack(Math.max(step, next));
   }
 
-  const layers = project.layers?.length ? project.layers : createProject(project.width, project.height).layers;
+  const layers = project.layers;
   const activeLayer = layers.find((layer) => layer.id === project.activeLayerId) ?? layers[0];
   const canEditActiveLayer = canEditLayer(activeLayer);
   const isolatedColorCount = useMemo(
@@ -1170,16 +1136,24 @@ export default function App() {
     setNotice(language === 'zh' ? '校准色阶 3MF 已下载。' : 'Calibration swatch 3MF downloaded.');
   }
 
+  function patchMaterialProfile(changes: Partial<BeadProject['materialProfile']>, resetCalibration = false) {
+    updateProject({
+      ...project,
+      materialProfile: {
+        ...project.materialProfile,
+        ...changes,
+        ...(resetCalibration ? { verified: false, measuredColors: [] } : {}),
+      },
+    }, 'settings');
+  }
+
   function setMeasuredStackColor(stopLevel: number, hex: string) {
     commitHistory();
     const measuredColors = project.materialProfile.measuredColors
       .filter((color) => color.stopLevel !== stopLevel)
       .concat({ stopLevel, hex })
       .sort((left, right) => left.stopLevel - right.stopLevel);
-    updateProject({
-      ...project,
-      materialProfile: { ...project.materialProfile, verified: false, measuredColors },
-    }, 'settings');
+    patchMaterialProfile({ verified: false, measuredColors });
   }
   const shapeLabel = {
     line: text.shapeLine,
@@ -1506,10 +1480,7 @@ export default function App() {
                 {text.width}
                 <span className="help-dot image-help-dot" {...imageHelpProps(text.heightFromRatio)}>?</span>
               </span>
-              <input aria-label="Output long side" type="number" min={8} max={outputMode === 'pattern' ? MAX_PROJECT_DIMENSION : MAX_PRINT_WORKSPACE_DIMENSION} value={convertWidth} onChange={(event) => {
-                markGenerationPending();
-                setConvertWidth(Number(event.target.value));
-              }} />
+              <input aria-label="Output long side" type="number" min={8} max={outputMode === 'pattern' ? MAX_PROJECT_DIMENSION : MAX_PRINT_WORKSPACE_DIMENSION} value={convertWidth} onChange={(event) => updateImportSetting('width', Number(event.target.value))} />
             </label>
             {outputMode === 'pattern' && <label className="image-range-field">
               <span>
@@ -1532,10 +1503,7 @@ export default function App() {
                 </span>
                 <strong>{tolerance}</strong>
               </span>
-              <input aria-label="Background tolerance" type="range" min={0} max={120} step={1} value={tolerance} onChange={(event) => {
-                markGenerationPending();
-                setTolerance(Number(event.target.value));
-              }} />
+              <input aria-label="Background tolerance" type="range" min={0} max={120} step={1} value={tolerance} onChange={(event) => updateImportSetting('tolerance', Number(event.target.value))} />
             </label>}
           </div>
 
@@ -1544,10 +1512,7 @@ export default function App() {
             <select
               aria-label="Generation style"
               value={generationStyle}
-              onChange={(event) => {
-                markGenerationPending();
-                setGenerationStyle(event.target.value as GenerationStyle);
-              }}
+              onChange={(event) => updateImportSetting('generationStyle', event.target.value as GenerationStyle)}
             >
               <option value="pixel">{text.generationStylePixel}</option>
               <option value="cartoon">{text.generationStyleCartoon}</option>
@@ -1559,10 +1524,7 @@ export default function App() {
             <summary>{text.cropImage}</summary>
             <label className="stacked-field">
               <span>{text.cropAspect}</span>
-              <select aria-label="Crop aspect" value={cropAspect} onChange={(event) => {
-                markGenerationPending();
-                setCropAspect(event.target.value as CropAspect);
-              }}>
+              <select aria-label="Crop aspect" value={cropAspect} onChange={(event) => updateImportSetting('cropAspect', event.target.value as CropAspect)}>
                 <option value="original">{text.cropOriginal}</option>
                 <option value="square">{text.cropSquare}</option>
                 <option value="portrait">{text.cropPortrait}</option>
@@ -1571,35 +1533,23 @@ export default function App() {
             </label>
             <label className="image-range-field">
               <span><span>{text.cropZoom}</span><strong>{cropZoom.toFixed(1)}×</strong></span>
-              <input aria-label="Crop zoom" type="range" min={1} max={3} step={0.1} value={cropZoom} onChange={(event) => {
-                markGenerationPending();
-                setCropZoom(Number(event.target.value));
-              }} />
+              <input aria-label="Crop zoom" type="range" min={1} max={3} step={0.1} value={cropZoom} onChange={(event) => updateImportSetting('cropZoom', Number(event.target.value))} />
             </label>
             <div className="image-field-grid">
               <label className="image-range-field">
                 <span><span>{text.cropHorizontal}</span><strong>{Math.round(cropOffsetX * 100)}</strong></span>
-                <input aria-label="Crop horizontal position" type="range" min={-1} max={1} step={0.05} value={cropOffsetX} onChange={(event) => {
-                  markGenerationPending();
-                  setCropOffsetX(Number(event.target.value));
-                }} />
+                <input aria-label="Crop horizontal position" type="range" min={-1} max={1} step={0.05} value={cropOffsetX} onChange={(event) => updateImportSetting('cropOffsetX', Number(event.target.value))} />
               </label>
               <label className="image-range-field">
                 <span><span>{text.cropVertical}</span><strong>{Math.round(cropOffsetY * 100)}</strong></span>
-                <input aria-label="Crop vertical position" type="range" min={-1} max={1} step={0.05} value={cropOffsetY} onChange={(event) => {
-                  markGenerationPending();
-                  setCropOffsetY(Number(event.target.value));
-                }} />
+                <input aria-label="Crop vertical position" type="range" min={-1} max={1} step={0.05} value={cropOffsetY} onChange={(event) => updateImportSetting('cropOffsetY', Number(event.target.value))} />
               </label>
             </div>
           </details>}
 
           <label className="stacked-field image-background-field">
             <span>{text.background}</span>
-            <select aria-label="Background handling" value={backgroundMode} onChange={(event) => {
-              markGenerationPending();
-              setBackgroundMode(event.target.value as BackgroundMode);
-            }}>
+            <select aria-label="Background handling" value={backgroundMode} onChange={(event) => updateImportSetting('backgroundMode', event.target.value as BackgroundMode)}>
               <option value="keep">{text.keepBackground}</option>
               <option value="remove-white">{text.removeWhite}</option>
             </select>
@@ -1620,41 +1570,29 @@ export default function App() {
           </div>
           <label className="stacked-field">
             <span>{text.profileName}</span>
-            <input value={project.materialProfile.name} maxLength={80} onFocus={commitHistory} onChange={(event) => updateProject({
-              ...project,
-              materialProfile: { ...project.materialProfile, name: event.target.value },
-            }, 'settings')} />
+            <input value={project.materialProfile.name} maxLength={80} onFocus={commitHistory} onChange={(event) => patchMaterialProfile({ name: event.target.value })} />
           </label>
           <label className="stacked-field">
             <span>{text.printer}</span>
-            <input value={project.materialProfile.printer} maxLength={80} onFocus={commitHistory} onChange={(event) => updateProject({
-              ...project,
-              materialProfile: { ...project.materialProfile, printer: event.target.value, verified: false, measuredColors: [] },
-            }, 'settings')} />
+            <input value={project.materialProfile.printer} maxLength={80} onFocus={commitHistory} onChange={(event) => patchMaterialProfile({ printer: event.target.value }, true)} />
           </label>
           <div className="image-field-grid">
             <label className="stacked-field">
               <span>{text.nozzle}</span>
-              <select value={project.materialProfile.nozzleDiameterMm} onFocus={commitHistory} onChange={(event) => updateProject({
-                ...project,
-                materialProfile: { ...project.materialProfile, nozzleDiameterMm: Number(event.target.value) as 0.2 | 0.4 | 0.6 | 0.8, verified: false, measuredColors: [] },
-              }, 'settings')}>
+              <select value={project.materialProfile.nozzleDiameterMm} onFocus={commitHistory} onChange={(event) => patchMaterialProfile({ nozzleDiameterMm: Number(event.target.value) as 0.2 | 0.4 | 0.6 | 0.8 }, true)}>
                 {[0.2, 0.4, 0.6, 0.8].map((value) => <option key={value} value={value}>{value} mm</option>)}
               </select>
             </label>
             <label className="stacked-field">
               <span>{text.profileLayerHeight}</span>
-              <input type="number" min={0.04} max={0.4} step={0.01} value={project.materialProfile.layerHeightMm} onFocus={commitHistory} onChange={(event) => updateProject({
-                ...project,
-                materialProfile: { ...project.materialProfile, layerHeightMm: Number(event.target.value), verified: false, measuredColors: [] },
-              }, 'settings')} />
+              <input type="number" min={0.04} max={0.4} step={0.01} value={project.materialProfile.layerHeightMm} onFocus={commitHistory} onChange={(event) => patchMaterialProfile({ layerHeightMm: Number(event.target.value) }, true)} />
             </label>
           </div>
           <label className="switch-row">
             <span>{text.physicallyVerified}</span>
             <input type="checkbox" checked={project.materialProfile.verified} disabled={!project.materialProfile.verified && !calibrationComplete} onChange={(event) => {
               commitHistory();
-              updateProject({ ...project, materialProfile: { ...project.materialProfile, verified: event.target.checked } }, 'settings');
+              patchMaterialProfile({ verified: event.target.checked });
             }} />
           </label>
           {project.amsColors.length >= 2 && <details className="calibration-panel">
@@ -1670,10 +1608,7 @@ export default function App() {
             </button>
             {project.materialProfile.measuredColors.length > 0 && <button type="button" onClick={() => {
               commitHistory();
-              updateProject({
-                ...project,
-                materialProfile: { ...project.materialProfile, verified: false, measuredColors: [] },
-              }, 'settings');
+              patchMaterialProfile({}, true);
             }}>
               {language === 'zh' ? '清除实测色' : 'Clear measured colors'}
             </button>}
@@ -1804,26 +1739,26 @@ export default function App() {
       </aside>
 
       <aside className="tool-rail">
-        {tools.map((item) => (
+        {tools.map((toolId) => (
           <button
-            key={item.id}
-            className={tool === item.id ? 'tool-button active' : 'tool-button'}
-            aria-label={text.tools[item.id].title}
-            aria-pressed={tool === item.id}
+            key={toolId}
+            className={tool === toolId ? 'tool-button active' : 'tool-button'}
+            aria-label={text.tools[toolId].title}
+            aria-pressed={tool === toolId}
             type="button"
             onPointerDown={(event) => {
               if (event.pointerType === 'mouse') return;
               event.preventDefault();
-              activateTool(item.id);
+              activateTool(toolId);
             }}
-            onClick={() => activateTool(item.id)}
+            onClick={() => activateTool(toolId)}
           >
-            <ToolIcon tool={item.id} />
-            <span>{text.tools[item.id].title}</span>
+            <ToolIcon tool={toolId} />
+            <span>{text.tools[toolId].title}</span>
           </button>
         ))}
-        {tool === 'pencil' && showPencilOptions && (
-          <div className="tool-options pencil-options" onMouseLeave={() => setShowPencilOptions(false)}>
+        {tool === 'pencil' && openToolOptions === 'pencil' && (
+          <div className="tool-options pencil-options" onMouseLeave={() => setOpenToolOptions(null)}>
             <div className="right-click-toggle compact" aria-label={text.rightClick}>
               <span className="field-label-with-help">
                 {text.rightClick}
@@ -1850,8 +1785,8 @@ export default function App() {
             </div>
           </div>
         )}
-        {tool === 'eraser' && showEraserOptions && (
-          <div className="tool-options eraser-options" onMouseLeave={() => setShowEraserOptions(false)}>
+        {tool === 'eraser' && openToolOptions === 'eraser' && (
+          <div className="tool-options eraser-options" onMouseLeave={() => setOpenToolOptions(null)}>
             <div className="tool-options-header">
               <span>{text.eraserSize}</span>
               <strong>{text.brushCells(eraserSize)}</strong>
@@ -1874,8 +1809,8 @@ export default function App() {
             />
           </div>
         )}
-        {tool === 'remove' && showRemoveOptions && (
-          <div className="tool-options remove-options" onMouseLeave={() => setShowRemoveOptions(false)}>
+        {tool === 'remove' && openToolOptions === 'remove' && (
+          <div className="tool-options remove-options" onMouseLeave={() => setOpenToolOptions(null)}>
             <div className="right-click-toggle compact remove-scope-toggle" aria-label={text.removeScope}>
               <span>{text.removeScope}</span>
               <div>
@@ -1898,8 +1833,8 @@ export default function App() {
             </div>
           </div>
         )}
-        {tool === 'move' && showMoveOptions && (
-          <div className="tool-options move-options" onMouseLeave={() => setShowMoveOptions(false)}>
+        {tool === 'move' && openToolOptions === 'move' && (
+          <div className="tool-options move-options" onMouseLeave={() => setOpenToolOptions(null)}>
             <div className="right-click-toggle compact" aria-label={text.moveScope}>
               <span>{text.moveScope}</span>
               <div>
@@ -1918,10 +1853,10 @@ export default function App() {
             </div>
           </div>
         )}
-        {(tool === 'copy' || tool === 'paste') && showClipboardOptions && (
+        {(tool === 'copy' || tool === 'paste') && openToolOptions === tool && (
           <div
             className={`tool-options clipboard-options ${tool === 'copy' ? 'copy-options' : 'paste-options'}`}
-            onMouseLeave={() => setShowClipboardOptions(false)}
+            onMouseLeave={() => setOpenToolOptions(null)}
           >
             {tool === 'copy' && (
               <div className="right-click-toggle compact clipboard-mode-toggle" aria-label={text.copyScope}>
@@ -1970,8 +1905,8 @@ export default function App() {
             )}
           </div>
         )}
-        {tool === 'mirror' && showMirrorOptions && (
-          <div className="tool-options mirror-options" onMouseLeave={() => setShowMirrorOptions(false)}>
+        {tool === 'mirror' && openToolOptions === 'mirror' && (
+          <div className="tool-options mirror-options" onMouseLeave={() => setOpenToolOptions(null)}>
             <div className="right-click-toggle compact" aria-label={text.moveScope}>
               <span>{text.moveScope}</span>
               <div>
@@ -2006,8 +1941,8 @@ export default function App() {
             </div>
           </div>
         )}
-        {tool === 'shape' && showShapeOptions && (
-          <div className="tool-options shape-options" onMouseLeave={() => setShowShapeOptions(false)}>
+        {tool === 'shape' && openToolOptions === 'shape' && (
+          <div className="tool-options shape-options" onMouseLeave={() => setOpenToolOptions(null)}>
             <div className="right-click-toggle compact" aria-label={text.shapeStyle}>
               <span>{text.shapeStyle}</span>
               <div>
@@ -2063,7 +1998,7 @@ export default function App() {
             )}
           </div>
         )}
-        {tool === 'text' && showTextOptions && (
+        {tool === 'text' && openToolOptions === 'text' && (
           <div className="tool-options text-options">
             <label className="text-tool-field">
               <span className="text-field-title">
@@ -2073,7 +2008,7 @@ export default function App() {
                   type="button"
                   aria-label={text.close}
                   title={text.close}
-                  onClick={() => setShowTextOptions(false)}
+                  onClick={() => setOpenToolOptions(null)}
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M7 7l10 10" />
@@ -2153,8 +2088,8 @@ export default function App() {
             />
           </div>
         )}
-        {tool === 'pan' && showPanOptions && (
-          <div className="tool-options pan-options" onMouseLeave={() => setShowPanOptions(false)}>
+        {tool === 'pan' && openToolOptions === 'pan' && (
+          <div className="tool-options pan-options" onMouseLeave={() => setOpenToolOptions(null)}>
             <div className="tool-options-header">
               <strong>{text.tools.pan.title}</strong>
             </div>
@@ -2196,15 +2131,7 @@ export default function App() {
         onReferenceOffsetChange={setReferenceOffset}
         onReferenceScaleChange={setReferenceScale}
         onCommitStart={() => {
-          setShowPencilOptions(false);
-          setShowEraserOptions(false);
-          setShowRemoveOptions(false);
-          setShowMoveOptions(false);
-          setShowMirrorOptions(false);
-          setShowShapeOptions(false);
-          setShowTextOptions(tool === 'text');
-          setShowClipboardOptions(false);
-          setShowPanOptions(false);
+          setOpenToolOptions(tool === 'text' ? 'text' : null);
           commitHistory();
         }}
         onCellsChange={updateCells}
@@ -2216,15 +2143,7 @@ export default function App() {
           const beads = pattern.cells.filter(Boolean).length;
           setClipboardPattern(pattern);
           if (switchToPaste) setTool('paste');
-          setShowPencilOptions(false);
-          setShowEraserOptions(false);
-          setShowRemoveOptions(false);
-          setShowMoveOptions(false);
-          setShowMirrorOptions(false);
-          setShowShapeOptions(false);
-          setShowTextOptions(false);
-          setShowClipboardOptions(false);
-          setShowPanOptions(false);
+          setOpenToolOptions(null);
           setNotice(text.copiedPattern(pattern.width, pattern.height, beads));
         }}
         onCopySelectionChange={(indices, pattern) => {
@@ -2236,15 +2155,7 @@ export default function App() {
         onPickColor={(colorId) => {
           selectColor(colorId);
           setTool('pencil');
-          setShowPencilOptions(false);
-          setShowEraserOptions(false);
-          setShowRemoveOptions(false);
-          setShowMoveOptions(false);
-          setShowMirrorOptions(false);
-          setShowShapeOptions(false);
-          setShowTextOptions(false);
-          setShowClipboardOptions(false);
-          setShowPanOptions(false);
+          setOpenToolOptions(null);
           setNotice(language === 'zh' ? '已从画布拾取颜色。' : 'Color picked from canvas.');
         }}
         onHover={setHoverCell}

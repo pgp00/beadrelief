@@ -1,6 +1,6 @@
-import type { BrandId, PaletteColor } from './types';
-import { oklabDistance, paletteColorFromAmsId } from './print/colors';
-import { paletteColorFromStackId } from './print/stacking';
+import type { BrandId, PaletteColor } from './types.js';
+import { hexToRgb, oklabDistance, paletteColorFromAmsId } from './print/colors.js';
+import { paletteColorFromStackId } from './print/stacking.js';
 
 const rawColorsCsv = `
 A1,#FAF4C8
@@ -300,10 +300,6 @@ ZG8,#AB91C0
 `;
 
 
-export const brandLabels: Record<BrandId, string> = {
-  MARD: 'MARD',
-};
-
 export const paletteVersion = 'mard-291-v1';
 
 function parseRawColors(csv: string): Array<{ code: string; hex: string }> {
@@ -341,12 +337,6 @@ function makePalette(colors: Array<{ code: string; hex: string }>): PaletteColor
 export const basicPalette: PaletteColor[] = makePalette(rawColors);
 export const completePalette: PaletteColor[] = makePalette(rawCompleteColors);
 export const palette: PaletteColor[] = basicPalette;
-
-export function hexToRgb(hex: string): [number, number, number] {
-  const normalized = hex.replace('#', '');
-  const value = Number.parseInt(normalized, 16);
-  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
-}
 
 export function getColor(id: string | null): PaletteColor | undefined {
   if (!id) return undefined;

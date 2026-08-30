@@ -1,15 +1,9 @@
-import { DEFAULT_AMS_COLORS, makeAmsColorId, replaceProjectColor } from './print/colors';
-import type { PrintableModel } from './print/model';
-import { PRINT_SETTING_LIMITS, normalizeLayeredBaseThickness, normalizePrintSetting, type NumericPrintSetting } from './print/settings';
-import { STACK_LAYER_HEIGHT_MM, type StackTemplateId } from './print/stacking';
-import { withLayeredMaterials, withPrintMode, withStackTemplate } from './project';
-import type { BeadProject, PrintMode, PrintSettings } from './types';
-
-function invalidateCalibration(project: BeadProject): BeadProject {
-  return project.materialProfile.verified || project.materialProfile.measuredColors.length
-    ? { ...project, materialProfile: { ...project.materialProfile, verified: false, measuredColors: [] } }
-    : project;
-}
+import { DEFAULT_AMS_COLORS, makeAmsColorId } from './print/colors.js';
+import type { PrintableModel } from './print/model.js';
+import { PRINT_SETTING_LIMITS, normalizeLayeredBaseThickness, normalizePrintSetting, type NumericPrintSetting } from './print/settings.js';
+import { STACK_LAYER_HEIGHT_MM, type StackTemplateId } from './print/stacking.js';
+import { withMaterials, withPrintMode, withStackTemplate } from './project.js';
+import type { BeadProject, PrintMode, PrintSettings } from './types.js';
 
 type Props = {
   project: BeadProject;
@@ -54,16 +48,9 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
   }
 
   function updateColor(index: number, change: { name?: string; hex?: string; tdMm?: number }) {
-    const previous = project.amsColors[index];
-    const color = { ...previous, ...change };
+    const color = { ...project.amsColors[index], ...change };
     color.id = makeAmsColorId(index + 1, color.hex);
-    if (project.printSettings.mode === 'layered') {
-      onChange(withLayeredMaterials(project, project.amsColors.map((item, itemIndex) => itemIndex === index ? color : item)));
-      return;
-    }
-    const renamed = color.id === previous.id ? project : replaceProjectColor(project, previous.id, color.id);
-    const updated = { ...renamed, amsColors: renamed.amsColors.map((item, itemIndex) => itemIndex === index ? color : item) };
-    onChange(color.hex !== previous.hex || color.tdMm !== previous.tdMm ? invalidateCalibration(updated) : updated);
+    onChange(withMaterials(project, project.amsColors.map((item, itemIndex) => itemIndex === index ? color : item)));
   }
 
   function addColor() {
@@ -71,22 +58,14 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
     if (!fallback) return;
     const materials = [...project.amsColors, { ...fallback }];
     onCommit();
-    onChange(project.printSettings.mode === 'layered'
-      ? withLayeredMaterials(project, materials)
-      : invalidateCalibration({ ...project, amsColors: materials }));
+    onChange(withMaterials(project, materials));
   }
 
   function removeLastColor() {
     const minimum = project.printSettings.mode === 'layered' ? 2 : 1;
     if (project.amsColors.length <= minimum) return;
-    const removed = project.amsColors[project.amsColors.length - 1];
     onCommit();
-    if (project.printSettings.mode === 'layered') {
-      onChange(withLayeredMaterials(project, project.amsColors.slice(0, -1)));
-      return;
-    }
-    const remapped = replaceProjectColor(project, removed.id, project.amsColors[0].id);
-    onChange(invalidateCalibration({ ...remapped, amsColors: remapped.amsColors.slice(0, -1) }));
+    onChange(withMaterials(project, project.amsColors.slice(0, -1)));
   }
 
   function updateNumber(key: NumericPrintSetting, value: number) {

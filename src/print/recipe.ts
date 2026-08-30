@@ -1,7 +1,7 @@
-import { composeVisibleCells } from '../project';
-import type { BeadProject } from '../types';
-import type { PrintableGrid } from './model';
-import { buildStackPalette, parseStackColorId, STACK_LAYER_HEIGHT_MM, STACK_LAYERS_PER_FILAMENT } from './stacking';
+import { composeVisibleCells } from '../project.js';
+import type { BeadProject } from '../types.js';
+import type { PrintableGrid } from './model.js';
+import { buildStackPalette, parseStackColorId, STACK_LAYER_HEIGHT_MM, STACK_LAYERS_PER_FILAMENT } from './stacking.js';
 
 export type PrintRecipe = {
   mode: 'solid' | 'layered';

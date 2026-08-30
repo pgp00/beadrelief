@@ -1,5 +1,5 @@
-import type { PrintSettings } from '../types';
-import { STACK_LAYER_HEIGHT_MM } from './stacking';
+import type { PrintSettings } from '../types.js';
+import { STACK_LAYER_HEIGHT_MM } from './stacking.js';
 
 export type NumericPrintSetting = keyof Pick<
   PrintSettings,

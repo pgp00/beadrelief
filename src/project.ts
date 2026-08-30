@@ -1,8 +1,8 @@
-import { getColor, paletteVersion } from './palette';
-import { DEFAULT_ACTIVE_AMS_COLORS, DEFAULT_AMS_COLORS, amsColorToPaletteColor, makeAmsColorId, nearestPaletteColorOklab, normalizeHex } from './print/colors';
-import { DEFAULT_PRINT_SETTINGS, PRINT_SETTING_LIMITS, normalizeLayeredBaseThickness, normalizePrintSetting, type NumericPrintSetting } from './print/settings';
-import { STACK_LAYERS_PER_FILAMENT, STACK_TEMPLATES, buildStackPalette, parseStackColorId, type StackTemplateId } from './print/stacking';
-import type { AmsColor, BeadLayer, BeadProject, MaterialProfileMeta, PaletteColor, PrintMode } from './types';
+import { getColor, paletteVersion } from './palette.js';
+import { DEFAULT_ACTIVE_AMS_COLORS, DEFAULT_AMS_COLORS, amsColorToPaletteColor, makeAmsColorId, nearestPaletteColorOklab, normalizeHex } from './print/colors.js';
+import { DEFAULT_PRINT_SETTINGS, PRINT_SETTING_LIMITS, normalizeLayeredBaseThickness, normalizePrintSetting, type NumericPrintSetting } from './print/settings.js';
+import { STACK_LAYERS_PER_FILAMENT, STACK_TEMPLATES, buildStackPalette, hasCompleteStackCalibration, parseStackColorId, type StackTemplateId } from './print/stacking.js';
+import type { AmsColor, BeadLayer, BeadProject, MaterialProfileMeta, PaletteColor, PrintMode } from './types.js';
 
 export const autosaveKey = 'perler-beads-generator:draft';
 export const MAX_PROJECT_DIMENSION = 180;
@@ -57,7 +57,6 @@ export function createProject(width = 32, height = 32, name = 'Untitled Pattern'
     boardSettings: {
       boardWidth: 52,
       boardHeight: 52,
-      showBoardIds: true,
     },
     amsColors: DEFAULT_ACTIVE_AMS_COLORS.map((color) => ({ ...color })),
     materialProfile: { ...DEFAULT_MATERIAL_PROFILE, measuredColors: [] },
@@ -122,31 +121,22 @@ export function composeVisibleCells(layers: BeadLayer[], width: number, height: 
 }
 
 export function withPrintMode(project: BeadProject, mode: PrintMode): BeadProject {
-  if (mode === 'layered' && project.amsColors.length < 2) throw new Error('Layered mode needs two to four filaments.');
-  const palette = mode === 'layered'
-    ? buildStackPalette(project.amsColors)
-    : project.amsColors.map(amsColorToPaletteColor);
-  return remapPrintCells(project, project.amsColors, mode, palette);
+  return withMaterials(project, project.amsColors, mode);
 }
 
-export function withLayeredMaterials(project: BeadProject, materials: AmsColor[]): BeadProject {
-  const nextMaterials = materials.map((material) => ({ ...material }));
-  return remapPrintCells(project, nextMaterials, 'layered', buildStackPalette(nextMaterials));
-}
-
-export function withMaterials(project: BeadProject, materials: AmsColor[]): BeadProject {
-  if (materials.length < 1 || materials.length > 4 || (project.printSettings.mode === 'layered' && materials.length < 2)) {
+export function withMaterials(project: BeadProject, materials: AmsColor[], mode = project.printSettings.mode): BeadProject {
+  if (materials.length < 1 || materials.length > 4 || (mode === 'layered' && materials.length < 2)) {
     throw new Error('A material profile needs one to four filaments; Layered mode needs at least two.');
   }
   const nextMaterials = materials.map((material) => ({ ...material }));
-  const palette = project.printSettings.mode === 'layered'
+  const palette = mode === 'layered'
     ? buildStackPalette(nextMaterials)
     : nextMaterials.map(amsColorToPaletteColor);
-  return remapPrintCells(project, nextMaterials, project.printSettings.mode, palette);
+  return remapPrintCells(project, nextMaterials, mode, palette);
 }
 
 export function withStackTemplate(project: BeadProject, id: StackTemplateId): BeadProject {
-  return withLayeredMaterials(project, STACK_TEMPLATES[id].map((material) => ({ ...material })));
+  return withMaterials(project, STACK_TEMPLATES[id], 'layered');
 }
 
 function remapPrintCells(
@@ -155,6 +145,9 @@ function remapPrintCells(
   mode: PrintMode,
   palette: PaletteColor[],
 ): BeadProject {
+  const solidSlotIds = mode === 'solid' && project.printSettings.mode === 'solid'
+    ? new Map(project.amsColors.map((material, index) => [material.id, materials[index]?.id ?? materials[0].id]))
+    : null;
   const calibrationChanged = materials.length !== project.amsColors.length || materials.some((material, index) => {
     const previous = project.amsColors[index];
     return !previous || material.hex.toLowerCase() !== previous.hex.toLowerCase() || material.tdMm !== previous.tdMm;
@@ -165,6 +158,8 @@ function remapPrintCells(
   }));
   const remap = (id: string | null): string | null => {
     if (!id) return null;
+    const slotId = solidSlotIds?.get(id);
+    if (slotId) return slotId;
     const parsed = parseStackColorId(id);
     if (mode === 'layered' && parsed) {
       return byLevel.get(Math.min(parsed.stopLevel, materials.length * STACK_LAYERS_PER_FILAMENT)) ?? palette[0].id;
@@ -184,7 +179,7 @@ function remapPrintCells(
     printSettings: {
       ...project.printSettings,
       mode,
-      baseColorId: materials[0].id,
+      baseColorId: solidSlotIds?.get(project.printSettings.baseColorId) ?? materials[0].id,
     },
     layers,
     cells: composeVisibleCells(layers, project.width, project.height),
@@ -239,7 +234,6 @@ export function normalizeProject(project: unknown): BeadProject {
   const boardSettings: BeadProject['boardSettings'] = {
     boardWidth: safeIntegerInRange(importedBoardSettings.boardWidth, fallback.boardSettings.boardWidth, 1, 1000),
     boardHeight: safeIntegerInRange(importedBoardSettings.boardHeight, fallback.boardSettings.boardHeight, 1, 1000),
-    showBoardIds: booleanOr(importedBoardSettings.showBoardIds, fallback.boardSettings.showBoardIds),
   };
   const materialProfile = normalizeMaterialProfileMeta(source.materialProfile, amsColors.length);
   const layers = normalizeLayers(source, width, height).map((layer) => ({
@@ -319,9 +313,7 @@ function normalizeMaterialProfileMeta(value: unknown, materialCount = 1): Materi
   const measuredColors = [...new Map(normalizedMeasuredColors
     .filter(({ stopLevel }) => stopLevel <= materialCount * 4)
     .map((color) => [color.stopLevel, color])).values()];
-  const measuredStops = new Set(measuredColors.map(({ stopLevel }) => stopLevel));
-  const calibrationComplete = materialCount < 2
-    || Array.from({ length: materialCount * 4 - 3 }, (_, index) => index + 4).every((stop) => measuredStops.has(stop));
+  const calibrationComplete = hasCompleteStackCalibration(materialCount, measuredColors);
   return {
     version: '1.0.0',
     name: typeof value.name === 'string' && value.name.trim() ? value.name.trim().slice(0, 80) : DEFAULT_MATERIAL_PROFILE.name,
@@ -440,8 +432,7 @@ function isSafeProjectSettings(value: unknown): boolean {
 function isSafeBoardSettings(value: unknown): boolean {
   if (!isRecord(value)) return false;
   return (value.boardWidth === undefined || isSafeIntegerInRange(value.boardWidth, 1, 1000))
-    && (value.boardHeight === undefined || isSafeIntegerInRange(value.boardHeight, 1, 1000))
-    && (value.showBoardIds === undefined || typeof value.showBoardIds === 'boolean');
+    && (value.boardHeight === undefined || isSafeIntegerInRange(value.boardHeight, 1, 1000));
 }
 
 function isSafePrintSettings(value: unknown): boolean {

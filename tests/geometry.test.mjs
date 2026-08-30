@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createProject } from "../generated/dist/src/project.js";
+import { createProject, withStackTemplate } from "../generated/dist/src/project.js";
 import { composePrintableGrid, buildPrintableModel, meshBounds } from "../generated/dist/src/print/model.js";
+import { buildStackPalette } from "../generated/dist/src/print/stacking.js";
 import { closedEdgeErrors, validatePrintableModel } from "../generated/dist/src/print/validation.js";
 
 function triangleComponentCount(part) {
@@ -126,9 +127,7 @@ test("export validation rejects zero-area triangles", () => {
   assert.match(validatePrintableModel(model).join("\n"), /degenerate triangle/);
 });
 
-test("every layered material band is closed and only touches its neighbors", async () => {
-  const { withStackTemplate } = await import("../generated/dist/src/project.js");
-  const { buildStackPalette } = await import("../generated/dist/src/print/stacking.js");
+test("every layered material band is closed and only touches its neighbors", () => {
   const project = withStackTemplate(createProject(4, 1), "rybw");
   const palette = buildStackPalette(project.amsColors);
   project.layers[0].cells = [palette[0].id, palette[4].id, palette[8].id, palette[12].id];
@@ -142,9 +141,7 @@ test("every layered material band is closed and only touches its neighbors", asy
   assert.match(validatePrintableModel(buildPrintableModel(composePrintableGrid(project))).join("\n"), /multiple of 0.08 mm/);
 });
 
-test("a one-layer exposed dimple band closes with one annular bottom surface", async () => {
-  const { withStackTemplate } = await import("../generated/dist/src/project.js");
-  const { buildStackPalette } = await import("../generated/dist/src/print/stacking.js");
+test("a one-layer exposed dimple band closes with one annular bottom surface", () => {
   const project = withStackTemplate(createProject(1, 1), "rybw");
   const palette = buildStackPalette(project.amsColors);
   project.layers[0].cells = [palette[1].id];
@@ -156,9 +153,7 @@ test("a one-layer exposed dimple band closes with one annular bottom surface", a
   assert.deepEqual(closedEdgeErrors(part), []);
 });
 
-test("the combined layered base and first band share one triangle component", async () => {
-  const { withStackTemplate } = await import("../generated/dist/src/project.js");
-  const { buildStackPalette } = await import("../generated/dist/src/print/stacking.js");
+test("the combined layered base and first band share one triangle component", () => {
   const project = withStackTemplate(createProject(4, 1), "rybw");
   const palette = buildStackPalette(project.amsColors);
   project.layers[0].cells = [palette[0].id, palette[4].id, palette[8].id, palette[12].id];
@@ -167,9 +162,7 @@ test("the combined layered base and first band share one triangle component", as
   assert.deepEqual(closedEdgeErrors(firstPart), []);
 });
 
-test("zero-dimple layered bands remain closed", async () => {
-  const { withStackTemplate } = await import("../generated/dist/src/project.js");
-  const { buildStackPalette } = await import("../generated/dist/src/print/stacking.js");
+test("zero-dimple layered bands remain closed", () => {
   const project = withStackTemplate(createProject(2, 1), "rybw");
   const palette = buildStackPalette(project.amsColors);
   project.layers[0].cells = [palette[0].id, palette[1].id];

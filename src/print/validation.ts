@@ -1,6 +1,6 @@
-import type { PrintableModel, PrintablePart } from './model';
-import { PRINT_SETTING_LIMITS, type NumericPrintSetting } from './settings';
-import { STACK_LAYER_HEIGHT_MM } from './stacking';
+import type { PrintableModel, PrintablePart } from './model.js';
+import { PRINT_SETTING_LIMITS, type NumericPrintSetting } from './settings.js';
+import { STACK_LAYER_HEIGHT_MM } from './stacking.js';
 
 export const MAX_EXPORT_GRID_DIMENSION = 32;
 

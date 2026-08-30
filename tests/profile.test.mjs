@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createProject, normalizeProject, withLayeredMaterials, withPrintMode } from "../generated/dist/src/project.js";
+import { createProject, normalizeProject, withMaterials, withPrintMode } from "../generated/dist/src/project.js";
 import { applyMaterialProfile, calibrationProject, materialProfileFromProject, parseMaterialProfile } from "../generated/dist/src/print/profile.js";
 import { applyMeasuredStackColors, buildStackPalette } from "../generated/dist/src/print/stacking.js";
 import { buildPrintableModel, composePrintableGrid } from "../generated/dist/src/print/model.js";
@@ -57,11 +57,11 @@ test("calibration is invalidated by physical material changes but survives namin
   const project = withPrintMode(createProject(1, 1), "layered");
   project.materialProfile.verified = true;
   project.materialProfile.measuredColors = buildStackPalette(project.amsColors).map(({ stopLevel, hex }) => ({ stopLevel, hex }));
-  const renamed = withLayeredMaterials(project, project.amsColors.map((material, index) =>
+  const renamed = withMaterials(project, project.amsColors.map((material, index) =>
     index ? material : { ...material, name: "Renamed" }));
   assert.equal(renamed.materialProfile.measuredColors.length, 9);
   assert.equal(renamed.materialProfile.verified, true);
-  const changed = withLayeredMaterials(renamed, renamed.amsColors.map((material, index) =>
+  const changed = withMaterials(renamed, renamed.amsColors.map((material, index) =>
     index ? material : { ...material, tdMm: 2 }));
   assert.equal(changed.amsColors[0].tdMm, 2);
   assert.deepEqual(changed.materialProfile.measuredColors, []);

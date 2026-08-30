@@ -9,7 +9,6 @@ const types = {
   '.html': 'text/html;charset=utf-8',
   '.js': 'text/javascript;charset=utf-8',
   '.css': 'text/css;charset=utf-8',
-  '.map': 'application/json;charset=utf-8',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -47,5 +46,3 @@ http
     fs.mkdirSync(generated, { recursive: true });
     fs.writeFileSync(path.join(generated, 'dev-server.log'), `BeadRelief is running at http://127.0.0.1:${port}/\n`);
   });
-
-setInterval(() => {}, 60_000);

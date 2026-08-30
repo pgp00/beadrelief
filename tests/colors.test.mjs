@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import React from "react";
-import * as projectApi from "../generated/dist/src/project.js";
+import { createProject, normalizeProject, withCells, withLayers, withMaterials } from "../generated/dist/src/project.js";
 import { planImageConversion } from "../generated/dist/src/imageToBeads.js";
 import PrintSettingsPanel from "../generated/dist/src/PrintSettingsPanel.js";
 import { buildPrintableModel, composePrintableGrid } from "../generated/dist/src/print/model.js";
@@ -12,10 +12,8 @@ import {
   makeAmsColorId,
   nearestPaletteColorOklab,
   paletteColorFromAmsId,
-  replaceProjectColor,
 } from "../generated/dist/src/print/colors.js";
 
-const { createProject, hasEditableWork, normalizeProject, withCells, withLayers } = projectApi;
 globalThis.React = React;
 const { autoGenerationPaletteKey, beginAutoGenerationEffect, canEditLayer, codedUiError, generationBlocksExport, hasLayerCapacity, pendingGenerationAction, printOptionsForProject, projectForDisplay, projectGridChanged, replaceGeneratedProject, resizeWouldCropProject, shouldAutoRegenerate } = await import("../generated/dist/src/App.js");
 const { resolveLanguage } = await import("../generated/dist/src/i18n.js");
@@ -107,17 +105,6 @@ test("legacy AMS colors receive the default transmission distance", () => {
   assert.ok(normalizeProject(legacy).amsColors.every((color) => color.tdMm === 1));
 });
 
-test("project imports reject unsafe allocation shapes", () => {
-  const project = createProject(1, 1);
-  assert.equal(typeof projectApi.isSafeProjectImport, "function");
-  assert.equal(projectApi.isSafeProjectImport({ ...project, width: 1.5 }, 100), false);
-  assert.equal(projectApi.isSafeProjectImport({ ...project, width: 181 }, 100), false);
-  assert.equal(projectApi.isSafeProjectImport({ ...project, layers: Array.from({ length: 65 }, () => project.layers[0]) }, 100), false);
-  assert.equal(projectApi.isSafeProjectImport(project, projectApi.MAX_PROJECT_FILE_BYTES + 1), false);
-  assert.equal(normalizeProject({ ...project, width: 1.5 }).width, 32);
-  assert.equal(normalizeProject({ ...project, width: 181 }).width, 32);
-});
-
 test("image conversion caps source pixels and treats the requested size as the long side", () => {
   assert.deepEqual(planImageConversion("image/jpeg", 6000, 3000, 60, 4, 8), {
     width: 60,
@@ -150,11 +137,24 @@ test("image conversion caps source pixels and treats the requested size as the l
 test("changing an AMS slot updates cells and the base reference", () => {
   const project = createProject(2, 1);
   const [first, second] = project.amsColors;
-  const updated = replaceProjectColor(withCells(project, [first.id, second.id]), first.id, "ams-1-333333");
+  const updated = withMaterials(
+    withCells(project, [first.id, second.id]),
+    project.amsColors.map((color, index) => index === 0 ? { ...color, id: "ams-1-333333", hex: "#333333" } : color),
+  );
   assert.deepEqual(updated.layers[0].cells, ["ams-1-333333", second.id]);
   assert.deepEqual(updated.cells, ["ams-1-333333", second.id]);
   assert.equal(updated.printSettings.baseColorId, "ams-1-333333");
   assert.equal(project.layers[0].cells[0], null);
+});
+
+test("removing the last AMS slot maps its cells to the base slot", () => {
+  const project = createProject(1, 1);
+  const updated = withMaterials(
+    withCells(project, [project.amsColors.at(-1).id]),
+    project.amsColors.slice(0, -1),
+  );
+  assert.deepEqual(updated.cells, [project.amsColors[0].id]);
+  assert.deepEqual(updated.layers[0].cells, updated.cells);
 });
 
 test("automatic image generation keys ignore layered material edits only", () => {
@@ -317,15 +317,10 @@ test("continuous print-setting edits create one undo checkpoint per focus sessio
   assert.equal(commits, 5);
 });
 
-test("first-use language and replacement decisions are pure", () => {
+test("first-use language and regeneration decisions are pure", () => {
   assert.equal(resolveLanguage("zh", "en-US"), "zh");
   assert.equal(resolveLanguage(null, "zh-CN"), "zh");
   assert.equal(resolveLanguage(null, "fr-FR"), "en");
-
-  assert.equal(hasEditableWork(createProject(10, 10)), false);
-  const edited = createProject(10, 10);
-  edited.layers[0].cells[0] = edited.amsColors[0].id;
-  assert.equal(hasEditableWork(edited), true);
 
   assert.equal(shouldAutoRegenerate(true, false), true);
   assert.equal(shouldAutoRegenerate(true, true), false);

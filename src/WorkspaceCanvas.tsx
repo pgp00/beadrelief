@@ -1,6 +1,6 @@
-import { arrowPoints, circlePoints, constrainToSquare, ellipsePoints, filledCirclePoints, filledEllipsePoints, filledRectanglePoints, filledTrianglePoints, linePoints, rectanglePoints, trianglePoints } from './canvasGeometry';
-import { getColor } from './palette';
-import type { ArrowKind, BeadLayer, BeadProject, ClipboardPattern, CopyMode, MirrorDirection, MoveMode, RemoveMode, ShapeFillMode, ShapeKind, TextDirection, ToolId } from './types';
+import { arrowPoints, circlePoints, constrainToSquare, ellipsePoints, filledCirclePoints, filledEllipsePoints, filledRectanglePoints, filledTrianglePoints, linePoints, rectanglePoints, trianglePoints } from './canvasGeometry.js';
+import { getColor } from './palette.js';
+import type { ArrowKind, BeadLayer, BeadProject, ClipboardPattern, CopyMode, MirrorDirection, MoveMode, RemoveMode, ShapeFillMode, ShapeKind, TextDirection, ToolId } from './types.js';
 
 const { useEffect, useMemo, useRef, useState } = React;
 
@@ -231,38 +231,25 @@ export default function WorkspaceCanvas({
     const canvas = canvasRef.current;
     const wrapper = wrapperRef.current;
     if (!canvas || !wrapper) return;
-    const context = canvas.getContext('2d');
-    if (!context) return;
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.floor(wrapper.clientWidth * dpr);
-    canvas.height = Math.floor(wrapper.clientHeight * dpr);
-    canvas.style.width = `${wrapper.clientWidth}px`;
-    canvas.style.height = `${wrapper.clientHeight}px`;
-    context.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawPattern(context, project, cellSize, zoom, pan, highlightedColorId, highlightedCellIndices, tool, selectedColorId, eraserSize, moveMode, removeMode, mirrorMode, clipboardPattern, copyMode, copySelectionIndices, shapeDraft, hoverPoint, canEdit, referenceImageOptions, textToolValue, textToolDirection, textToolSize, textToolSpacing, formatColorCode);
-  }, [project, cellSize, zoom, pan, highlightedColorId, highlightedCellIndices, tool, selectedColorId, eraserSize, moveMode, removeMode, mirrorMode, clipboardPattern, copyMode, copySelectionIndices, shapeKind, shapeDraft, hoverPoint, canEdit, referenceImageOptions, textToolValue, textToolDirection, textToolSize, textToolSpacing, formatColorCode]);
-
-  useEffect(() => {
-    const observer = new ResizeObserver(() => {
-      const canvas = canvasRef.current;
-      const wrapper = wrapperRef.current;
-      if (!canvas || !wrapper) return;
+    const draw = () => {
       const dpr = window.devicePixelRatio || 1;
       canvas.width = Math.floor(wrapper.clientWidth * dpr);
       canvas.height = Math.floor(wrapper.clientHeight * dpr);
-      canvas.style.width = `${wrapper.clientWidth}px`;
-      canvas.style.height = `${wrapper.clientHeight}px`;
       const context = canvas.getContext('2d');
       if (context) {
         context.setTransform(dpr, 0, 0, dpr, 0, 0);
         drawPattern(context, project, cellSize, zoom, pan, highlightedColorId, highlightedCellIndices, tool, selectedColorId, eraserSize, moveMode, removeMode, mirrorMode, clipboardPattern, copyMode, copySelectionIndices, shapeDraft, hoverPoint, canEdit, referenceImageOptions, textToolValue, textToolDirection, textToolSize, textToolSpacing, formatColorCode);
       }
+    };
+    draw();
+    const observer = new ResizeObserver(() => {
+      draw();
       setPan((current) => {
         const next = constrainPan(current, zoom);
         return almostSamePoint(current, next) ? current : next;
       });
     });
-    if (wrapperRef.current) observer.observe(wrapperRef.current);
+    observer.observe(wrapper);
     return () => observer.disconnect();
   }, [project, cellSize, zoom, pan, highlightedColorId, highlightedCellIndices, tool, selectedColorId, eraserSize, moveMode, removeMode, mirrorMode, clipboardPattern, copyMode, copySelectionIndices, shapeKind, shapeDraft, hoverPoint, canEdit, referenceImageOptions, textToolValue, textToolDirection, textToolSize, textToolSpacing, formatColorCode]);
 
@@ -892,7 +879,7 @@ function drawPattern(
   context.scale(zoom, zoom);
   context.fillStyle = '#fffdf7';
   context.fillRect(0, 0, project.width * cellSize, project.height * cellSize);
-  const visibleLayers = (project.layers ?? []).filter((layer) => layer.visible);
+  const visibleLayers = project.layers.filter((layer) => layer.visible);
   const highlightedCells = highlightedCellIndices.length > 0 ? new Set(highlightedCellIndices) : null;
   if (referenceImage.visible && referenceImage.placement === 'below') {
     drawReferenceImage(context, project, cellSize, referenceImage);
@@ -902,7 +889,7 @@ function drawPattern(
     for (let x = 0; x < project.width; x += 1) {
       const index = y * project.width + x;
       const stack = visibleLayers
-        .map((layer) => ({ layer, colorId: layer.cells?.[index] }))
+        .map((layer) => ({ layer, colorId: layer.cells[index] }))
         .filter((item): item is { layer: BeadLayer; colorId: string } => Boolean(item.colorId));
       const topColorId = stack.length > 0 ? stack[stack.length - 1].colorId : null;
       const topColor = getColor(topColorId);
@@ -1521,7 +1508,7 @@ function drawCellSet(
 
 function collectRecolorIndices(project: BeadProject, sourceColorId: string): number[] {
   const indices = new Set<number>();
-  (project.layers ?? []).forEach((layer) => {
+  project.layers.forEach((layer) => {
     if (!layer.visible || layer.locked) return;
     layer.cells.forEach((colorId, index) => {
       if (colorId === sourceColorId) indices.add(index);
@@ -2024,15 +2011,15 @@ function drawCellAlert(context: CanvasRenderingContext2D, left: number, top: num
 }
 
 function getActiveLayerCells(project: BeadProject): Array<string | null> {
-  return (project.layers ?? []).find((layer) => layer.id === project.activeLayerId)?.cells ?? project.cells;
+  return project.layers.find((layer) => layer.id === project.activeLayerId)!.cells;
 }
 
 function getTopVisibleColor(project: BeadProject, index: number): string | null {
-  const layers = project.layers ?? [];
+  const layers = project.layers;
   for (let layerIndex = layers.length - 1; layerIndex >= 0; layerIndex -= 1) {
     const layer = layers[layerIndex];
     if (!layer.visible) continue;
-    const colorId = layer.cells?.[index];
+    const colorId = layer.cells[index];
     if (colorId) return colorId;
   }
   return null;
@@ -2048,18 +2035,10 @@ function floodFill(
 ): Array<string | null> {
   const next = cells.slice();
   const startIndex = y * width + x;
-  const target = next[startIndex];
-  if (target === selectedColorId) return next;
-  const replacement = selectedColorId;
-  const stack = [[x, y]];
-  while (stack.length > 0) {
-    const [cx, cy] = stack.pop() as [number, number];
-    if (cx < 0 || cy < 0 || cx >= width || cy >= height) continue;
-    const index = cy * width + cx;
-    if (next[index] !== target) continue;
-    next[index] = replacement;
-    stack.push([cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]);
-  }
+  if (next[startIndex] === selectedColorId) return next;
+  collectConnectedCellIndices(cells, width, height, x, y).forEach((index) => {
+    next[index] = selectedColorId;
+  });
   return next;
 }
 
