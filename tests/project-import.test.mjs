@@ -6,7 +6,15 @@ import {
   isSafeProjectImport,
   MAX_PROJECT_FILE_BYTES,
   normalizeProject,
+  normalizeProjectName,
 } from "../generated/dist/src/project.js";
+
+test("project names are trimmed, bounded, and never empty", () => {
+  assert.equal(normalizeProjectName("   "), "Untitled Pattern");
+  assert.equal(normalizeProjectName(`  ${"x".repeat(100)}  `), "x".repeat(80));
+  assert.equal(createProject(1, 1, "  Bracelet  ").name, "Bracelet");
+  assert.equal(normalizeProject({ width: 1, height: 1, cells: [null], name: "  " }).name, "Untitled Pattern");
+});
 
 test("project import normalizes malformed print settings to safe values", () => {
   const project = createProject(1, 1);

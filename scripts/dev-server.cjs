@@ -17,11 +17,19 @@ const types = {
 
 http
   .createServer((request, response) => {
-    let requestPath = decodeURIComponent(request.url.split('?')[0]);
+    let requestPath;
+    try {
+      requestPath = decodeURIComponent((request.url || '/').split('?')[0]);
+    } catch {
+      response.writeHead(400);
+      response.end('Bad request');
+      return;
+    }
     if (requestPath === '/') requestPath = '/index.html';
     const filePath = path.normalize(path.join(root, requestPath));
+    const relativePath = path.relative(root, filePath);
 
-    if (!filePath.startsWith(root)) {
+    if (relativePath === '..' || relativePath.startsWith(`..${path.sep}`) || path.isAbsolute(relativePath)) {
       response.writeHead(403);
       response.end('Forbidden');
       return;

@@ -8,13 +8,18 @@ export function createStoredZip(entries: ZipEntry[]): Uint8Array {
 }
 
 export async function createDeflatedZip(entries: ZipEntry[]): Promise<Uint8Array> {
-  const compressed = await Promise.all(entries.map(async (entry) => {
-    const input = new ArrayBuffer(entry.data.byteLength);
-    new Uint8Array(input).set(entry.data);
-    const stream = new Blob([input]).stream().pipeThrough(new CompressionStream('deflate-raw'));
-    return new Uint8Array(await new Response(stream).arrayBuffer());
-  }));
-  return buildZip(entries, compressed, 8);
+  if (typeof CompressionStream === 'undefined') return createStoredZip(entries);
+  try {
+    const compressed = await Promise.all(entries.map(async (entry) => {
+      const input = new ArrayBuffer(entry.data.byteLength);
+      new Uint8Array(input).set(entry.data);
+      const stream = new Blob([input]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+      return new Uint8Array(await new Response(stream).arrayBuffer());
+    }));
+    return buildZip(entries, compressed, 8);
+  } catch {
+    return createStoredZip(entries);
+  }
 }
 
 function buildZip(entries: ZipEntry[], payloads: Uint8Array[], method: 0 | 8): Uint8Array {

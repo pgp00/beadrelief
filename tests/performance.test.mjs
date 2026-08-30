@@ -19,6 +19,17 @@ test('native raw-DEFLATE keeps a full 32x32 Layered 3MF below 10 MB', async () =
   assert.ok(entries.has('Metadata/project_settings.config'));
 });
 
+test('3MF export falls back to a stored ZIP without native compression', async () => {
+  const original = globalThis.CompressionStream;
+  try {
+    globalThis.CompressionStream = undefined;
+    const archive = await createCompressedThreeMf(buildPrintableModel(composePrintableGrid(createProject(1, 1))));
+    assert.ok(readZipEntries(archive).has('3D/3dmodel.model'));
+  } finally {
+    globalThis.CompressionStream = original;
+  }
+});
+
 test('image byte and decoded-pixel limits reject oversized input', () => {
   assert.throws(() => validateImageFileSize(MAX_IMAGE_FILE_BYTES + 1), /25 MB/);
   assert.throws(() => planImageConversion('image/png', 20_000, 20_000, 32, 3, 3), /dimensions are too large/);

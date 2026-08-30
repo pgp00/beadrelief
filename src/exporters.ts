@@ -1,4 +1,5 @@
 import { getColor, mappedCode } from './palette.js';
+import { downloadBlob } from './download.js';
 import type { BeadLayer, BeadProject, UsageRow } from './types.js';
 import { summarizeLayeredUsage, summarizeUsage } from './usage.js';
 import { buildPrintRecipe } from './print/recipe.js';
@@ -43,18 +44,22 @@ export function downloadUsageWorkbook(project: BeadProject, layered = project.pr
   downloadBlob(`${safeName(project.name || '\u62fc\u8c46\u56fe\u7eb8')}-\u7528\u91cf\u6e05\u5355.xlsx`, workbook, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 }
 
-export function downloadPrintPng(project: BeadProject, options: PrintExportOptions = { showColorCodes: true, showGuideLines: true }): void {
-  printLayerProjects(project, options).forEach((item) => {
+export async function downloadPrintPng(project: BeadProject, options: PrintExportOptions = { showColorCodes: true, showGuideLines: true }): Promise<void> {
+  await Promise.all(printLayerProjects(project, options).map((item) => new Promise<void>((resolve, reject) => {
     const layerOptions = { ...options, layerName: item.layerName };
     const canvas = renderPrintCanvas(item.project, layerOptions);
     canvas.toBlob((blob) => {
-      if (!blob) return;
+      if (!blob) {
+        reject(new Error('Could not encode the PNG pattern.'));
+        return;
+      }
       downloadBlob(`${printFileName(layerOptions)}.png`, blob, 'image/png');
+      resolve();
     });
-  });
+  })));
 }
 
-export function downloadPrintPdf(project: BeadProject, options: PrintExportOptions = { showColorCodes: true, showGuideLines: true }): void {
+export async function downloadPrintPdf(project: BeadProject, options: PrintExportOptions = { showColorCodes: true, showGuideLines: true }): Promise<void> {
   printLayerProjects(project, options).forEach((item) => {
     const layerOptions = { ...options, layerName: item.layerName };
     const canvas = renderPrintCanvas(item.project, layerOptions);
@@ -620,14 +625,4 @@ function createSingleImagePdf(jpegBytes: Uint8Array, imageWidth: number, imageHe
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-}
-
-function downloadBlob(fileName: string, content: BlobPart, type: string): void {
-  const blob = content instanceof Blob ? content : new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  link.click();
-  URL.revokeObjectURL(url);
 }

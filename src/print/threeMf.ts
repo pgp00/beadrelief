@@ -1,4 +1,5 @@
 import type { PrintableModel, PrintablePart } from './model.js';
+import { downloadBlob } from '../download.js';
 import { validatePrintableModel } from './validation.js';
 import { createDeflatedZip, createStoredZip, type ZipEntry } from './zip.js';
 
@@ -29,13 +30,7 @@ export async function downloadThreeMf(model: PrintableModel, filename: string): 
   const bytes = await createCompressedThreeMf(model);
   const buffer = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(buffer).set(bytes);
-  const blob = new Blob([buffer], { type: 'model/3mf' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename.endsWith('.3mf') ? filename : `${filename}.3mf`;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  downloadBlob(filename.endsWith('.3mf') ? filename : `${filename}.3mf`, buffer, 'model/3mf');
 }
 
 function contentTypesXml(): string {

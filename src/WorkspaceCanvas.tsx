@@ -77,6 +77,7 @@ type Props = {
   onPickColor: (colorId: string) => void;
   onHover: (cell: HoverCell | null) => void;
   fitLabel: string;
+  zoomLabel: string;
   canvasLabel: string;
   coordinateLabel: string;
   canEdit: boolean;
@@ -125,6 +126,7 @@ export default function WorkspaceCanvas({
   onPickColor,
   onHover,
   fitLabel,
+  zoomLabel,
   canvasLabel,
   coordinateLabel,
   canEdit,
@@ -832,7 +834,7 @@ export default function WorkspaceCanvas({
       {referenceImageAdjusting && referenceImageVisible && (
         <div className="reference-adjust-hint">{referenceAdjustHint}</div>
       )}
-      <div className="zoom-controls" aria-label="Canvas zoom controls">
+      <div className="zoom-controls" aria-label={zoomLabel}>
         <button onClick={() => stepZoom(0.9)}>-</button>
         <span>{Math.round(zoom * 100)}%</span>
         <button onClick={() => stepZoom(1.1)}>+</button>

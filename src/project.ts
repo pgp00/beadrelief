@@ -9,6 +9,10 @@ export const MAX_PROJECT_DIMENSION = 180;
 export const MAX_PROJECT_LAYERS = 64;
 export const MAX_PROJECT_FILE_BYTES = 20 * 1024 * 1024;
 
+export function normalizeProjectName(value: unknown): string {
+  return typeof value === 'string' ? value.trim().slice(0, 80) || 'Untitled Pattern' : 'Untitled Pattern';
+}
+
 export const DEFAULT_MATERIAL_PROFILE: MaterialProfileMeta = {
   version: '1.0.0',
   name: 'Default example',
@@ -24,7 +28,7 @@ export function createProject(width = 32, height = 32, name = 'Untitled Pattern'
   const cells = emptyCells(width, height);
   return {
     version: '1.0.0',
-    name,
+    name: normalizeProjectName(name),
     width,
     height,
     activeBrand: 'MARD',
@@ -192,7 +196,7 @@ export function normalizeProject(project: unknown): BeadProject {
   const source = isRecord(project) ? project : {};
   const width = isSafeDimension(source.width) ? source.width : 32;
   const height = isSafeDimension(source.height) ? source.height : 32;
-  const name = typeof source.name === 'string' ? source.name : 'Untitled Pattern';
+  const name = normalizeProjectName(source.name);
   const fallback = createProject(width, height, name);
   const amsColors = normalizeAmsColors(source.amsColors);
   const importedAmsIds = importedAmsIdMap(source.amsColors, amsColors);

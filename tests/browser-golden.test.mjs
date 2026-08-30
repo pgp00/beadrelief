@@ -106,11 +106,27 @@ test('heart PNG golden path edits and downloads every export', { skip: !browserP
     await page.locator('input[type="file"]').first().waitFor({ state: 'attached', timeout: 5_000 }).catch((error) => {
       throw new Error(`${browserErrors.join('\n')}\n${error.message}`);
     });
-    await page.getByRole('button', { name: 'Bead pattern', exact: true }).click();
+    const status = page.getByRole('status');
+    assert.equal(await status.getAttribute('aria-live'), 'polite');
+    assert.equal(await status.getAttribute('aria-atomic'), 'true');
+    const paletteTab = page.getByRole('tab', { name: 'Palette', exact: true });
+    assert.equal(await paletteTab.getAttribute('aria-controls'), 'right-panel-palette');
+    assert.equal(await page.getByRole('tabpanel', { name: 'Palette', exact: true }).count(), 1);
+    await paletteTab.focus();
+    await page.keyboard.press('ArrowRight');
+    const layersTab = page.getByRole('tab', { name: 'Layers', exact: true });
+    assert.equal(await layersTab.getAttribute('aria-selected'), 'true');
+    await expectFocused(page, layersTab);
+    await page.keyboard.press('ArrowLeft');
+    await page.getByRole('button', { name: '中', exact: true }).click();
+    assert.equal(await page.getByLabel('画布宽度').count(), 1);
+    assert.equal(await page.getByRole('tablist', { name: '右侧面板' }).count(), 1);
+    await page.getByRole('button', { name: 'EN', exact: true }).click();
     assert.equal(await page.getByRole('button', { name: 'Bead pattern', exact: true }).getAttribute('aria-pressed'), 'true');
     assert.equal(await page.getByRole('button', { name: 'Export 3MF', exact: true }).count(), 0);
-    assert.equal(await page.getByLabel('Pattern color limit').inputValue(), '24');
+    assert.equal(await page.getByLabel('Pattern color limit').inputValue(), '291');
     assert.equal(await page.getByLabel('Pattern color limit').getAttribute('max'), '291');
+    assert.equal(await page.getByLabel('Style').inputValue(), 'realistic');
     assert.equal(await page.getByLabel('Canvas width').getAttribute('max'), '180');
     assert.deepEqual(await page.locator('.readonly-brand-field select option').allTextContents(), [
       'MARD Basic (221 colors)',
@@ -122,7 +138,7 @@ test('heart PNG golden path edits and downloads every export', { skip: !browserP
     await page.getByText(/editable pattern ready\.$/).waitFor();
     assert.equal(await page.locator('.swatch').count(), 291);
     const patternDraft = JSON.parse(await page.evaluate(() => localStorage.getItem('perler-beads-generator:draft')));
-    assert.ok(patternDraft.layers.some((layer) => layer.cells.some((cell) => cell && !cell.startsWith('ams-'))));
+    assert.ok(patternDraft.layers.flatMap((layer) => layer.cells).filter(Boolean).every((cell) => cell.startsWith('mard-')));
 
     await page.getByRole('button', { name: '3D print', exact: true }).click();
     await page.waitForFunction(() => {
@@ -223,10 +239,18 @@ test('heart PNG golden path edits and downloads every export', { skip: !browserP
     await page.getByRole('button', { name: 'Export pattern', exact: true }).click();
     await page.locator('.export-format-select').first().selectOption('png');
     await downloadFrom(page, 'Export PNG', directory);
+    await page.getByText('PNG pattern exported.', { exact: true }).waitFor();
+    const exportPatternButton = page.getByRole('button', { name: 'Export pattern', exact: true });
+    await expectFocused(page, exportPatternButton);
 
-    await page.getByRole('button', { name: 'Export pattern', exact: true }).click();
+    await exportPatternButton.click();
+    assert.equal(await page.getByRole('dialog', { name: 'Pattern settings' }).count(), 1);
+    await page.keyboard.press('Escape');
+    await expectFocused(page, exportPatternButton);
+    await exportPatternButton.click();
     await page.locator('.export-format-select').first().selectOption('pdf');
     await downloadFrom(page, 'Export PDF', directory);
+    await page.getByText('PDF pattern exported.', { exact: true }).waitFor();
 
     await page.getByRole('tab', { name: 'Layers', exact: true }).click();
     await page.getByRole('button', { name: 'New layer', exact: true }).click();

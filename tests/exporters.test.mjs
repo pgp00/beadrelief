@@ -34,7 +34,7 @@ function noopContext() {
   };
 }
 
-function installDownloadEnvironment(t) {
+function installDownloadEnvironment(t, pngBlob = new Blob([pngBytes], { type: "image/png" })) {
   const originalDocument = globalThis.document;
   const originalCreateObjectUrl = URL.createObjectURL;
   const originalRevokeObjectUrl = URL.revokeObjectURL;
@@ -49,13 +49,14 @@ function installDownloadEnvironment(t) {
   };
   URL.revokeObjectURL = () => {};
   globalThis.document = {
+    body: { appendChild() {} },
     createElement(tag) {
       if (tag === "canvas") {
         return {
           width: 0,
           height: 0,
           getContext: () => noopContext(),
-          toBlob: (callback) => callback(new Blob([pngBytes], { type: "image/png" })),
+          toBlob: (callback) => callback(pngBlob),
           toDataURL: () => "data:image/jpeg;base64,/9j/2Q==",
         };
       }
@@ -66,6 +67,7 @@ function installDownloadEnvironment(t) {
           click() {
             downloads.push({ name: this.download, blob: blobs.get(this.href) });
           },
+          remove() {},
         };
       }
       throw new Error(`Unexpected element: ${tag}`);
@@ -165,8 +167,8 @@ test("PNG and PDF downloads have their required binary structure", async (t) => 
   project.cells = [...project.layers[0].cells];
   const options = { showColorCodes: true, showGuideLines: false, exportBounds: "canvas", projectName: project.name };
 
-  downloadPrintPng(project, options);
-  downloadPrintPdf(project, options);
+  await downloadPrintPng(project, options);
+  await downloadPrintPdf(project, options);
   assert.deepEqual(downloads.map(({ name }) => name), ["Binary-export.png", "Binary-export.pdf"]);
 
   const png = await downloadedBytes(downloads[0]);
@@ -187,4 +189,9 @@ test("PNG and PDF downloads have their required binary structure", async (t) => 
   const startXref = /startxref\n(\d+)\n%%EOF$/.exec(pdfText);
   assert.ok(startXref);
   assert.equal(decoder.decode(pdf.slice(Number(startXref[1]), Number(startXref[1]) + 4)), "xref");
+});
+
+test("PNG export rejects a browser encoding failure", async (t) => {
+  installDownloadEnvironment(t, null);
+  await assert.rejects(downloadPrintPng(createProject(1, 1)), /encode the PNG/);
 });

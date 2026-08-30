@@ -132,14 +132,14 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
             <span className="ams-slot">AMS {index + 1}</span>
             <input
               type="color"
-              aria-label={`AMS ${index + 1} color`}
+              aria-label={`AMS ${index + 1} ${zh ? '颜色' : 'color'}`}
               value={color.hex}
               onFocus={onCommit}
               onChange={(event) => updateColor(index, { hex: event.target.value })}
             />
             <input
               type="text"
-              aria-label={`AMS ${index + 1} name`}
+              aria-label={`AMS ${index + 1} ${zh ? '名称' : 'name'}`}
               value={color.name}
               maxLength={32}
               onFocus={onCommit}

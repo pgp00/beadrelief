@@ -150,7 +150,7 @@ const sizePresets = [
 
 const defaultImportSettings = {
   width: 32,
-  generationStyle: 'cartoon' as GenerationStyle,
+  generationStyle: 'realistic' as GenerationStyle,
   backgroundMode: 'keep' as BackgroundMode,
   tolerance: 32,
   speckleReduction: 0,
@@ -177,6 +177,7 @@ export default function App() {
   const referenceInputRef = useRef<HTMLInputElement | null>(null);
   const jsonInputRef = useRef<HTMLInputElement | null>(null);
   const profileInputRef = useRef<HTMLInputElement | null>(null);
+  const printExportButtonRef = useRef<HTMLButtonElement | null>(null);
   const autoGenerateShouldCommitRef = useRef(false);
   const generationRequestRef = useRef(0);
   const autoGenerationPendingRef = useRef(false);
@@ -197,13 +198,13 @@ export default function App() {
   const languageRef = useRef(language);
   languageRef.current = language;
   const text = ui[language];
-  const [outputMode, setOutputMode] = useState<OutputMode>('three-d');
+  const [outputMode, setOutputMode] = useState<OutputMode>('pattern');
   const [paletteMode, setPaletteMode] = useState<PaletteMode>('complete');
   const [project, setProject] = useState<BeadProject>(() => loadDraft() ?? createProject());
   const [previewProject, setPreviewProject] = useState(project);
   const projectRef = useRef(project);
   projectRef.current = project;
-  const [patternColorLimit, setPatternColorLimit] = useState(24);
+  const [patternColorLimit, setPatternColorLimit] = useState(completePalette.length);
   const projectGenerationKey = (value: BeadProject) => outputMode === 'pattern'
     ? `pattern:${paletteMode}:${patternColorLimit}`
     : autoGenerationPaletteKey(value.printSettings.mode, value.amsColors);
@@ -1169,16 +1170,38 @@ export default function App() {
     double: text.arrowDouble,
     block: text.arrowBlock,
   } satisfies Record<ArrowKind, string>;
+  const rightTabLabel = {
+    palette: text.palette,
+    layers: text.layers,
+    usage: text.usage,
+    adjustments: text.adjustments,
+  } satisfies Record<typeof rightTab, string>;
   const selectedSizePreset = sizePresets.find((item) => item.width === canvasWidth && item.height === canvasHeight)?.label ?? '';
-  function exportPrintPattern() {
-    if (blockExportWhileGenerating()) return;
-    const exportOptions = printOptionsForProject(project, printExportOptions, language);
-    if (printExportOptions.format === 'pdf') {
-      downloadPrintPdf(project, exportOptions);
-    } else {
-      downloadPrintPng(project, exportOptions);
-    }
+  function closePrintExportPanel() {
     setShowPrintExportPanel(false);
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => printExportButtonRef.current?.focus()));
+  }
+
+  async function exportPrintPattern() {
+    if (blockExportWhileGenerating()) return;
+    if (isExporting) return;
+    const exportOptions = printOptionsForProject(project, printExportOptions, language);
+    const format = (printExportOptions.format ?? 'png').toUpperCase();
+    setIsExporting(true);
+    setNotice(text.patternExporting(format));
+    try {
+      if (printExportOptions.format === 'pdf') {
+        await downloadPrintPdf(project, exportOptions);
+      } else {
+        await downloadPrintPng(project, exportOptions);
+      }
+      closePrintExportPanel();
+      setNotice(text.patternExported(format));
+    } catch {
+      setNotice(codedUiError('PATTERN_EXPORT_FAILED', text.patternExportFailed));
+    } finally {
+      setIsExporting(false);
+    }
   }
 
   const imageLaunch = imageLaunchState(Boolean(pendingFile), project);
@@ -1259,14 +1282,14 @@ export default function App() {
         </div>
 
         <div className="topbar-workspace">
-          <div className="topbar-params canvas-params" aria-label="Canvas controls">
+          <div className="topbar-params canvas-params" aria-label={text.canvasControls}>
             <span className="topbar-control-label">{text.board}</span>
             <div className="topbar-dimension-group">
-              <input aria-label="Canvas width" type="number" min={8} max={outputMode === 'pattern' ? MAX_PROJECT_DIMENSION : MAX_PRINT_WORKSPACE_DIMENSION} value={canvasWidth} onChange={(event) => setCanvasWidth(Number(event.target.value))} />
+              <input aria-label={text.canvasWidth} type="number" min={8} max={outputMode === 'pattern' ? MAX_PROJECT_DIMENSION : MAX_PRINT_WORKSPACE_DIMENSION} value={canvasWidth} onChange={(event) => setCanvasWidth(Number(event.target.value))} />
               <span className="size-times">×</span>
-              <input aria-label="Canvas height" type="number" min={8} max={outputMode === 'pattern' ? MAX_PROJECT_DIMENSION : MAX_PRINT_WORKSPACE_DIMENSION} value={canvasHeight} onChange={(event) => setCanvasHeight(Number(event.target.value))} />
+              <input aria-label={text.canvasHeight} type="number" min={8} max={outputMode === 'pattern' ? MAX_PROJECT_DIMENSION : MAX_PRINT_WORKSPACE_DIMENSION} value={canvasHeight} onChange={(event) => setCanvasHeight(Number(event.target.value))} />
             </div>
-            <select className="canvas-preset-select" aria-label="Canvas preset" value={selectedSizePreset || ''} onChange={(event) => applyPreset(event.target.value)}>
+            <select className="canvas-preset-select" aria-label={text.canvasPreset} value={selectedSizePreset || ''} onChange={(event) => applyPreset(event.target.value)}>
               <option value="" disabled hidden>{text.commonSizes}</option>
               {sizePresets.map((preset) => (
                 <option key={preset.label} value={preset.label}>{preset.label}</option>
@@ -1296,26 +1319,40 @@ export default function App() {
                 </button>}
               <div className="print-export-menu">
                 <button
+                  ref={printExportButtonRef}
                   type="button"
                   className={`export-action-button print-export-button${outputMode === 'pattern' ? ' primary-action' : ''}`}
                   title={`${text.exportPatternTitle} PNG`}
                   aria-expanded={showPrintExportPanel}
+                  aria-haspopup="dialog"
+                  aria-controls="print-export-dialog"
                   disabled={exportDisabled}
-                  onClick={() => setShowPrintExportPanel((value) => !value)}
+                  onClick={() => showPrintExportPanel ? closePrintExportPanel() : setShowPrintExportPanel(true)}
                 >
                   <ExportIcon />
                   <span>{text.exportPatternFull}</span>
                 </button>
                 {showPrintExportPanel && (
-                  <div className="print-export-popover">
+                  <div
+                    id="print-export-dialog"
+                    className="print-export-popover"
+                    role="dialog"
+                    aria-labelledby="print-export-dialog-title"
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Escape') return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                      closePrintExportPanel();
+                    }}
+                  >
                     <div className="print-export-popover-header">
-                      <strong>{text.printExportSettings}</strong>
+                      <strong id="print-export-dialog-title">{text.printExportSettings}</strong>
                       <button
                         className="print-export-close"
                         type="button"
                         aria-label={text.close}
                         title={text.close}
-                        onClick={() => setShowPrintExportPanel(false)}
+                        onClick={closePrintExportPanel}
                       >
                         <CloseIcon />
                       </button>
@@ -1323,6 +1360,7 @@ export default function App() {
                     <label className="export-text-field">
                       <span>{text.exportFormat}</span>
                       <select
+                        autoFocus
                         className="export-format-select"
                         value={printExportOptions.format ?? 'png'}
                         onChange={(event) => setPrintExportOptions((current) => ({ ...current, format: event.target.value as 'png' | 'pdf' }))}
@@ -1480,7 +1518,7 @@ export default function App() {
                 {text.width}
                 <span className="help-dot image-help-dot" {...imageHelpProps(text.heightFromRatio)}>?</span>
               </span>
-              <input aria-label="Output long side" type="number" min={8} max={outputMode === 'pattern' ? MAX_PROJECT_DIMENSION : MAX_PRINT_WORKSPACE_DIMENSION} value={convertWidth} onChange={(event) => updateImportSetting('width', Number(event.target.value))} />
+              <input aria-label={text.outputLongSide} type="number" min={8} max={outputMode === 'pattern' ? MAX_PROJECT_DIMENSION : MAX_PRINT_WORKSPACE_DIMENSION} value={convertWidth} onChange={(event) => updateImportSetting('width', Number(event.target.value))} />
             </label>
             {outputMode === 'pattern' && <label className="image-range-field">
               <span>
@@ -1490,7 +1528,7 @@ export default function App() {
                 </span>
                 <strong>{patternColorLimit}</strong>
               </span>
-              <input aria-label="Pattern color limit" type="range" min={1} max={activePalette.length} value={patternColorLimit} onChange={(event) => {
+              <input aria-label={text.patternColorLimit} type="range" min={1} max={activePalette.length} value={patternColorLimit} onChange={(event) => {
                 markGenerationPending();
                 setPatternColorLimit(Number(event.target.value));
               }} />
@@ -1503,14 +1541,14 @@ export default function App() {
                 </span>
                 <strong>{tolerance}</strong>
               </span>
-              <input aria-label="Background tolerance" type="range" min={0} max={120} step={1} value={tolerance} onChange={(event) => updateImportSetting('tolerance', Number(event.target.value))} />
+              <input aria-label={text.backgroundTolerance} type="range" min={0} max={120} step={1} value={tolerance} onChange={(event) => updateImportSetting('tolerance', Number(event.target.value))} />
             </label>}
           </div>
 
           <label className="stacked-field image-style-field">
             <span>{text.generationStyle}</span>
             <select
-              aria-label="Generation style"
+              aria-label={text.generationStyle}
               value={generationStyle}
               onChange={(event) => updateImportSetting('generationStyle', event.target.value as GenerationStyle)}
             >
@@ -1524,7 +1562,7 @@ export default function App() {
             <summary>{text.cropImage}</summary>
             <label className="stacked-field">
               <span>{text.cropAspect}</span>
-              <select aria-label="Crop aspect" value={cropAspect} onChange={(event) => updateImportSetting('cropAspect', event.target.value as CropAspect)}>
+              <select aria-label={text.cropAspect} value={cropAspect} onChange={(event) => updateImportSetting('cropAspect', event.target.value as CropAspect)}>
                 <option value="original">{text.cropOriginal}</option>
                 <option value="square">{text.cropSquare}</option>
                 <option value="portrait">{text.cropPortrait}</option>
@@ -1533,23 +1571,23 @@ export default function App() {
             </label>
             <label className="image-range-field">
               <span><span>{text.cropZoom}</span><strong>{cropZoom.toFixed(1)}×</strong></span>
-              <input aria-label="Crop zoom" type="range" min={1} max={3} step={0.1} value={cropZoom} onChange={(event) => updateImportSetting('cropZoom', Number(event.target.value))} />
+              <input aria-label={text.cropZoom} type="range" min={1} max={3} step={0.1} value={cropZoom} onChange={(event) => updateImportSetting('cropZoom', Number(event.target.value))} />
             </label>
             <div className="image-field-grid">
               <label className="image-range-field">
                 <span><span>{text.cropHorizontal}</span><strong>{Math.round(cropOffsetX * 100)}</strong></span>
-                <input aria-label="Crop horizontal position" type="range" min={-1} max={1} step={0.05} value={cropOffsetX} onChange={(event) => updateImportSetting('cropOffsetX', Number(event.target.value))} />
+                <input aria-label={text.cropHorizontal} type="range" min={-1} max={1} step={0.05} value={cropOffsetX} onChange={(event) => updateImportSetting('cropOffsetX', Number(event.target.value))} />
               </label>
               <label className="image-range-field">
                 <span><span>{text.cropVertical}</span><strong>{Math.round(cropOffsetY * 100)}</strong></span>
-                <input aria-label="Crop vertical position" type="range" min={-1} max={1} step={0.05} value={cropOffsetY} onChange={(event) => updateImportSetting('cropOffsetY', Number(event.target.value))} />
+                <input aria-label={text.cropVertical} type="range" min={-1} max={1} step={0.05} value={cropOffsetY} onChange={(event) => updateImportSetting('cropOffsetY', Number(event.target.value))} />
               </label>
             </div>
           </details>}
 
           <label className="stacked-field image-background-field">
             <span>{text.background}</span>
-            <select aria-label="Background handling" value={backgroundMode} onChange={(event) => updateImportSetting('backgroundMode', event.target.value as BackgroundMode)}>
+            <select aria-label={text.background} value={backgroundMode} onChange={(event) => updateImportSetting('backgroundMode', event.target.value as BackgroundMode)}>
               <option value="keep">{text.keepBackground}</option>
               <option value="remove-white">{text.removeWhite}</option>
             </select>
@@ -1618,7 +1656,7 @@ export default function App() {
                   <span>L{color.stopLevel}</span>
                   <input
                     type="color"
-                    aria-label={`Measured color L${color.stopLevel}`}
+                    aria-label={text.measuredColor(color.stopLevel)}
                     value={project.materialProfile.measuredColors.find((item) => item.stopLevel === color.stopLevel)?.hex ?? color.hex}
                     onChange={(event) => setMeasuredStackColor(color.stopLevel, event.target.value)}
                   />
@@ -1679,7 +1717,7 @@ export default function App() {
               <strong>{Math.round(referenceOpacity * 100)}%</strong>
             </span>
             <input
-              aria-label="Reference opacity"
+              aria-label={text.referenceOpacityControl}
               type="range"
               min={0.1}
               max={0.95}
@@ -2160,49 +2198,48 @@ export default function App() {
         }}
         onHover={setHoverCell}
         fitLabel={text.fit}
+        zoomLabel={text.zoomControls}
         canEdit={canEditActiveLayer}
         lockedHint={activeLayer.locked ? text.lockedCanvasHint : text.hiddenCanvasHint}
       />
 
       <aside className="right-panel">
-        <div className="right-tabs" role="tablist" aria-label="Right panel">
-          <button
-            className={rightTab === 'palette' ? 'active' : ''}
-            role="tab"
-            aria-selected={rightTab === 'palette'}
-            onClick={() => setRightTab('palette')}
-          >
-            {text.palette}
-          </button>
-          <button
-            className={rightTab === 'layers' ? 'active' : ''}
-            role="tab"
-            aria-selected={rightTab === 'layers'}
-            onClick={() => setRightTab('layers')}
-          >
-            {text.layers}
-          </button>
-          <button
-            className={rightTab === 'usage' ? 'active' : ''}
-            role="tab"
-            aria-selected={rightTab === 'usage'}
-            onClick={() => setRightTab('usage')}
-          >
-            {text.usage}
-          </button>
-          <button
-            className={rightTab === 'adjustments' ? 'active' : ''}
-            role="tab"
-            aria-selected={rightTab === 'adjustments'}
-            onClick={() => setRightTab('adjustments')}
-          >
-            {text.adjustments}
-          </button>
+        <div
+          className="right-tabs"
+          role="tablist"
+          aria-label={text.rightPanel}
+          onKeyDown={(event) => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+            const tabs = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+            const current = tabs.indexOf(event.target as HTMLButtonElement);
+            if (current < 0) return;
+            event.preventDefault();
+            const next = event.key === 'Home' ? 0
+              : event.key === 'End' ? tabs.length - 1
+                : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+            tabs[next].click();
+            tabs[next].focus();
+          }}
+        >
+          {(Object.keys(rightTabLabel) as Array<keyof typeof rightTabLabel>).map((tab) => (
+            <button
+              id={`right-tab-${tab}`}
+              key={tab}
+              className={rightTab === tab ? 'active' : ''}
+              role="tab"
+              aria-controls={`right-panel-${tab}`}
+              aria-selected={rightTab === tab}
+              tabIndex={rightTab === tab ? 0 : -1}
+              onClick={() => setRightTab(tab)}
+            >
+              {rightTabLabel[tab]}
+            </button>
+          ))}
         </div>
 
         <section className="panel-section status-section">
           <div>
-            <strong>{notice}</strong>
+            <strong role="status" aria-live="polite" aria-atomic="true">{notice}</strong>
             <span>
               {text.panelStatus(project.width, project.height, usage.length, totalBeads, boardCount)}
             </span>
@@ -2242,7 +2279,7 @@ export default function App() {
         </section>
 
         {rightTab === 'palette' && (
-          <section className="panel-section panel-tab-body palette-section">
+          <section id="right-panel-palette" className="panel-section panel-tab-body palette-section" role="tabpanel" aria-labelledby="right-tab-palette">
             <h2>{text.palette}</h2>
             <div className="palette-selected-card">
               <span style={{ backgroundColor: selectedColor?.hex }} />
@@ -2283,7 +2320,7 @@ export default function App() {
                 ))}
               </div>
             </div>
-            <div className="palette-filter" aria-label="Palette groups">
+            <div className="palette-filter" aria-label={text.paletteGroups}>
               {paletteGroups.map((group) => (
                 <button
                   key={group.id}
@@ -2313,7 +2350,7 @@ export default function App() {
         )}
 
         {rightTab === 'layers' && (
-          <section className="panel-section panel-tab-body layers-section">
+          <section id="right-panel-layers" className="panel-section panel-tab-body layers-section" role="tabpanel" aria-labelledby="right-tab-layers">
             <div className="layers-header">
               <h2>{text.layers}</h2>
               <button
@@ -2518,7 +2555,7 @@ export default function App() {
         )}
 
         {rightTab === 'usage' && (
-          <section className="panel-section panel-tab-body usage-section">
+          <section id="right-panel-usage" className="panel-section panel-tab-body usage-section" role="tabpanel" aria-labelledby="right-tab-usage">
             <h2>{text.usage}</h2>
             <div className="usage-overview">
               <div><span>{text.totalBeadsLabel}</span><strong>{totalBeads}</strong></div>
@@ -2678,7 +2715,7 @@ export default function App() {
         )}
 
         {rightTab === 'adjustments' && (
-          <section className="panel-section panel-tab-body adjustment-section">
+          <section id="right-panel-adjustments" className="panel-section panel-tab-body adjustment-section" role="tabpanel" aria-labelledby="right-tab-adjustments">
             <div className="adjustment-header">
               <h2>{text.adjustmentTitle}</h2>
               <span>{layerDisplayName(activeLayer, layers.findIndex((item) => item.id === activeLayer.id))}</span>
@@ -2732,7 +2769,7 @@ export default function App() {
               </div>
               <span>{text.colorCleanupHint}</span>
               <input
-                aria-label="Color cleanup strength"
+                aria-label={text.colorCleanup}
                 type="range"
                 min={1}
                 max={4}
@@ -2751,7 +2788,7 @@ export default function App() {
               </div>
               <span>{text.colorLimitHint}</span>
               <input
-                aria-label="Layer color limit"
+                aria-label={text.colorLimit}
                 type="range"
                 min={2}
                 max={48}
