@@ -4,7 +4,7 @@ import PrintSettingsPanel from './PrintSettingsPanel';
 import { downloadMaterialProfile, downloadPrintPdf, downloadPrintPng, downloadProjectJson, downloadUsageWorkbook } from './exporters';
 import type { PrintExportOptions } from './exporters';
 import { imageFileToBeads } from './imageToBeads';
-import { adjustLayerCells, applyEffectToLayer, defaultAdjustments, hasAdjustments, limitLayerColors, mergeCloseLayerColors } from './imageAdjustments';
+import { adjustLayerCells, applyEffectToLayer, defaultAdjustments, hasAdjustments, limitLayerColors, mergeCloseLayerColors, mergeIsolatedLayerColors } from './imageAdjustments';
 import type { AdjustmentSettings, LayerEffect } from './imageAdjustments';
 import { languageKey, resolveLanguage, ui } from './i18n';
 import type { Language } from './i18n';
@@ -307,6 +307,12 @@ export default function App() {
       ? applyMeasuredStackColors(buildStackPalette(project.amsColors), project.materialProfile.measuredColors)
       : []
   ), [project.amsColors, project.materialProfile.measuredColors, project.printSettings.mode]);
+  const calibrationPalette = useMemo(
+    () => project.amsColors.length >= 2 ? buildStackPalette(project.amsColors) : [],
+    [project.amsColors],
+  );
+  const calibrationComplete = calibrationPalette.length > 0 && calibrationPalette.every((color) =>
+    project.materialProfile.measuredColors.some((measured) => measured.stopLevel === color.stopLevel));
   const activePalette = outputMode === 'pattern'
     ? paletteMode === 'basic' ? basicPalette : completePalette
     : project.printSettings.mode === 'layered' ? stackPalette : solidPalette;
@@ -756,6 +762,16 @@ export default function App() {
     setNotice(language === 'zh' ? `已创建 ${width} * ${height} 空白画布。` : `Blank ${width} x ${height} canvas created.`);
   }
 
+  function applyIsolatedColorCleanup() {
+    if (!ensureActiveLayerEditable()) return;
+    const { cells, changed } = mergeIsolatedLayerColors(activeLayer.cells, project.width, project.height);
+    if (changed > 0) {
+      commitHistory();
+      updateProject(withLayers(project, layers.map((layer) => (layer.id === activeLayer.id ? { ...layer, cells } : layer))));
+    }
+    setNotice(text.isolatedColorsCleaned(changed));
+  }
+
   function clearCanvas() {
     if (!ensureActiveLayerEditable()) return;
     if (activeLayer.cells.every((cell) => cell === null)) return;
@@ -1092,6 +1108,10 @@ export default function App() {
   const layers = project.layers?.length ? project.layers : createProject(project.width, project.height).layers;
   const activeLayer = layers.find((layer) => layer.id === project.activeLayerId) ?? layers[0];
   const canEditActiveLayer = canEditLayer(activeLayer);
+  const isolatedColorCount = useMemo(
+    () => mergeIsolatedLayerColors(activeLayer.cells, project.width, project.height).changed,
+    [activeLayer.cells, project.width, project.height],
+  );
   const countedLayers = layers.filter((layer) => layer.includeInUsage);
   useEffect(() => {
     setCopySelectionIndices([]);
@@ -1609,7 +1629,7 @@ export default function App() {
             <span>{text.printer}</span>
             <input value={project.materialProfile.printer} maxLength={80} onFocus={commitHistory} onChange={(event) => updateProject({
               ...project,
-              materialProfile: { ...project.materialProfile, printer: event.target.value },
+              materialProfile: { ...project.materialProfile, printer: event.target.value, verified: false, measuredColors: [] },
             }, 'settings')} />
           </label>
           <div className="image-field-grid">
@@ -1617,7 +1637,7 @@ export default function App() {
               <span>{text.nozzle}</span>
               <select value={project.materialProfile.nozzleDiameterMm} onFocus={commitHistory} onChange={(event) => updateProject({
                 ...project,
-                materialProfile: { ...project.materialProfile, nozzleDiameterMm: Number(event.target.value) as 0.2 | 0.4 | 0.6 | 0.8 },
+                materialProfile: { ...project.materialProfile, nozzleDiameterMm: Number(event.target.value) as 0.2 | 0.4 | 0.6 | 0.8, verified: false, measuredColors: [] },
               }, 'settings')}>
                 {[0.2, 0.4, 0.6, 0.8].map((value) => <option key={value} value={value}>{value} mm</option>)}
               </select>
@@ -1626,27 +1646,39 @@ export default function App() {
               <span>{text.profileLayerHeight}</span>
               <input type="number" min={0.04} max={0.4} step={0.01} value={project.materialProfile.layerHeightMm} onFocus={commitHistory} onChange={(event) => updateProject({
                 ...project,
-                materialProfile: { ...project.materialProfile, layerHeightMm: Number(event.target.value) },
+                materialProfile: { ...project.materialProfile, layerHeightMm: Number(event.target.value), verified: false, measuredColors: [] },
               }, 'settings')} />
             </label>
           </div>
           <label className="switch-row">
             <span>{text.physicallyVerified}</span>
-            <input type="checkbox" checked={project.materialProfile.verified} onChange={(event) => {
+            <input type="checkbox" checked={project.materialProfile.verified} disabled={!project.materialProfile.verified && !calibrationComplete} onChange={(event) => {
               commitHistory();
               updateProject({ ...project, materialProfile: { ...project.materialProfile, verified: event.target.checked } }, 'settings');
             }} />
           </label>
           {project.amsColors.length >= 2 && <details className="calibration-panel">
-            <summary>{language === 'zh' ? '分层成色校准' : 'Layered color calibration'}</summary>
+            <summary>
+              {language === 'zh' ? '分层成色校准' : 'Layered color calibration'}
+              {' '}({project.materialProfile.measuredColors.length}/{calibrationPalette.length})
+            </summary>
             <p>{language === 'zh'
               ? '下载色阶并实物打印；将每格实测颜色录入后，分层预览会立即更新。'
               : 'Print the swatch, then enter each measured color to update layered previews.'}</p>
             <button type="button" onClick={() => void exportCalibrationThreeMf()}>
               {language === 'zh' ? '下载校准 3MF' : 'Download calibration 3MF'}
             </button>
+            {project.materialProfile.measuredColors.length > 0 && <button type="button" onClick={() => {
+              commitHistory();
+              updateProject({
+                ...project,
+                materialProfile: { ...project.materialProfile, verified: false, measuredColors: [] },
+              }, 'settings');
+            }}>
+              {language === 'zh' ? '清除实测色' : 'Clear measured colors'}
+            </button>}
             <div className="calibration-colors">
-              {buildStackPalette(project.amsColors).map((color) => (
+              {calibrationPalette.map((color) => (
                 <label key={color.stopLevel}>
                   <span>L{color.stopLevel}</span>
                   <input
@@ -2668,7 +2700,7 @@ export default function App() {
                 })}
               </div>
               {countedLayers.length === 0 && <div className="usage-no-layers">{text.noCountedLayers}</div>}
-              {(usage.length > 32 || isolatedBeads > 0) && (
+              {(usage.length > 32 || isolatedBeads > 0 || isolatedColorCount > 0) && (
                 <div className="usage-notes">
                   {usage.length > 32 && <span>{text.manyColors}</span>}
                   {isolatedBeads > 0 && (
@@ -2683,6 +2715,14 @@ export default function App() {
                         onClick={() => setShowIsolatedBeads((current) => !current)}
                       >
                         <EyeIcon visible={showIsolatedBeads} />
+                      </button>
+                    </span>
+                  )}
+                  {isolatedColorCount > 0 && (
+                    <span className="usage-note-line">
+                      <span>{text.isolatedColors(isolatedColorCount)}</span>
+                      <button type="button" disabled={!canEditActiveLayer} onClick={applyIsolatedColorCleanup}>
+                        {text.cleanIsolatedColors}
                       </button>
                     </span>
                   )}

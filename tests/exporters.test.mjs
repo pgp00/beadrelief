@@ -151,6 +151,7 @@ test("Layered XLSX reports AMS order and layer cells without bead-pack estimates
   project.amsColors = project.amsColors.map((color, index) => ({ ...color, name: `Custom AMS ${index + 1}` }));
   const palette = buildStackPalette(project.amsColors);
   project.layers[0].cells = [palette[4].id, palette[8].id];
+  project.materialProfile.measuredColors = [{ stopLevel: palette[4].stopLevel, hex: "#123456" }];
   project.cells = [...project.layers[0].cells];
 
   assert.deepEqual(summarizeLayeredUsage(project).map((row) => row.layerCells), [8, 8, 4, 0]);
@@ -163,6 +164,8 @@ test("Layered XLSX reports AMS order and layer cells without bead-pack estimates
   assert.match(sheet, />Custom AMS 1</);
   assert.match(sheet, /<v>8<\/v>/);
   assert.match(sheet, /<v>4<\/v>/);
+  assert.match(sheet, />Surface stops</);
+  assert.match(sheet, />#123456</);
   assert.doesNotMatch(sheet, /\u9884\u8ba1\u5305\u6570|\u6bcf\u5305\u6570\u91cf|\u603b\u9897\u6570/);
 
   downloadUsageWorkbook(project, false);

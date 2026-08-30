@@ -155,6 +155,10 @@ function remapPrintCells(
   mode: PrintMode,
   palette: PaletteColor[],
 ): BeadProject {
+  const calibrationChanged = materials.length !== project.amsColors.length || materials.some((material, index) => {
+    const previous = project.amsColors[index];
+    return !previous || material.hex.toLowerCase() !== previous.hex.toLowerCase() || material.tdMm !== previous.tdMm;
+  });
   const byLevel = new Map(palette.flatMap((color) => {
     const parsed = parseStackColorId(color.id);
     return parsed ? [[parsed.stopLevel, color.id] as const] : [];
@@ -172,6 +176,11 @@ function remapPrintCells(
   return {
     ...project,
     amsColors: materials,
+    materialProfile: calibrationChanged ? {
+      ...project.materialProfile,
+      verified: false,
+      measuredColors: [],
+    } : project.materialProfile,
     printSettings: {
       ...project.printSettings,
       mode,
@@ -232,7 +241,7 @@ export function normalizeProject(project: unknown): BeadProject {
     boardHeight: safeIntegerInRange(importedBoardSettings.boardHeight, fallback.boardSettings.boardHeight, 1, 1000),
     showBoardIds: booleanOr(importedBoardSettings.showBoardIds, fallback.boardSettings.showBoardIds),
   };
-  const materialProfile = normalizeMaterialProfileMeta(source.materialProfile);
+  const materialProfile = normalizeMaterialProfileMeta(source.materialProfile, amsColors.length);
   const layers = normalizeLayers(source, width, height).map((layer) => ({
     ...layer,
     cells: layer.cells.map((cell) => cell ? importedAmsIds.get(cell) ?? cell : null),
@@ -297,16 +306,22 @@ function normalizeAmsColors(colors: unknown): AmsColor[] {
   });
 }
 
-function normalizeMaterialProfileMeta(value: unknown): MaterialProfileMeta {
+function normalizeMaterialProfileMeta(value: unknown, materialCount = 1): MaterialProfileMeta {
   if (!isRecord(value)) return { ...DEFAULT_MATERIAL_PROFILE, measuredColors: [] };
   const nozzle = [0.2, 0.4, 0.6, 0.8].includes(Number(value.nozzleDiameterMm))
     ? Number(value.nozzleDiameterMm) as MaterialProfileMeta['nozzleDiameterMm']
     : DEFAULT_MATERIAL_PROFILE.nozzleDiameterMm;
-  const measuredColors = Array.isArray(value.measuredColors) ? value.measuredColors.flatMap((item) => {
+  const normalizedMeasuredColors = Array.isArray(value.measuredColors) ? value.measuredColors.flatMap((item) => {
     if (!isRecord(item) || !Number.isSafeInteger(item.stopLevel) || Number(item.stopLevel) < 4 || Number(item.stopLevel) > 16
       || typeof item.hex !== 'string' || !/^#[0-9a-f]{6}$/i.test(item.hex)) return [];
     return [{ stopLevel: Number(item.stopLevel), hex: item.hex.toLowerCase() }];
   }) : [];
+  const measuredColors = [...new Map(normalizedMeasuredColors
+    .filter(({ stopLevel }) => stopLevel <= materialCount * 4)
+    .map((color) => [color.stopLevel, color])).values()];
+  const measuredStops = new Set(measuredColors.map(({ stopLevel }) => stopLevel));
+  const calibrationComplete = materialCount < 2
+    || Array.from({ length: materialCount * 4 - 3 }, (_, index) => index + 4).every((stop) => measuredStops.has(stop));
   return {
     version: '1.0.0',
     name: typeof value.name === 'string' && value.name.trim() ? value.name.trim().slice(0, 80) : DEFAULT_MATERIAL_PROFILE.name,
@@ -315,7 +330,7 @@ function normalizeMaterialProfileMeta(value: unknown): MaterialProfileMeta {
     layerHeightMm: typeof value.layerHeightMm === 'number' && Number.isFinite(value.layerHeightMm) && value.layerHeightMm >= 0.04 && value.layerHeightMm <= 0.4
       ? value.layerHeightMm
       : DEFAULT_MATERIAL_PROFILE.layerHeightMm,
-    verified: value.verified === true,
+    verified: value.verified === true && calibrationComplete,
     measuredColors,
   };
 }

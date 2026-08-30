@@ -100,6 +100,42 @@ export function mergeCloseLayerColors(
   return { cells: next, changed };
 }
 
+export function mergeIsolatedLayerColors(
+  cells: Array<string | null>,
+  width: number,
+  height: number,
+): { cells: Array<string | null>; changed: number } {
+  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1 || cells.length !== width * height) {
+    return { cells, changed: 0 };
+  }
+  const replacements = new Map<number, string>();
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = y * width + x;
+      const current = cells[index];
+      if (!current) continue;
+      const neighbors: string[] = [];
+      for (let dy = -1; dy <= 1; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          if ((!dx && !dy) || x + dx < 0 || x + dx >= width || y + dy < 0 || y + dy >= height) continue;
+          const neighbor = cells[(y + dy) * width + x + dx];
+          if (neighbor) neighbors.push(neighbor);
+        }
+      }
+      if (!neighbors.length || neighbors.includes(current)) continue;
+      const counts = new Map<string, number>();
+      neighbors.forEach((id) => counts.set(id, (counts.get(id) ?? 0) + 1));
+      const winner = [...counts].sort((left, right) => right[1] - left[1])[0];
+      if (winner && winner[1] >= 2) replacements.set(index, winner[0]);
+    }
+  }
+  if (!replacements.size) return { cells, changed: 0 };
+  return {
+    cells: cells.map((cell, index) => replacements.get(index) ?? cell),
+    changed: replacements.size,
+  };
+}
+
 function areLayerColorsClose(
   from: NonNullable<ReturnType<typeof getColor>>,
   to: NonNullable<ReturnType<typeof getColor>>,

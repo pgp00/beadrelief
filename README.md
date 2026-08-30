@@ -41,6 +41,8 @@ Open the [live demo](https://pgp00.github.io/beadrelief/), choose **Bead pattern
 
 Every project JSON, layered workbook, and 3MF carries the bottom-to-top print recipe. The 3MF also embeds the selected nozzle and material assignments.
 
+The usage panel can safely merge isolated color speckles in one undoable pass. Layered calibration is tied to the physical filament order, TD, printer, nozzle, and layer height; changing those inputs automatically retires stale measurements.
+
 ## Open it in Bambu Studio
 
 1. Import the exported `.3mf`.

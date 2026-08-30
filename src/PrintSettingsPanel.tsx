@@ -5,6 +5,12 @@ import { STACK_LAYER_HEIGHT_MM, type StackTemplateId } from './print/stacking';
 import { withLayeredMaterials, withPrintMode, withStackTemplate } from './project';
 import type { BeadProject, PrintMode, PrintSettings } from './types';
 
+function invalidateCalibration(project: BeadProject): BeadProject {
+  return project.materialProfile.verified || project.materialProfile.measuredColors.length
+    ? { ...project, materialProfile: { ...project.materialProfile, verified: false, measuredColors: [] } }
+    : project;
+}
+
 type Props = {
   project: BeadProject;
   model: PrintableModel;
@@ -56,7 +62,8 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
       return;
     }
     const renamed = color.id === previous.id ? project : replaceProjectColor(project, previous.id, color.id);
-    onChange({ ...renamed, amsColors: renamed.amsColors.map((item, itemIndex) => itemIndex === index ? color : item) });
+    const updated = { ...renamed, amsColors: renamed.amsColors.map((item, itemIndex) => itemIndex === index ? color : item) };
+    onChange(color.hex !== previous.hex || color.tdMm !== previous.tdMm ? invalidateCalibration(updated) : updated);
   }
 
   function addColor() {
@@ -66,7 +73,7 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
     onCommit();
     onChange(project.printSettings.mode === 'layered'
       ? withLayeredMaterials(project, materials)
-      : { ...project, amsColors: materials });
+      : invalidateCalibration({ ...project, amsColors: materials }));
   }
 
   function removeLastColor() {
@@ -79,7 +86,7 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
       return;
     }
     const remapped = replaceProjectColor(project, removed.id, project.amsColors[0].id);
-    onChange({ ...remapped, amsColors: remapped.amsColors.slice(0, -1) });
+    onChange(invalidateCalibration({ ...remapped, amsColors: remapped.amsColors.slice(0, -1) }));
   }
 
   function updateNumber(key: NumericPrintSetting, value: number) {

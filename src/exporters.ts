@@ -430,6 +430,15 @@ function layeredUsageSheetRows(
       layer.zStartMm,
       layer.zEndMm,
     ]),
+    [],
+    ['Surface stops', 'Stop', 'Cells', 'Estimated HEX', 'Measured HEX'],
+    ...recipe.stops.map((stop) => [
+      'Layered',
+      `L${stop.stopLevel}`,
+      stop.cells,
+      stop.estimatedHex,
+      stop.measuredHex ?? '',
+    ]),
   ];
 }
 

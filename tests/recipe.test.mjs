@@ -15,6 +15,9 @@ test("layered recipe is deterministic and follows bottom-to-top AMS order", () =
   assert.deepEqual(recipe.slots.map(({ slot }) => slot), [1, 2, 3, 4]);
   assert.deepEqual(recipe.layers.map(({ slot }) => slot), [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3]);
   assert.deepEqual(recipe.stops.map(({ stopLevel, cells }) => [stopLevel, cells]), [[4, 1], [8, 1], [12, 1]]);
+  assert.ok(recipe.stops.every(({ measuredHex }) => measuredHex === null));
+  project.materialProfile.measuredColors = [{ stopLevel: 8, hex: "#123456" }];
+  assert.equal(buildPrintRecipe(project).stops.find(({ stopLevel }) => stopLevel === 8).measuredHex, "#123456");
   assert.deepEqual(recipe.layers.at(-1), {
     layer: 12,
     slot: 3,

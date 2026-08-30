@@ -38,8 +38,9 @@ export function materialProfileFromProject(project: BeadProject): MaterialProfil
 
 export function applyMaterialProfile(project: BeadProject, value: unknown): BeadProject {
   const profile = parseMaterialProfile(value);
-  return withMaterials({
-    ...project,
+  const remapped = withMaterials(project, profile.materials);
+  return {
+    ...remapped,
     materialProfile: {
       version: '1.0.0',
       name: profile.name,
@@ -49,7 +50,7 @@ export function applyMaterialProfile(project: BeadProject, value: unknown): Bead
       verified: profile.verified,
       measuredColors: profile.measuredColors.map((color) => ({ ...color })),
     },
-  }, profile.materials);
+  };
 }
 
 export function parseMaterialProfile(value: unknown): MaterialProfile {
@@ -72,6 +73,12 @@ export function parseMaterialProfile(value: unknown): MaterialProfile {
       || typeof item.hex !== 'string') throw new Error('Invalid material profile.');
     return { stopLevel: Number(item.stopLevel), hex: normalizeHex(item.hex) };
   });
+  const measuredStops = new Set(measuredColors.map(({ stopLevel }) => stopLevel));
+  if (measuredStops.size !== measuredColors.length) throw new Error('Invalid material profile.');
+  if (value.verified && materials.length >= 2
+    && Array.from({ length: materials.length * 4 - 3 }, (_, index) => index + 4).some((stop) => !measuredStops.has(stop))) {
+    throw new Error('A verified layered profile needs every calibration stop.');
+  }
   return {
     version: '1.0.0',
     name: value.name.trim(),
