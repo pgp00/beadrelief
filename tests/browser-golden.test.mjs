@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { inflateRawSync } from 'node:zlib';
+import { crc32, inflateRawSync } from 'node:zlib';
 import test from 'node:test';
 import { chromium } from 'playwright-core';
 
@@ -61,7 +61,9 @@ function readZipEntries(archive) {
       ? inflateRawSync(archive.subarray(dataStart, dataEnd))
       : archive.subarray(dataStart, dataEnd);
     assert.equal(data.byteLength, uncompressedSize, `size mismatch for ZIP entry ${name}`);
-    entries.push({ name, data, method, compressedSize, localOffset: offset });
+    const crc = view.getUint32(offset + 14, true);
+    assert.equal(crc32(data), crc, `CRC mismatch for ZIP entry ${name}`);
+    entries.push({ name, data, method, compressedSize, crc, localOffset: offset });
     offset = dataEnd;
   }
 
@@ -79,6 +81,7 @@ function readZipEntries(archive) {
     const name = new TextDecoder().decode(archive.subarray(nameStart, nameStart + nameLength));
     assert.equal(name, entry.name);
     assert.equal(view.getUint16(offset + 10, true), entry.method);
+    assert.equal(view.getUint32(offset + 16, true), entry.crc, `CRC mismatch for ZIP entry ${name}`);
     assert.equal(compressedSize, entry.compressedSize);
     assert.equal(uncompressedSize, entry.data.byteLength);
     assert.equal(view.getUint32(offset + 42, true), entry.localOffset);
@@ -254,6 +257,15 @@ test('heart PNG golden path edits and downloads every export', { skip: !browserP
       'Metadata/model_settings.config',
       'Metadata/beadrelief_recipe.config',
     ]);
+    const corruptedLocalCrc = Uint8Array.from(threeMf);
+    corruptedLocalCrc[threeMfEntries[0].localOffset + 14] ^= 0xff;
+    assert.throws(() => readZipEntries(corruptedLocalCrc), /CRC/i);
+    const archiveView = new DataView(threeMf.buffer, threeMf.byteOffset, threeMf.byteLength);
+    const eocdOffset = threeMf.byteLength - 22 - archiveView.getUint16(threeMf.byteLength - 2, true);
+    const centralDirectoryOffset = archiveView.getUint32(eocdOffset + 16, true);
+    const corruptedCentralCrc = Uint8Array.from(threeMf);
+    corruptedCentralCrc[centralDirectoryOffset + 16] ^= 0xff;
+    assert.throws(() => readZipEntries(corruptedCentralCrc), /CRC/i);
 
     const xlsx = await downloadFrom(page, 'Export usage', directory);
     const xlsxEntries = readZipEntries(xlsx);
