@@ -106,6 +106,9 @@ test('heart PNG golden path edits and downloads every export', { skip: !browserP
     await page.locator('input[type="file"]').first().waitFor({ state: 'attached', timeout: 5_000 }).catch((error) => {
       throw new Error(`${browserErrors.join('\n')}\n${error.message}`);
     });
+    await page.setViewportSize({ width: 980, height: 768 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+    await page.setViewportSize({ width: 1366, height: 768 });
     const status = page.getByRole('status');
     assert.equal(await status.getAttribute('aria-live'), 'polite');
     assert.equal(await status.getAttribute('aria-atomic'), 'true');
@@ -122,6 +125,35 @@ test('heart PNG golden path edits and downloads every export', { skip: !browserP
     assert.equal(await page.getByLabel('画布宽度').count(), 1);
     assert.equal(await page.getByRole('tablist', { name: '右侧面板' }).count(), 1);
     await page.getByRole('button', { name: 'EN', exact: true }).click();
+    const helpButton = page.getByRole('button', { name: 'Help', exact: true });
+    await helpButton.click();
+    const helpDialog = page.getByRole('dialog', { name: 'Quick start & help' });
+    assert.equal(await helpDialog.evaluate((dialog) => dialog.open), true);
+    assert.equal(await helpDialog.locator('ol > li').count(), 4);
+    await page.keyboard.press('Escape');
+    await expectFocused(page, helpButton);
+    assert.equal(await page.evaluate(() => document.documentElement.lang), 'en');
+    const unnamedInteractive = await page.locator('button, input, select, textarea, a[href], summary, [tabindex]:not([tabindex="-1"])').evaluateAll((elements) => {
+      function accessibleName(element) {
+        const labelledBy = element.getAttribute('aria-labelledby')
+          ?.split(/\s+/)
+          .map((id) => document.getElementById(id)?.textContent?.trim() ?? '')
+          .filter(Boolean)
+          .join(' ');
+        return element.getAttribute('aria-label')
+          || labelledBy
+          || [...(element.labels ?? [])].map((label) => label.textContent?.trim() ?? '').filter(Boolean).join(' ')
+          || element.getAttribute('title')
+          || (element instanceof HTMLInputElement ? element.value : '')
+          || element.textContent?.trim()
+          || '';
+      }
+      return elements
+        .filter((element) => element.getClientRects().length > 0 && !element.closest('[aria-hidden="true"]'))
+        .filter((element) => !accessibleName(element))
+        .map((element) => element.outerHTML.slice(0, 200));
+    });
+    assert.deepEqual(unnamedInteractive, []);
     assert.equal(await page.getByRole('button', { name: 'Bead pattern', exact: true }).getAttribute('aria-pressed'), 'true');
     assert.equal(await page.getByRole('button', { name: 'Export 3MF', exact: true }).count(), 0);
     assert.equal(await page.getByLabel('Pattern color limit').inputValue(), '291');

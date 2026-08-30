@@ -18,17 +18,19 @@ type PreviewRefs = {
 };
 
 type CommonProps = {
-  language: 'zh' | 'en';
   title: string;
   emptyLabel: string;
   closeLabel: string;
   expandLabel: string;
   webglErrorLabel: string;
+  previewLayerLabel: string;
+  singleLayerLabel: string;
+  explodedLabel: string;
 };
 
 type Props = CommonProps & ({ model: PrintableModel; project?: never } | { project: BeadProject; model?: never });
 
-export default function ThreePreview({ model, project, language, title, emptyLabel, closeLabel, expandLabel, webglErrorLabel }: Props) {
+export default function ThreePreview({ model, project, title, emptyLabel, closeLabel, expandLabel, webglErrorLabel, previewLayerLabel, singleLayerLabel, explodedLabel }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const modalHostRef = useRef<HTMLDivElement | null>(null);
   const dialogRef = useRef<HTMLDialogElement | null>(null);
@@ -239,9 +241,9 @@ export default function ThreePreview({ model, project, language, title, emptyLab
               <strong>{title}</strong>
               {maximumLayer > 0 && <div className="preview-layer-controls">
                 <label>
-                  <span>{language === 'zh' ? '预览层' : 'Preview layer'} {previewLayer}/{maximumLayer}</span>
+                  <span>{previewLayerLabel} {previewLayer}/{maximumLayer}</span>
                   <input
-                    aria-label={language === 'zh' ? '预览层' : 'Preview layer'}
+                    aria-label={previewLayerLabel}
                     type="range"
                     min={1}
                     max={maximumLayer}
@@ -249,8 +251,8 @@ export default function ThreePreview({ model, project, language, title, emptyLab
                     onChange={(event) => setPreviewLayer(Number(event.target.value))}
                   />
                 </label>
-                <label><input type="checkbox" checked={singleLayer} onChange={(event) => setSingleLayer(event.target.checked)} /> {language === 'zh' ? '仅当前层' : 'Single layer'}</label>
-                <label><input type="checkbox" checked={exploded} onChange={(event) => setExploded(event.target.checked)} /> {language === 'zh' ? '爆炸视图' : 'Exploded'}</label>
+                <label><input type="checkbox" checked={singleLayer} onChange={(event) => setSingleLayer(event.target.checked)} /> {singleLayerLabel}</label>
+                <label><input type="checkbox" checked={exploded} onChange={(event) => setExploded(event.target.checked)} /> {explodedLabel}</label>
               </div>}
               <button onClick={() => dialogRef.current?.close()}>{closeLabel}</button>
             </div>

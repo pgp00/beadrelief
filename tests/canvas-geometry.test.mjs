@@ -10,6 +10,7 @@ import {
   filledRectanglePoints,
   linePoints,
 } from "../generated/dist/src/canvasGeometry.js";
+import { collectConnectedCellIndices, createClipboardPattern, floodFill, shiftCells } from "../generated/dist/src/canvasOperations.js";
 
 test("canvas geometry keeps line endpoints and fills rectangles", () => {
   assert.deepEqual(linePoints(1, 2, 3, 4), [
@@ -35,4 +36,12 @@ test("round shapes stay inside odd-sized drag bounds", () => {
   }
   assert.deepEqual([Math.min(...ellipse.map(({ x }) => x)), Math.max(...ellipse.map(({ x }) => x)), Math.min(...ellipse.map(({ y }) => y)), Math.max(...ellipse.map(({ y }) => y))], [0, 5, 0, 3]);
   assert.deepEqual([Math.min(...circle.map(({ x }) => x)), Math.max(...circle.map(({ x }) => x)), Math.min(...circle.map(({ y }) => y)), Math.max(...circle.map(({ y }) => y))], [0, 5, 0, 5]);
+});
+
+test("canvas operations keep selection and fill behavior independent from React", () => {
+  const cells = ['red', 'red', null, 'blue', null, null];
+  assert.deepEqual(collectConnectedCellIndices(cells, 3, 2, 0, 0).sort(), [0, 1]);
+  assert.deepEqual(floodFill(cells, 3, 2, 0, 0, 'blue'), ['blue', 'blue', null, 'blue', null, null]);
+  assert.deepEqual(createClipboardPattern(cells, 3, [0, 1]), { width: 2, height: 1, cells: ['red', 'red'] });
+  assert.deepEqual(shiftCells(cells, 3, 2, 1, 0, [0, 1]), [null, 'red', 'red', 'blue', null, null]);
 });

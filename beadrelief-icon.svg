@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="BeadRelief">
+  <rect width="64" height="64" rx="14" fill="#fffaf0"/>
+  <g stroke="#173f43" stroke-width="2">
+    <circle cx="21" cy="21" r="11" fill="#17656a"/>
+    <circle cx="43" cy="21" r="11" fill="#f3d247"/>
+    <circle cx="21" cy="43" r="11" fill="#c93a35"/>
+    <circle cx="43" cy="43" r="11" fill="#3f9e55"/>
+  </g>
+</svg>

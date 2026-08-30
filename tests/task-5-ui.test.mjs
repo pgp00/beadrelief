@@ -6,7 +6,7 @@ import { createProject } from "../generated/dist/src/project.js";
 
 globalThis.React = React;
 const { ui } = await import("../generated/dist/src/i18n.js");
-const { imageLaunchState, loadHeartSample } = await import("../generated/dist/src/App.js");
+const { imageLaunchState, loadHeartSample } = await import("../generated/dist/src/appLogic.js");
 
 test("first-use launch and export copy stay localized", () => {
   for (const key of ["threeMfDownloaded", "trySample", "uploadYourImage", "exportThreeMf"]) {
@@ -44,10 +44,14 @@ test("sample loading localizes fetch failures", async () => {
 
 test("public identity stays BeadRelief", async () => {
   const packageJson = JSON.parse(await readFile("package.json", "utf8"));
+  const indexHtml = await readFile("index.html", "utf8");
 
   assert.equal(packageJson.name, "beadrelief");
   assert.equal(packageJson.homepage, "https://pgp00.github.io/beadrelief/");
   assert.equal(packageJson.repository.url, "https://github.com/pgp00/beadrelief.git");
   assert.equal(ui.en.appName, "BeadRelief");
   assert.equal(ui.zh.appName, "BeadRelief");
+  assert.match(indexHtml, /property="og:title"/);
+  assert.match(indexHtml, /name="twitter:card"/);
+  assert.match(indexHtml, /href="\.\/beadrelief-icon\.svg"/);
 });

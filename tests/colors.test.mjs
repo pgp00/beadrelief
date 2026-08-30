@@ -15,7 +15,7 @@ import {
 } from "../generated/dist/src/print/colors.js";
 
 globalThis.React = React;
-const { autoGenerationPaletteKey, beginAutoGenerationEffect, canEditLayer, codedUiError, generationBlocksExport, hasLayerCapacity, pendingGenerationAction, printOptionsForProject, projectForDisplay, projectGridChanged, replaceGeneratedProject, resizeWouldCropProject, shouldAutoRegenerate } = await import("../generated/dist/src/App.js");
+const { autoGenerationPaletteKey, beginAutoGenerationEffect, canEditLayer, codedUiError, generationBlocksExport, hasLayerCapacity, pendingGenerationAction, printOptionsForProject, projectForDisplay, projectGridChanged, replaceGeneratedProject, resizeWouldCropProject, shouldAutoRegenerate } = await import("../generated/dist/src/appLogic.js");
 const { resolveLanguage } = await import("../generated/dist/src/i18n.js");
 
 function findElements(element, predicate, found = []) {
@@ -220,8 +220,8 @@ test("resize confirmation is needed only when nonempty cells would be cropped", 
 
 test("every print output uses the persisted project name", () => {
   const project = { ...createProject(1, 1), name: "My persistent pattern" };
-  assert.equal(printOptionsForProject(project, { format: "png", projectName: "stale nickname" }, "en").projectName, project.name);
-  assert.equal(printOptionsForProject(project, { format: "pdf" }, "zh").layerLabelPrefix, "图层");
+  assert.equal(printOptionsForProject(project, { format: "png", projectName: "stale nickname" }, "Layer").projectName, project.name);
+  assert.equal(printOptionsForProject(project, { format: "pdf" }, "图层").layerLabelPrefix, "图层");
 });
 
 test("solo display derives visibility without changing the project", () => {

@@ -24,6 +24,15 @@ Turn any image into an editable bead pattern or a multicolor 3MF relief — enti
 |:---:|:---:|:---:|
 | Images and generated files stay in your browser. | Use the full MARD palette and export PNG/PDF patterns. | Project-filament colors and part assignments are included. |
 
+## Three-minute quick start
+
+1. Open the [live demo](https://pgp00.github.io/beadrelief/) and choose **Bead pattern** or **3D print**.
+2. Select **Try the sample** or upload a JPG, PNG, or WebP image.
+3. Adjust the size, color limit, crop, and background; then edit cells with the palette and drawing tools.
+4. Export a PNG/PDF pattern, usage workbook, edit-record JSON, or a 3MF in 3D print mode.
+
+The **Help** button in the app keeps this workflow, keyboard controls, FAQ, and browser support in one place.
+
 ## Choose an output
 
 The live demo has two explicit workflows that share the same editable canvas:
@@ -62,12 +71,51 @@ Follow the full editable-project path with the same tiny heart:
 |:---:|:---:|:---:|
 | [PNG](samples/beadrelief-heart-source.png) | [Project JSON](samples/beadrelief-heart-project.json) | [Grouped 3MF](samples/beadrelief-heart-p2s.3mf) |
 
+## Canvas shortcuts
+
+| Input | Action |
+|---|---|
+| Arrow keys | Move the keyboard cursor |
+| Space or Enter | Draw at the cursor |
+| Delete or Backspace | Clear the cursor cell |
+| Hold Space and drag | Temporarily pan the canvas |
+| Mouse wheel | Zoom the canvas |
+| Right-click drag | Pan or erase, based on the right-click setting |
+
+## Browser support
+
+Releases are verified in current Chromium. The supported setup is the latest Chrome or Edge with a desktop viewport at least 980 px wide; WebGL is required for the 3D preview. Firefox and Safari are not yet part of the supported release contract.
+
+## FAQ
+
+<details>
+<summary><strong>Are my images uploaded?</strong></summary>
+
+No. Image conversion and exports run locally in your browser.
+
+</details>
+
+<details>
+<summary><strong>How should I back up a project?</strong></summary>
+
+The current draft is stored in this browser. Export the edit-record JSON for any project you need to keep or move to another device.
+
+</details>
+
+<details>
+<summary><strong>Why is 3MF export unavailable?</strong></summary>
+
+Switch to **3D print**, keep the canvas at 32 × 32 cells or smaller, and resolve any print-setting validation message before exporting.
+
+</details>
+
 ## Run locally
 
 Requires Node.js 22.9 or newer.
 
 ```bash
 npm ci
+npm run check
 npm run dev
 ```
 

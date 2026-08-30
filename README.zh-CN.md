@@ -24,6 +24,15 @@
 |:---:|:---:|:---:|
 | 图片和生成文件都留在浏览器中。 | 使用完整 MARD 色板并导出 PNG/PDF 图纸。 | 包含项目耗材颜色和零件分配。 |
 
+## 三分钟快速上手
+
+1. 打开[在线演示](https://pgp00.github.io/beadrelief/)，选择**拼豆图纸**或 **3D 打印**。
+2. 点击**试试示例**，或上传 JPG、PNG、WebP 图片。
+3. 调整尺寸、色数、裁切和背景，再用色板与绘图工具修改格子。
+4. 导出 PNG/PDF 图纸、用量表、编辑记录 JSON，或在 3D 打印模式导出 3MF。
+
+应用顶部的**帮助**按钮集中提供这套流程、快捷操作、常见问题和浏览器支持信息。
+
 ## 选择输出类型
 
 在线演示提供两个明确入口，并共享同一套可编辑画布：
@@ -62,12 +71,51 @@
 |:---:|:---:|:---:|
 | [PNG](samples/beadrelief-heart-source.png) | [项目 JSON](samples/beadrelief-heart-project.json) | [分组 3MF](samples/beadrelief-heart-p2s.3mf) |
 
+## 画布快捷操作
+
+| 操作 | 功能 |
+|---|---|
+| 方向键 | 移动键盘光标 |
+| 空格或 Enter | 在光标位置绘制 |
+| Delete 或 Backspace | 清除光标位置 |
+| 按住空格并拖动 | 临时平移画布 |
+| 鼠标滚轮 | 缩放画布 |
+| 右键拖动 | 按右键设置执行平移或擦除 |
+
+## 浏览器支持
+
+发布版本使用当前 Chromium 完成验证。正式支持最新版 Chrome 或 Edge，桌面窗口至少 980 px 宽；3D 预览需要 WebGL。Firefox 和 Safari 尚未纳入正式支持和发布回归范围。
+
+## 常见问题
+
+<details>
+<summary><strong>图片会上传吗？</strong></summary>
+
+不会。图片转换与文件导出都在浏览器本地完成。
+
+</details>
+
+<details>
+<summary><strong>怎样备份作品？</strong></summary>
+
+当前草稿保存在这个浏览器中。需要长期保存或换设备时，请导出编辑记录 JSON。
+
+</details>
+
+<details>
+<summary><strong>为什么不能导出 3MF？</strong></summary>
+
+请切换到 **3D 打印**，把画布控制在 32 × 32 格以内，并先解决打印参数校验提示。
+
+</details>
+
 ## 本地运行
 
 需要 Node.js 22.9 或更高版本。
 
 ```bash
 npm ci
+npm run check
 npm run dev
 ```
 

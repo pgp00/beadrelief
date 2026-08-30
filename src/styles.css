@@ -921,6 +921,14 @@ button:focus-visible {
   gap: 7px;
 }
 
+.image-empty-actions p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+  line-height: var(--line-normal);
+}
+
 .image-empty-actions button {
   min-width: 0;
   padding-inline: 8px;

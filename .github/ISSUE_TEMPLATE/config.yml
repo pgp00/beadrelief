@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Usage help and FAQ
+    url: https://github.com/pgp00/beadrelief#faq
+    about: Check the quick start, browser support, and common solutions before opening an issue.

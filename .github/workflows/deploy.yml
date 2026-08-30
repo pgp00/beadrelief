@@ -24,6 +24,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run check
       - run: npm run verify
       - run: git diff --exit-code -- samples
       - run: node scripts/generate-checksums.mjs --check

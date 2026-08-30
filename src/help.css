@@ -1,0 +1,139 @@
+.help-button {
+  height: 38px;
+  padding-inline: 10px;
+  border-color: transparent;
+  background: transparent;
+  color: #344044;
+  font-weight: var(--weight-semibold);
+}
+
+.help-button:hover:not(:disabled) {
+  background: rgba(255, 253, 248, 0.62);
+  color: var(--accent);
+}
+
+.help-dialog {
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow-pop);
+}
+
+.help-dialog::backdrop {
+  background: rgba(22, 24, 29, 0.48);
+  backdrop-filter: blur(8px);
+}
+
+.help-dialog-panel {
+  display: grid;
+  gap: 18px;
+  max-height: calc(100dvh - 32px);
+  padding: 22px;
+  overflow: auto;
+}
+
+.help-dialog header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.help-dialog h2,
+.help-dialog h3,
+.help-dialog p,
+.help-dialog ol,
+.help-dialog dl {
+  margin: 0;
+}
+
+.help-dialog h2 {
+  font-size: 22px;
+}
+
+.help-dialog h3 {
+  margin-bottom: 9px;
+  color: var(--accent);
+  font-size: var(--font-size-title);
+}
+
+.help-dialog header p,
+.help-dialog section > p,
+.help-faq p {
+  margin-top: 5px;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.help-dialog header button {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.help-dialog ol {
+  display: grid;
+  gap: 7px;
+  padding-left: 22px;
+  line-height: 1.5;
+}
+
+.shortcut-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 18px;
+}
+
+.shortcut-list > div {
+  display: grid;
+  grid-template-columns: minmax(105px, auto) 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.shortcut-list dd {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.shortcut-list kbd {
+  display: inline-block;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: #ffffff;
+  font: inherit;
+  font-size: var(--font-size-small);
+}
+
+.help-faq {
+  display: grid;
+  gap: 7px;
+}
+
+.help-faq details {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.help-faq summary {
+  cursor: pointer;
+  font-weight: var(--weight-semibold);
+}
+
+@media (max-width: 700px) {
+  .shortcut-list {
+    grid-template-columns: 1fr;
+  }
+}

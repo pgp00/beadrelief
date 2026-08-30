@@ -1,6 +1,8 @@
 ﻿import WorkspaceCanvas from './WorkspaceCanvas.js';
 import ThreePreview from './ThreePreview.js';
 import PrintSettingsPanel from './PrintSettingsPanel.js';
+import HelpDialog from './HelpDialog.js';
+import { autoGenerationPaletteKey, beginAutoGenerationEffect, canEditLayer, codedUiError, generationBlocksExport, hasLayerCapacity, imageLaunchState, loadHeartSample, pendingGenerationAction, printOptionsForProject, projectForDisplay, replaceGeneratedProject, resizeWouldCropProject, shouldAutoRegenerate } from './appLogic.js';
 import { downloadMaterialProfile, downloadPrintPdf, downloadPrintPng, downloadProjectJson, downloadUsageWorkbook } from './exporters.js';
 import type { PrintExportOptions } from './exporters.js';
 import { imageFileToBeads } from './imageToBeads.js';
@@ -16,114 +18,11 @@ import { applyMaterialProfile, calibrationProject, MAX_PROFILE_FILE_BYTES } from
 import { downloadThreeMf } from './print/threeMf.js';
 import { validatePrintableModel } from './print/validation.js';
 import { basicPalette, completePalette, getColor } from './palette.js';
-import { MAX_PROJECT_DIMENSION, MAX_PROJECT_FILE_BYTES, MAX_PROJECT_LAYERS, composeVisibleCells, createLayer, createProject, hasEditableWork, isSafeProjectImport, loadDraft, normalizeProject, projectGridChanged, saveDraft, withCells, withLayers } from './project.js';
+import { MAX_PROJECT_DIMENSION, MAX_PROJECT_FILE_BYTES, composeVisibleCells, createLayer, createProject, hasEditableWork, isSafeProjectImport, loadDraft, normalizeProject, projectGridChanged, saveDraft, withCells, withLayers } from './project.js';
 import { findIsolatedBeads, summarizeLayeredUsage, summarizeUsage } from './usage.js';
-import type { ArrowKind, BackgroundMode, BeadProject, ClipboardPattern, ConvertResult, CopyMode, CropAspect, GenerationStyle, MirrorDirection, MoveMode, PaletteColor, RemoveMode, RightClickAction, ShapeFillMode, ShapeKind, TextDirection, ToolId } from './types.js';
+import type { ArrowKind, BackgroundMode, BeadProject, ClipboardPattern, CopyMode, CropAspect, GenerationStyle, MirrorDirection, MoveMode, PaletteColor, RemoveMode, RightClickAction, ShapeFillMode, ShapeKind, TextDirection, ToolId } from './types.js';
 
 const { useCallback, useEffect, useMemo, useRef, useState } = React;
-
-export function autoGenerationPaletteKey(mode: BeadProject['printSettings']['mode'], colors: BeadProject['amsColors']): string {
-  return mode === 'layered'
-    ? 'layered'
-    : `solid:${JSON.stringify(colors.map(({ id, hex }) => [id, hex]))}`;
-}
-
-export function beginAutoGenerationEffect(request: { current: number }, suppression: { current: boolean }): boolean {
-  request.current += 1;
-  const shouldGenerate = !suppression.current;
-  suppression.current = false;
-  return shouldGenerate;
-}
-
-export function pendingGenerationAction(pending: boolean, suppressed: boolean): 'none' | 'restart' | 'cancel' {
-  return !pending ? 'none' : suppressed ? 'cancel' : 'restart';
-}
-
-export function shouldAutoRegenerate(hasSource: boolean, hasManualEdits: boolean): boolean {
-  return hasSource && !hasManualEdits;
-}
-
-export function hasLayerCapacity(layerCount: number): boolean {
-  return layerCount < MAX_PROJECT_LAYERS;
-}
-
-export function canEditLayer(layer: Pick<BeadProject['layers'][number], 'locked' | 'visible'>): boolean {
-  return !layer.locked && layer.visible;
-}
-
-export function resizeWouldCropProject(project: BeadProject, width: number, height: number): boolean {
-  if (width >= project.width && height >= project.height) return false;
-  return project.layers.some((layer) => layer.cells.some((cell, index) => (
-    cell !== null && (index % project.width >= width || Math.floor(index / project.width) >= height)
-  )));
-}
-
-export function printOptionsForProject(project: BeadProject, options: PrintExportOptions, language: Language): PrintExportOptions {
-  return {
-    ...options,
-    projectName: project.name,
-    layerLabelPrefix: language === 'en' ? 'Layer' : '图层',
-  };
-}
-
-export function generationBlocksExport(running: boolean, scheduled: boolean): boolean {
-  return running || scheduled;
-}
-
-export function codedUiError(code: string, message: string): string {
-  return `[${code}] ${message}`;
-}
-
-export function imageLaunchState(hasPendingImage: boolean, project: BeadProject) {
-  return {
-    showActions: !hasPendingImage && !hasEditableWork(project),
-    sampleSettings: {
-      width: 10,
-      generationStyle: 'cartoon' as GenerationStyle,
-      backgroundMode: 'keep' as BackgroundMode,
-      tolerance: 0,
-    },
-  };
-}
-
-export async function loadHeartSample(fetchImage: typeof fetch, localizedError: string): Promise<File> {
-  try {
-    const response = await fetchImage('./samples/beadrelief-heart-source.png');
-    if (!response.ok) throw new Error(localizedError);
-    return new File([await response.blob()], 'beadrelief-heart-source.png', { type: 'image/png' });
-  } catch {
-    throw new Error(localizedError);
-  }
-}
-
-export function replaceGeneratedProject(
-  project: BeadProject,
-  result: Pick<ConvertResult, 'width' | 'height' | 'cells'>,
-): BeadProject {
-  const fresh = createProject(result.width, result.height, project.name);
-  return withCells({
-    ...fresh,
-    settings: { ...project.settings, showActiveLayerOnly: false },
-    boardSettings: { ...project.boardSettings },
-    amsColors: project.amsColors.map((color) => ({ ...color })),
-    printSettings: { ...project.printSettings },
-  }, result.cells, result.width, result.height);
-}
-
-export function projectForDisplay(project: BeadProject): BeadProject {
-  if (!project.settings.showActiveLayerOnly) return project;
-  const layers = project.layers.map((layer) => ({
-    ...layer,
-    visible: layer.id === project.activeLayerId,
-  }));
-  return {
-    ...project,
-    layers,
-    cells: composeVisibleCells(layers, project.width, project.height),
-  };
-}
-
-export { projectGridChanged } from './project.js';
 
 const tools: ToolId[] = [
   'pencil',
@@ -184,6 +83,7 @@ export default function App() {
   const jsonInputRef = useRef<HTMLInputElement | null>(null);
   const profileInputRef = useRef<HTMLInputElement | null>(null);
   const printExportButtonRef = useRef<HTMLButtonElement | null>(null);
+  const helpDialogRef = useRef<HTMLDialogElement | null>(null);
   const autoGenerateShouldCommitRef = useRef(false);
   const generationRequestRef = useRef(0);
   const autoGenerationPendingRef = useRef(false);
@@ -367,16 +267,16 @@ export default function App() {
   function layerDisplayName(layer: BeadProject['layers'][number], index: number): string {
     if (layer.customName) return layer.name;
     const match = layer.name.match(/^(?:Layer|图层)\s+(\d+)$/);
-    if (match) return language === 'zh' ? `图层 ${match[1]}` : `Layer ${match[1]}`;
+    if (match) return `${text.layer} ${match[1]}`;
     if (layer.id === 'base' || layer.name === 'Pattern' || layer.name === 'Base bead layer' || layer.name === '基础珠子层') {
       return systemLayerName(index);
     }
-    if (!layer.name.trim()) return language === 'zh' ? `图层 ${index + 1}` : `Layer ${index + 1}`;
+    if (!layer.name.trim()) return `${text.layer} ${index + 1}`;
     return layer.name;
   }
 
   function systemLayerName(index: number): string {
-    return language === 'zh' ? `图层 ${index + 1}` : `Layer ${index + 1}`;
+    return `${text.layer} ${index + 1}`;
   }
 
   function startEditingLayer(layer: BeadProject['layers'][number], index: number) {
@@ -451,15 +351,7 @@ export default function App() {
   }, [project.width, project.height]);
 
   useEffect(() => {
-    setNotice((current: string) => {
-      if (current === ui.zh.workspaceReady || current === ui.en.workspaceReady) return text.workspaceReady;
-      if (current === ui.zh.regenerateFromImage || current === ui.en.regenerateFromImage) return text.regenerateFromImage;
-      const zhGenerated = current.match(/^(\d+) 色 - (\d+) 颗 - 可编辑图案已生成。$/);
-      if (zhGenerated) return `${zhGenerated[1]} colors - ${zhGenerated[2]} beads - editable pattern ready.`;
-      const enGenerated = current.match(/^(\d+) colors - (\d+) beads - editable pattern ready\.$/);
-      if (enGenerated) return `${enGenerated[1]} 色 - ${enGenerated[2]} 颗 - 可编辑图案已生成。`;
-      return current;
-    });
+    setNotice(text.workspaceReady);
   }, [language, text.workspaceReady]);
 
   useEffect(() => {
@@ -544,7 +436,7 @@ export default function App() {
 
   function blockExportWhileGenerating(): boolean {
     if (!generationBlocksExport(isGenerating, autoGenerationPendingRef.current)) return false;
-    setNotice(language === 'zh' ? '图案更新完成后才能导出。' : 'Wait for the pattern update before exporting.');
+    setNotice(text.exportBlocked);
     return true;
   }
 
@@ -565,9 +457,7 @@ export default function App() {
       setImportSettings((current) => ({ ...current, width: Math.min(current.width, MAX_PRINT_WORKSPACE_DIMENSION) }));
     }
     setShowPrintExportPanel(false);
-    setNotice(next === 'pattern'
-      ? (language === 'zh' ? '拼豆图纸模式：使用完整 MARD 色板。' : 'Bead pattern mode: using the full MARD palette.')
-      : (language === 'zh' ? '3D 打印模式：使用 AMS 颜色生成 3MF。' : '3D print mode: using AMS colors for 3MF.'));
+    setNotice(next === 'pattern' ? text.patternModeSelected : text.threeDModeSelected);
   }
 
   const selectColor = useCallback((colorId: string, options: { updateRecent?: boolean } = {}) => {
@@ -743,7 +633,7 @@ export default function App() {
     setFuture([]);
     setManualEditsSinceGeneration(false);
     resetImportSettings();
-    setNotice(language === 'zh' ? `已创建 ${width} * ${height} 空白画布。` : `Blank ${width} x ${height} canvas created.`);
+    setNotice(text.blankCanvasCreated(width, height));
   }
 
   function applyIsolatedColorCleanup() {
@@ -757,7 +647,7 @@ export default function App() {
     if (activeLayer.cells.every((cell) => cell === null)) return;
     commitHistory();
     updateProject(withCells(project, Array.from({ length: project.width * project.height }, () => null)));
-    setNotice(language === 'zh' ? '画布已清空。' : 'Canvas cleared.');
+    setNotice(text.canvasCleared);
   }
 
   function resizeCanvas() {
@@ -779,7 +669,7 @@ export default function App() {
       layers: nextLayers,
       cells: composeVisibleCells(nextLayers, width, height),
     });
-    setNotice(language === 'zh' ? `画布已调整为 ${width} * ${height}。` : `Canvas resized to ${width} x ${height}.`);
+    setNotice(text.canvasResized(width, height));
   }
 
   function applyPreset(value: string) {
@@ -791,7 +681,7 @@ export default function App() {
 
   function handleImageFile(file: File, options: { replacementConfirmed?: boolean } = {}): boolean {
     if (!file.type.match(/^image\/(png|jpeg|jpg|webp)$/)) {
-      setNotice(language === 'zh' ? '请使用 PNG、JPG、JPEG 或 WebP 图片。' : 'Use a PNG, JPG, JPEG, or WebP image.');
+      setNotice(text.supportedImageTypes);
       return false;
     }
     if (!options.replacementConfirmed && !allowProjectReplacement()) return false;
@@ -812,7 +702,7 @@ export default function App() {
     });
     resetReferenceTransform();
     autoGenerateShouldCommitRef.current = true;
-    setNotice(language === 'zh' ? `正在生成 ${file.name}...` : `Generating ${file.name}...`);
+    setNotice(text.generatingImage(file.name));
     return true;
   }
 
@@ -826,7 +716,7 @@ export default function App() {
 
   function handleReferenceImageFile(file: File) {
     if (!file.type.match(/^image\/(png|jpeg|jpg|webp)$/)) {
-      setNotice(language === 'zh' ? '请使用 PNG、JPG、JPEG 或 WebP 图片。' : 'Use a PNG, JPG, JPEG, or WebP image.');
+      setNotice(text.supportedImageTypes);
       return;
     }
     setReferenceFile(file);
@@ -836,7 +726,7 @@ export default function App() {
     });
     resetReferenceTransform();
     setReferenceVisible(true);
-    setNotice(language === 'zh' ? `${file.name} 已设为参考图。` : `${file.name} set as reference image.`);
+    setNotice(text.referenceImageSet(file.name));
   }
 
   async function generateFromImage(options: { recordHistory?: boolean; automatic?: boolean } = {}) {
@@ -844,7 +734,7 @@ export default function App() {
     const requestId = generationRequestRef.current + 1;
     generationRequestRef.current = requestId;
     setIsGenerating(true);
-    setNotice(language === 'zh' ? '正在本地更新拼豆图案...' : 'Updating bead pattern locally...');
+    setNotice(text.updatingPattern);
     try {
       const result = await imageFileToBeads(pendingFile, {
         width: convertWidth,
@@ -864,11 +754,7 @@ export default function App() {
       }
       const nextProject = replaceGeneratedProject(projectRef.current, result);
       updateProject(nextProject, 'generated');
-      setNotice(
-        language === 'zh'
-          ? `${result.colorsUsed} 色 - ${result.totalBeads} 颗 - 可编辑图案已生成。`
-          : `${result.colorsUsed} colors - ${result.totalBeads} beads - editable pattern ready.`,
-      );
+      setNotice(text.patternReady(result.colorsUsed, result.totalBeads));
     } catch (error) {
       if (requestId !== generationRequestRef.current) return;
       setNotice(codedUiError('IMAGE_CONVERSION', text.imageConversionFailed));
@@ -956,7 +842,7 @@ export default function App() {
   }
 
   function uniqueDuplicateLayerName(baseName: string): string {
-    const suffix = language === 'zh' ? '复制' : 'copy ';
+    const suffix = text.layerCopySuffix;
     const existingNames = new Set(layers.map((layer, index) => layerDisplayName(layer, index)));
     for (let index = 1; index < 1000; index += 1) {
       const candidate = `${baseName}-${suffix}${index}`;
@@ -1115,7 +1001,7 @@ export default function App() {
     if (blockExportWhileGenerating()) return;
     if (isExporting) return;
     setIsExporting(true);
-    setNotice(language === 'zh' ? '正在构建并压缩 3MF...' : 'Building and compressing 3MF...');
+    setNotice(text.buildingThreeMf);
     try {
       await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
       const exportModel = buildPrintableModel(composePrintableGrid(projectRef.current));
@@ -1150,7 +1036,7 @@ export default function App() {
       return;
     }
     await downloadThreeMf(model, 'beadrelief-layered-calibration.3mf');
-    setNotice(language === 'zh' ? '校准色阶 3MF 已下载。' : 'Calibration swatch 3MF downloaded.');
+    setNotice(text.calibrationDownloaded);
   }
 
   function patchMaterialProfile(changes: Partial<BeadProject['materialProfile']>, resetCalibration = false) {
@@ -1201,7 +1087,7 @@ export default function App() {
   async function exportPrintPattern() {
     if (blockExportWhileGenerating()) return;
     if (isExporting) return;
-    const exportOptions = printOptionsForProject(project, printExportOptions, language);
+    const exportOptions = printOptionsForProject(project, printExportOptions, text.layer);
     const format = (printExportOptions.format ?? 'png').toUpperCase();
     setIsExporting(true);
     setNotice(text.patternExporting(format));
@@ -1446,6 +1332,7 @@ export default function App() {
         </div>
 
         <div className="topbar-right">
+          <button className="help-button" type="button" onClick={() => helpDialogRef.current?.showModal()}>{text.help}</button>
           <a
             className="github-link"
             href="https://github.com/pgp00/beadrelief"
@@ -1505,6 +1392,7 @@ export default function App() {
 
           {imageLaunch.showActions ? (
             <div className="image-empty-actions">
+              <p>{text.quickStartHint}</p>
               <button className="project-action-button primary-action" type="button" onClick={() => void startHeartSample().catch(() => setNotice(codedUiError('SAMPLE_LOAD', text.sampleLoadError)))}>
                 {text.trySample}
               </button>
@@ -1651,20 +1539,18 @@ export default function App() {
           </label>
           {project.amsColors.length >= 2 && <details className="calibration-panel">
             <summary>
-              {language === 'zh' ? '分层成色校准' : 'Layered color calibration'}
+              {text.calibrationTitle}
               {' '}({project.materialProfile.measuredColors.length}/{calibrationPalette.length})
             </summary>
-            <p>{language === 'zh'
-              ? '下载色阶并实物打印；将每格实测颜色录入后，分层预览会立即更新。'
-              : 'Print the swatch, then enter each measured color to update layered previews.'}</p>
+            <p>{text.calibrationDescription}</p>
             <button type="button" onClick={() => void exportCalibrationThreeMf()}>
-              {language === 'zh' ? '下载校准 3MF' : 'Download calibration 3MF'}
+              {text.downloadCalibration}
             </button>
             {project.materialProfile.measuredColors.length > 0 && <button type="button" onClick={() => {
               commitHistory();
               patchMaterialProfile({}, true);
             }}>
-              {language === 'zh' ? '清除实测色' : 'Clear measured colors'}
+              {text.clearMeasuredColors}
             </button>}
             <div className="calibration-colors">
               {calibrationPalette.map((color) => (
@@ -2105,7 +1991,7 @@ export default function App() {
                   value={textToolSize}
                   onChange={(event) => setTextToolSize(Math.min(72, Math.max(5, Number(event.target.value) || 5)))}
                 />
-                <span>{language === 'zh' ? '格' : 'cells'}</span>
+                <span>{text.cellUnit}</span>
               </label>
             </div>
             <input
@@ -2128,7 +2014,7 @@ export default function App() {
                   value={textToolSpacing}
                   onChange={(event) => setTextToolSpacing(Math.min(24, Math.max(0, Number(event.target.value) || 0)))}
                 />
-                <span>{language === 'zh' ? '格' : 'cells'}</span>
+                <span>{text.cellUnit}</span>
               </label>
             </div>
             <input
@@ -2210,7 +2096,7 @@ export default function App() {
           selectColor(colorId);
           setTool('pencil');
           setOpenToolOptions(null);
-          setNotice(language === 'zh' ? '已从画布拾取颜色。' : 'Color picked from canvas.');
+          setNotice(text.pickedColor);
         }}
         onHover={setHoverCell}
         fitLabel={text.fit}
@@ -2269,27 +2155,31 @@ export default function App() {
               <strong>{outputMode === 'pattern' ? text.beadPreview : text.preview3d}</strong>
               <span>{outputMode === 'pattern' ? text.liveBeadPreview : text.liveBoard}</span>
             </div>
-            <small>{outputMode === 'pattern' ? totalBeads : previewProject.width * previewProject.height} {language === 'zh' ? '格' : 'cells'}</small>
+            <small>{outputMode === 'pattern' ? totalBeads : previewProject.width * previewProject.height} {text.cellUnit}</small>
           </div>
           {outputMode === 'pattern' ? (
             <ThreePreview
               project={previewDisplayProject}
-              language={language}
               title={text.beadPreview}
               emptyLabel={text.previewEmpty}
               closeLabel={text.close}
               expandLabel={text.expandPreview}
               webglErrorLabel={text.webglUnavailable}
+              previewLayerLabel={text.previewLayerControl}
+              singleLayerLabel={text.singleLayer}
+              explodedLabel={text.explodedView}
             />
           ) : (
             <ThreePreview
               model={printableModel!}
-              language={language}
               title={text.preview3d}
               emptyLabel={text.previewEmpty}
               closeLabel={text.close}
               expandLabel={text.expandPreview}
               webglErrorLabel={text.webglUnavailable}
+              previewLayerLabel={text.previewLayerControl}
+              singleLayerLabel={text.singleLayer}
+              explodedLabel={text.explodedView}
             />
           )}
         </section>
@@ -2564,7 +2454,7 @@ export default function App() {
             <div className="usage-overview">
               <div><span>{text.totalBeadsLabel}</span><strong>{totalBeads}</strong></div>
               <div>
-                <span>{layeredOutput ? (language === 'zh' ? '耗材' : 'Filaments') : text.colorTypes}</span>
+                <span>{layeredOutput ? text.filaments : text.colorTypes}</span>
                 <strong>{layeredOutput ? project.amsColors.length : usage.length}</strong>
               </div>
               <div>
@@ -2900,6 +2790,7 @@ export default function App() {
           {floatingHelp.text}
         </div>
       )}
+      <HelpDialog text={text} dialogRef={helpDialogRef} />
     </main>
   );
 }
