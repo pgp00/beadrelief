@@ -69,10 +69,11 @@ export function oklabDistance(a: [number, number, number], b: [number, number, n
 
 export function nearestPaletteColorOklab(hex: string, palette: PaletteColor[]): PaletteColor {
   if (!palette.length) throw new Error('At least one AMS color is required');
-  const rgb = hexToRgb(hex);
+  const target = rgbToOklab(hexToRgb(hex));
   return palette.reduce(
     (best, color) => {
-      const distance = oklabDistance(rgb, color.rgb);
+      const current = rgbToOklab(color.rgb);
+      const distance = Math.hypot(target[0] - current[0], target[1] - current[1], target[2] - current[2]);
       return distance < best.distance ? { color, distance } : best;
     },
     { color: palette[0], distance: Number.POSITIVE_INFINITY },

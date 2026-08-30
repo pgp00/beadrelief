@@ -1,5 +1,5 @@
 import type { BrandId, PaletteColor } from './types.js';
-import { hexToRgb, oklabDistance, paletteColorFromAmsId } from './print/colors.js';
+import { hexToRgb, oklabDistance, paletteColorFromAmsId, rgbToOklab } from './print/colors.js';
 import { paletteColorFromStackId } from './print/stacking.js';
 
 const rawColorsCsv = `
@@ -337,20 +337,35 @@ function makePalette(colors: Array<{ code: string; hex: string }>): PaletteColor
 export const basicPalette: PaletteColor[] = makePalette(rawColors);
 export const completePalette: PaletteColor[] = makePalette(rawCompleteColors);
 export const palette: PaletteColor[] = basicPalette;
+const completePaletteById = new Map(completePalette.map((color) => [color.id, color]));
+const paletteLabCache = new WeakMap<PaletteColor, [number, number, number]>();
 
 export function getColor(id: string | null): PaletteColor | undefined {
   if (!id) return undefined;
-  return paletteColorFromAmsId(id) ?? paletteColorFromStackId(id) ?? completePalette.find((color) => color.id === id);
+  if (id.startsWith('ams-')) return paletteColorFromAmsId(id) ?? undefined;
+  if (id.startsWith('stack-')) return paletteColorFromStackId(id) ?? undefined;
+  return completePaletteById.get(id);
 }
 
 export function nearestPaletteColor(
   rgb: [number, number, number],
   candidates: PaletteColor[] = palette,
 ): PaletteColor {
+  if (!candidates.length) throw new Error('At least one palette color is required');
+  const targetLab = rgbToOklab(rgb);
   let best = candidates[0];
   let bestDistance = Number.POSITIVE_INFINITY;
   for (const color of candidates) {
-    const distance = colorDistance(rgb, color.rgb);
+    let colorLab = paletteLabCache.get(color);
+    if (!colorLab) {
+      colorLab = rgbToOklab(color.rgb);
+      paletteLabCache.set(color, colorLab);
+    }
+    const distance = Math.hypot(
+      targetLab[0] - colorLab[0],
+      targetLab[1] - colorLab[1],
+      targetLab[2] - colorLab[2],
+    );
     if (distance < bestDistance) {
       best = color;
       bestDistance = distance;

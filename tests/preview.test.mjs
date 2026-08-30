@@ -11,7 +11,7 @@ globalThis.React = {
   useState() {},
 };
 
-const { createPreviewGroup } = await import("../generated/dist/src/ThreePreview.js");
+const { createPatternPreviewGroup, createPreviewGroup } = await import("../generated/dist/src/ThreePreview.js");
 
 test("3D preview meshes reuse the exact printable vertices, indices, and colors", () => {
   const project = createProject(1, 1);
@@ -41,4 +41,13 @@ test("layered preview adds estimated top colors without replacing print bands", 
     group.children.filter((mesh) => mesh.userData.previewOverlay).map((mesh) => `#${mesh.material.color.getHexString()}`),
     model.previewParts.map((part) => part.color),
   );
+});
+
+test("large bead patterns use one lightweight instanced cylinder per color", () => {
+  const project = createProject(180, 180);
+  project.layers[0].cells.fill("mard-a1");
+  const group = createPatternPreviewGroup(project);
+  assert.equal(group.children.length, 1);
+  assert.equal(group.children[0].count, 180 * 180);
+  assert.equal(group.children[0].geometry.type, "CylinderGeometry");
 });

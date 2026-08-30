@@ -18,9 +18,9 @@ import { validatePrintableModel } from './print/validation.js';
 import { basicPalette, completePalette, getColor } from './palette.js';
 import { MAX_PROJECT_DIMENSION, MAX_PROJECT_FILE_BYTES, MAX_PROJECT_LAYERS, composeVisibleCells, createLayer, createProject, hasEditableWork, isSafeProjectImport, loadDraft, normalizeProject, projectGridChanged, saveDraft, withCells, withLayers } from './project.js';
 import { findIsolatedBeads, summarizeLayeredUsage, summarizeUsage } from './usage.js';
-import type { ArrowKind, BackgroundMode, BeadProject, ClipboardPattern, ConvertResult, CopyMode, CropAspect, GenerationStyle, MirrorDirection, MoveMode, RemoveMode, RightClickAction, ShapeFillMode, ShapeKind, TextDirection, ToolId } from './types.js';
+import type { ArrowKind, BackgroundMode, BeadProject, ClipboardPattern, ConvertResult, CopyMode, CropAspect, GenerationStyle, MirrorDirection, MoveMode, PaletteColor, RemoveMode, RightClickAction, ShapeFillMode, ShapeKind, TextDirection, ToolId } from './types.js';
 
-const { useEffect, useMemo, useRef, useState } = React;
+const { useCallback, useEffect, useMemo, useRef, useState } = React;
 
 export function autoGenerationPaletteKey(mode: BeadProject['printSettings']['mode'], colors: BeadProject['amsColors']): string {
   return mode === 'layered'
@@ -270,18 +270,23 @@ export default function App() {
   const [layerColorLimit, setLayerColorLimit] = useState(16);
   const [past, setPast] = useState<BeadProject[]>([]);
   const [future, setFuture] = useState<BeadProject[]>([]);
-  const usage = useMemo(() => summarizeUsage(project), [project]);
+  const usage = useMemo(() => summarizeUsage(previewProject), [previewProject]);
   const layeredUsage = useMemo(() => (
-    project.printSettings.mode === 'layered' ? summarizeLayeredUsage(project) : []
-  ), [project]);
+    outputMode === 'three-d' && previewProject.printSettings.mode === 'layered'
+      ? summarizeLayeredUsage(previewProject)
+      : []
+  ), [outputMode, previewProject]);
   const layeredOutput = outputMode === 'three-d' && project.printSettings.mode === 'layered';
-  const printRecipe = useMemo(() => buildPrintRecipe(project), [project]);
+  const printRecipe = useMemo(
+    () => outputMode === 'three-d' ? buildPrintRecipe(previewProject) : null,
+    [outputMode, previewProject],
+  );
   const totalBeads = usage.reduce((sum, row) => sum + row.count, 0);
   const totalPacks = usage.reduce((sum, row) => sum + row.packs, 0);
   const boardCount =
     Math.ceil(project.width / project.boardSettings.boardWidth) *
     Math.ceil(project.height / project.boardSettings.boardHeight);
-  const isolatedBeadRefs = useMemo(() => findIsolatedBeads(project), [project]);
+  const isolatedBeadRefs = useMemo(() => findIsolatedBeads(previewProject), [previewProject]);
   const isolatedBeads = isolatedBeadRefs.length;
   const isolatedCellIndices = useMemo(
     () => (showIsolatedBeads ? [...new Set(isolatedBeadRefs.map((item) => item.index))] : []),
@@ -350,10 +355,7 @@ export default function App() {
     };
   }
 
-  function displayCodeById(colorId: string): string {
-    const color = getColor(colorId);
-    return color ? displayCode(color) : '';
-  }
+  const displayCodeById = useCallback((colorId: string): string => getColor(colorId)?.primaryCode ?? '', []);
 
   function layerDisplayName(layer: BeadProject['layers'][number], index: number): string {
     if (layer.customName) return layer.name;
@@ -552,6 +554,7 @@ export default function App() {
     if (next === outputMode) return;
     setOutputMode(next);
     if (next === 'three-d') {
+      setPreviewProject(projectRef.current);
       setImportSettings((current) => ({ ...current, width: Math.min(current.width, MAX_PRINT_WORKSPACE_DIMENSION) }));
     }
     setShowPrintExportPanel(false);
@@ -560,11 +563,11 @@ export default function App() {
       : (language === 'zh' ? '3D 打印模式：使用 AMS 颜色生成 3MF。' : '3D print mode: using AMS colors for 3MF.'));
   }
 
-  function selectColor(colorId: string, options: { updateRecent?: boolean } = {}) {
+  const selectColor = useCallback((colorId: string, options: { updateRecent?: boolean } = {}) => {
     setSelectedColorId(colorId);
     if (options.updateRecent === false) return;
     setRecentColorIds((current) => [colorId, ...current.filter((id) => id !== colorId)].slice(0, 7));
-  }
+  }, []);
 
   function activateTool(nextTool: ToolId) {
     setTool(nextTool);
@@ -1075,9 +1078,13 @@ export default function App() {
   const layers = project.layers;
   const activeLayer = layers.find((layer) => layer.id === project.activeLayerId) ?? layers[0];
   const canEditActiveLayer = canEditLayer(activeLayer);
+  const previewActiveLayer = previewProject.layers.find((layer) => layer.id === previewProject.activeLayerId)
+    ?? previewProject.layers[0];
   const isolatedColorCount = useMemo(
-    () => mergeIsolatedLayerColors(activeLayer.cells, project.width, project.height).changed,
-    [activeLayer.cells, project.width, project.height],
+    () => previewActiveLayer
+      ? mergeIsolatedLayerColors(previewActiveLayer.cells, previewProject.width, previewProject.height).changed
+      : 0,
+    [previewActiveLayer, previewProject.width, previewProject.height],
   );
   const countedLayers = layers.filter((layer) => layer.includeInUsage);
   useEffect(() => {
@@ -1086,11 +1093,13 @@ export default function App() {
     adjustmentSessionRef.current = { layerId: null, baseCells: [] };
   }, [activeLayer.id, project.width, project.height]);
   const displayProject = useMemo(() => projectForDisplay(project), [project]);
+  const previewDisplayProject = useMemo(() => projectForDisplay(previewProject), [previewProject]);
   const printableModel = useMemo(
-    () => buildPrintableModel(composePrintableGrid(previewProject)),
-    [previewProject],
+    () => outputMode === 'three-d' ? buildPrintableModel(composePrintableGrid(previewProject)) : null,
+    [outputMode, previewProject],
   );
   const printErrors = useMemo(() => {
+    if (!printableModel) return [];
     const errors = validatePrintableModel(printableModel, false);
     return errors.length ? [codedUiError('EXPORT_INVALID', text.exportValidationFailed)] : [];
   }, [printableModel, text.exportValidationFailed]);
@@ -1675,7 +1684,7 @@ export default function App() {
 
         {outputMode === 'three-d' && <PrintSettingsPanel
           project={project}
-          model={printableModel}
+          model={printableModel!}
           errors={printErrors}
           language={language}
           onChange={updatePrintProject}
@@ -2253,11 +2262,11 @@ export default function App() {
               <strong>{outputMode === 'pattern' ? text.beadPreview : text.preview3d}</strong>
               <span>{outputMode === 'pattern' ? text.liveBeadPreview : text.liveBoard}</span>
             </div>
-            <small>{outputMode === 'pattern' ? totalBeads : printableModel.gridSize.width * printableModel.gridSize.height} {language === 'zh' ? '格' : 'cells'}</small>
+            <small>{outputMode === 'pattern' ? totalBeads : previewProject.width * previewProject.height} {language === 'zh' ? '格' : 'cells'}</small>
           </div>
           {outputMode === 'pattern' ? (
             <ThreePreview
-              project={displayProject}
+              project={previewDisplayProject}
               language={language}
               title={text.beadPreview}
               emptyLabel={text.previewEmpty}
@@ -2267,7 +2276,7 @@ export default function App() {
             />
           ) : (
             <ThreePreview
-              model={printableModel}
+              model={printableModel!}
               language={language}
               title={text.preview3d}
               emptyLabel={text.previewEmpty}
@@ -2332,19 +2341,7 @@ export default function App() {
               ))}
             </div>
             <div className="palette-grid">
-              {visiblePalette.map((color) => (
-                <button
-                  key={color.id}
-                  className={selectedColorId === color.id ? 'swatch active' : 'swatch'}
-                  title={`${displayCode(color)} ${displayName(color)}`}
-                  onClick={() => {
-                    selectColor(color.id);
-                  }}
-                >
-                  <span style={{ backgroundColor: color.hex }} />
-                  <small>{displayCode(color)}</small>
-                </button>
-              ))}
+              <PaletteGrid colors={visiblePalette} selectedColorId={selectedColorId} onSelect={selectColor} />
             </div>
           </section>
         )}
@@ -2576,7 +2573,7 @@ export default function App() {
                 <span>{text.bottomToTop}</span>
               </div>
               <div className="print-recipe-slots">
-                {printRecipe.slots.map((slot) => (
+                {printRecipe!.slots.map((slot) => (
                   <div key={slot.id}>
                     <span className="usage-chip" style={{ backgroundColor: slot.hex }} />
                     <strong>AMS {slot.slot}</strong>
@@ -2585,9 +2582,9 @@ export default function App() {
                 ))}
               </div>
               <div className="print-recipe-meta">
-                <span>{text.recipeLayers(printRecipe.layers.length)}</span>
-                <span>{text.recipeStops(printRecipe.stops.length)}</span>
-                <span>{printRecipe.layerHeightMm} mm</span>
+                <span>{text.recipeLayers(printRecipe!.layers.length)}</span>
+                <span>{text.recipeStops(printRecipe!.stops.length)}</span>
+                <span>{printRecipe!.layerHeightMm} mm</span>
               </div>
             </div>}
             {!layeredOutput && (
@@ -2899,6 +2896,28 @@ export default function App() {
     </main>
   );
 }
+
+const PaletteGrid = React.memo(function PaletteGrid({
+  colors,
+  selectedColorId,
+  onSelect,
+}: {
+  colors: PaletteColor[];
+  selectedColorId: string;
+  onSelect: (colorId: string) => void;
+}) {
+  return colors.map((color) => (
+    <button
+      key={color.id}
+      className={selectedColorId === color.id ? 'swatch active' : 'swatch'}
+      title={`${color.primaryCode} ${color.name}`}
+      onClick={() => onSelect(color.id)}
+    >
+      <span style={{ backgroundColor: color.hex }} />
+      <small>{color.primaryCode}</small>
+    </button>
+  ));
+});
 
 
 function clampInteger(value: number, min: number, max: number): number {

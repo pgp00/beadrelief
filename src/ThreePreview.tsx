@@ -69,7 +69,7 @@ export default function ThreePreview({ model, project, language, title, emptyLab
       return;
     }
     setWebglUnavailable(false);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.5));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.setClearColor(PREVIEW_BACKGROUND, 0);
     renderer.localClippingEnabled = true;
@@ -344,13 +344,14 @@ export function createPatternPreviewGroup(project: BeadProject): THREE.Group {
   const spacing = 0.72;
   const beadRadius = 0.31;
   const beadHeight = beadRadius * 2;
-  const byColor = new Map<string, Array<[number, number, number]>>();
+  const cellCount = project.width * project.height;
+  const byColor = new Map<string, number[]>();
   const visibleLayers = project.layers.filter((layer) => layer.visible);
   visibleLayers.forEach((layer, layerIndex) => {
     layer.cells.forEach((colorId, index) => {
       if (!colorId) return;
       const items = byColor.get(colorId) ?? [];
-      items.push([index % project.width, Math.floor(index / project.width), layerIndex]);
+      items.push(layerIndex * cellCount + index);
       byColor.set(colorId, items);
     });
   });
@@ -366,7 +367,11 @@ export function createPatternPreviewGroup(project: BeadProject): THREE.Group {
       new THREE.MeshStandardMaterial({ color: color.hex, roughness: 0.72, metalness: 0 }),
       items.length,
     );
-    items.forEach(([x, y, layerIndex], itemIndex) => {
+    items.forEach((encoded, itemIndex) => {
+      const layerIndex = Math.floor(encoded / cellCount);
+      const index = encoded % cellCount;
+      const x = index % project.width;
+      const y = Math.floor(index / project.width);
       matrix.makeTranslation(
         (x - (project.width - 1) / 2) * spacing,
         layerIndex * beadHeight,
@@ -393,19 +398,7 @@ function previewClippingPlanes(model: PrintableModel, layer?: number, singleLaye
 }
 
 function createRoundBeadGeometry(radius: number, height: number): THREE.BufferGeometry {
-  const shape = new THREE.Shape();
-  shape.absarc(0, 0, radius, 0, Math.PI * 2, false);
-  const geometry = new THREE.ExtrudeGeometry(shape, {
-    depth: height,
-    bevelEnabled: true,
-    bevelSegments: 2,
-    bevelSize: 0.02,
-    bevelThickness: 0.02,
-    curveSegments: 24,
-  });
-  geometry.center();
-  geometry.rotateX(Math.PI / 2);
-  return geometry;
+  return new THREE.CylinderGeometry(radius, radius, height, 16);
 }
 
 function disposeGroup(group: THREE.Group) {

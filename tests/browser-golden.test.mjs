@@ -286,6 +286,61 @@ test('heart PNG golden path edits and downloads every export', { skip: !browserP
       return durations;
     });
     assert.ok(editLongTasks.every((duration) => duration <= 50), `edit long tasks: ${editLongTasks.join(', ')}`);
+
+    await page.getByRole('button', { name: 'Bead pattern', exact: true }).click();
+    await page.getByLabel('Canvas width').fill('180');
+    await page.getByLabel('Canvas height').fill('180');
+    await page.getByRole('button', { name: 'Apply', exact: true }).evaluate((button) => button.click());
+    await page.waitForTimeout(350);
+    await page.getByRole('button', { name: 'Fill', exact: true }).click();
+    const fillLongTasks = await page.locator('.workspace canvas').evaluate(async (element) => {
+      const durations = [];
+      const observer = new PerformanceObserver((list) => {
+        durations.push(...list.getEntries().map((entry) => entry.duration));
+      });
+      observer.observe({ type: 'longtask', buffered: false });
+      const canvas = element;
+      const bounds = canvas.getBoundingClientRect();
+      const init = {
+        bubbles: true,
+        pointerId: 1,
+        isPrimary: true,
+        clientX: bounds.left + bounds.width * 0.5,
+        clientY: bounds.top + bounds.height * 0.2,
+      };
+      canvas.dispatchEvent(new PointerEvent('pointerdown', { ...init, buttons: 1 }));
+      canvas.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0 }));
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      observer.disconnect();
+      return durations;
+    });
+    assert.ok(fillLongTasks.every((duration) => duration <= 50), `pattern fill long tasks: ${fillLongTasks.join(', ')}`);
+    await page.getByRole('button', { name: 'Pencil', exact: true }).click();
+    const patternLongTasks = await page.locator('.workspace canvas').evaluate(async (element) => {
+      const durations = [];
+      const observer = new PerformanceObserver((list) => {
+        durations.push(...list.getEntries().map((entry) => entry.duration));
+      });
+      observer.observe({ type: 'longtask', buffered: false });
+      const canvas = element;
+      const bounds = canvas.getBoundingClientRect();
+      for (let index = 0; index < 12; index += 1) {
+        const init = {
+          bubbles: true,
+          pointerId: 1,
+          isPrimary: true,
+          clientX: bounds.left + bounds.width * (0.2 + index * 0.04),
+          clientY: bounds.top + bounds.height * 0.5,
+        };
+        canvas.dispatchEvent(new PointerEvent('pointerdown', { ...init, buttons: 1 }));
+        canvas.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0 }));
+        await new Promise(requestAnimationFrame);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      observer.disconnect();
+      return durations;
+    });
+    assert.ok(patternLongTasks.every((duration) => duration <= 50), `pattern edit long tasks: ${patternLongTasks.join(', ')}`);
     assert.deepEqual(browserErrors, []);
   } finally {
     await browser?.close();

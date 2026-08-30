@@ -235,8 +235,10 @@ export default function WorkspaceCanvas({
     if (!canvas || !wrapper) return;
     const draw = () => {
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = Math.floor(wrapper.clientWidth * dpr);
-      canvas.height = Math.floor(wrapper.clientHeight * dpr);
+      const width = Math.floor(wrapper.clientWidth * dpr);
+      const height = Math.floor(wrapper.clientHeight * dpr);
+      if (canvas.width !== width) canvas.width = width;
+      if (canvas.height !== height) canvas.height = height;
       const context = canvas.getContext('2d');
       if (context) {
         context.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -882,6 +884,10 @@ function drawPattern(
   context.fillStyle = '#fffdf7';
   context.fillRect(0, 0, project.width * cellSize, project.height * cellSize);
   const visibleLayers = project.layers.filter((layer) => layer.visible);
+  const stack: Array<{ layer: BeadLayer; colorId: string }> = [];
+  const renderedCellSize = cellSize * zoom;
+  const renderBeads = project.settings.beadDisplayMode === 'bead' && renderedCellSize >= 6;
+  const renderOverlap = project.settings.showLayerOverlap && renderedCellSize >= 6;
   const highlightedCells = highlightedCellIndices.length > 0 ? new Set(highlightedCellIndices) : null;
   if (referenceImage.visible && referenceImage.placement === 'below') {
     drawReferenceImage(context, project, cellSize, referenceImage);
@@ -890,22 +896,32 @@ function drawPattern(
   for (let y = 0; y < project.height; y += 1) {
     for (let x = 0; x < project.width; x += 1) {
       const index = y * project.width + x;
-      const stack = visibleLayers
-        .map((layer) => ({ layer, colorId: layer.cells[index] }))
-        .filter((item): item is { layer: BeadLayer; colorId: string } => Boolean(item.colorId));
-      const topColorId = stack.length > 0 ? stack[stack.length - 1].colorId : null;
+      stack.length = 0;
+      let topColorId: string | null = null;
+      if (renderBeads || renderOverlap) {
+        for (const layer of visibleLayers) {
+          const colorId = layer.cells[index];
+          if (colorId) stack.push({ layer, colorId });
+        }
+        topColorId = stack.length > 0 ? stack[stack.length - 1].colorId : null;
+      } else {
+        for (let layerIndex = visibleLayers.length - 1; layerIndex >= 0; layerIndex -= 1) {
+          topColorId = visibleLayers[layerIndex].cells[index];
+          if (topColorId) break;
+        }
+      }
       const topColor = getColor(topColorId);
       const left = x * cellSize;
       const top = y * cellSize;
 
-      if (project.settings.beadDisplayMode === 'bead') {
+      if (renderBeads) {
         drawBeadStack(context, stack, left, top, cellSize);
       } else if (topColor) {
         context.fillStyle = topColor.hex;
         context.fillRect(left, top, cellSize, cellSize);
       }
 
-      if (stack.length > 1 && project.settings.showLayerOverlap) {
+      if (stack.length > 1 && renderOverlap) {
         drawStackOverlay(context, stack, left, top, cellSize);
       }
 
@@ -918,7 +934,7 @@ function drawPattern(
         drawCellAlert(context, left, top, cellSize);
       }
 
-      if (project.settings.showColorCodes && topColor && cellSize >= 16) {
+      if (project.settings.showColorCodes && topColor && renderedCellSize >= 16) {
         context.fillStyle = readableTextColor(topColor.rgb);
         context.font = `${Math.max(7, cellSize * 0.3)}px Arial`;
         context.textAlign = 'center';
