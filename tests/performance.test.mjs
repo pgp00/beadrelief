@@ -41,4 +41,5 @@ test('production build uses minified Three and emits no source maps', () => {
   assert.ok(statSync(`${vendor}/three.core.min.js`).size < 500_000);
   assert.equal(readdirSync('generated/dist/src', { recursive: true }).some((file) => String(file).endsWith('.map')), false);
   assert.equal(existsSync('generated/dist/src/main.js'), true);
+  assert.equal(existsSync('generated/dist/beadrelief-social-preview.jpg'), true);
 });

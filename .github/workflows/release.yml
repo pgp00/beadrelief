@@ -18,6 +18,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      - name: Verify release version
+        run: node -e "const fs=require('node:fs'),p=require('./package.json'); if(process.env.GITHUB_REF_NAME!=='v'+p.version || !fs.readFileSync('CHANGELOG.md','utf8').includes('## '+p.version+' -')) throw new Error('Tag, package version, and changelog must match')"
       - run: npm run release:prepare
       - run: git diff --exit-code -- samples SHA256SUMS
       - name: Create release

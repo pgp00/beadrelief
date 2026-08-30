@@ -52,6 +52,8 @@ test("public identity stays BeadRelief", async () => {
   assert.equal(ui.en.appName, "BeadRelief");
   assert.equal(ui.zh.appName, "BeadRelief");
   assert.match(indexHtml, /property="og:title"/);
-  assert.match(indexHtml, /name="twitter:card"/);
+  assert.match(indexHtml, /name="twitter:card" content="summary_large_image"/);
+  assert.match(indexHtml, /beadrelief-social-preview\.jpg/);
   assert.match(indexHtml, /href="\.\/beadrelief-icon\.svg"/);
+  assert.equal((await readFile("beadrelief-social-preview.jpg")).byteLength < 1_000_000, true);
 });

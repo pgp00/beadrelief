@@ -4,6 +4,8 @@ Notable user-facing changes are recorded here. BeadRelief follows semantic versi
 
 ## Unreleased
 
+## 0.2.0 - 2026-08-30
+
 ### Added
 
 - In-app quick start, canvas shortcut reference, FAQ, and browser support guidance.

@@ -144,7 +144,6 @@ test('heart PNG golden path edits and downloads every export', { skip: !browserP
           || labelledBy
           || [...(element.labels ?? [])].map((label) => label.textContent?.trim() ?? '').filter(Boolean).join(' ')
           || element.getAttribute('title')
-          || (element instanceof HTMLInputElement ? element.value : '')
           || element.textContent?.trim()
           || '';
       }

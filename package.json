@@ -1,7 +1,7 @@
 {
   "name": "beadrelief",
-  "version": "0.1.0",
-  "description": "Turn any image into an editable, multicolor 3MF bead relief — locally in your browser.",
+  "version": "0.2.0",
+  "description": "Turn any image into an editable bead pattern — locally in your browser.",
   "private": true,
   "homepage": "https://pgp00.github.io/beadrelief/",
   "repository": {
