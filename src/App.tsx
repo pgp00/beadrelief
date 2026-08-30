@@ -141,12 +141,18 @@ const tools: ToolId[] = [
   'pan',
 ];
 
-const sizePresets = [
-  { label: '16 * 16', width: 16, height: 16 },
-  { label: '24 * 24', width: 24, height: 24 },
-  { label: '32 * 32', width: 32, height: 32 },
-  { label: '50 * 50', width: 50, height: 50 },
+const printSizePresets = [
+  { label: '16 × 16', width: 16, height: 16 },
+  { label: '24 × 24', width: 24, height: 24 },
+  { label: '32 × 32', width: 32, height: 32 },
+  { label: '50 × 50', width: 50, height: 50 },
 ];
+
+const patternSizePresets = [15, 29, 52, 78, 104].map((size) => ({
+  label: `${size} × ${size}`,
+  width: size,
+  height: size,
+}));
 
 const defaultImportSettings = {
   width: 32,
@@ -199,6 +205,7 @@ export default function App() {
   languageRef.current = language;
   const text = ui[language];
   const [outputMode, setOutputMode] = useState<OutputMode>('pattern');
+  const sizePresets = outputMode === 'pattern' ? patternSizePresets : printSizePresets;
   const [paletteMode, setPaletteMode] = useState<PaletteMode>('complete');
   const [project, setProject] = useState<BeadProject>(() => loadDraft() ?? createProject());
   const [previewProject, setPreviewProject] = useState(project);

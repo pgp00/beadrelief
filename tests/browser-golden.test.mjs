@@ -128,6 +128,14 @@ test('heart PNG golden path edits and downloads every export', { skip: !browserP
     assert.equal(await page.getByLabel('Pattern color limit').getAttribute('max'), '291');
     assert.equal(await page.getByLabel('Style').inputValue(), 'realistic');
     assert.equal(await page.getByLabel('Canvas width').getAttribute('max'), '180');
+    assert.deepEqual(await page.locator('.canvas-preset-select option').allTextContents(), [
+      'Common sizes',
+      '15 × 15',
+      '29 × 29',
+      '52 × 52',
+      '78 × 78',
+      '104 × 104',
+    ]);
     assert.deepEqual(await page.locator('.readonly-brand-field select option').allTextContents(), [
       'MARD Basic (221 colors)',
       'MARD Complete (291 colors)',
