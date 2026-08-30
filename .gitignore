@@ -45,3 +45,7 @@ release-smoke*.png
 *_release_smoke.png
 *.local
 *.local.*
+
+# Local planning notes
+PLAN.md
+docs/*-plan.md
