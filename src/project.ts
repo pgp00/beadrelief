@@ -1,7 +1,7 @@
 import { getColor, paletteVersion } from './palette.js';
 import { DEFAULT_ACTIVE_AMS_COLORS, DEFAULT_AMS_COLORS, amsColorToPaletteColor, makeAmsColorId, nearestPaletteColorOklab, normalizeHex } from './print/colors.js';
 import { DEFAULT_PRINT_SETTINGS, PRINT_SETTING_LIMITS, normalizeLayeredBaseThickness, normalizePrintSetting, type NumericPrintSetting } from './print/settings.js';
-import { STACK_LAYERS_PER_FILAMENT, STACK_TEMPLATES, buildStackPalette, hasCompleteStackCalibration, parseStackColorId, type StackTemplateId } from './print/stacking.js';
+import { STACK_LAYER_HEIGHT_MM, STACK_LAYERS_PER_FILAMENT, STACK_TEMPLATES, buildStackPalette, hasCompleteStackCalibration, parseStackColorId, type StackTemplateId } from './print/stacking.js';
 import type { AmsColor, BeadLayer, BeadProject, MaterialProfileMeta, PaletteColor, PrintMode } from './types.js';
 
 export const autosaveKey = 'perler-beads-generator:draft';
@@ -151,7 +151,7 @@ function remapPrintCells(
   const calibrationChanged = materials.length !== project.amsColors.length || materials.some((material, index) => {
     const previous = project.amsColors[index];
     return !previous || material.hex.toLowerCase() !== previous.hex.toLowerCase() || material.tdMm !== previous.tdMm;
-  });
+  }) || (mode === 'layered' && project.materialProfile.layerHeightMm !== STACK_LAYER_HEIGHT_MM);
   const byLevel = new Map(palette.flatMap((color) => {
     const parsed = parseStackColorId(color.id);
     return parsed ? [[parsed.stopLevel, color.id] as const] : [];
@@ -173,6 +173,7 @@ function remapPrintCells(
     amsColors: materials,
     materialProfile: calibrationChanged ? {
       ...project.materialProfile,
+      layerHeightMm: mode === 'layered' ? STACK_LAYER_HEIGHT_MM : project.materialProfile.layerHeightMm,
       verified: false,
       measuredColors: [],
     } : project.materialProfile,

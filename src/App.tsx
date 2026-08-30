@@ -1585,7 +1585,7 @@ export default function App() {
             </label>
             <label className="stacked-field">
               <span>{text.profileLayerHeight}</span>
-              <input type="number" min={0.04} max={0.4} step={0.01} value={project.materialProfile.layerHeightMm} onFocus={commitHistory} onChange={(event) => patchMaterialProfile({ layerHeightMm: Number(event.target.value) }, true)} />
+              <input type="number" min={0.04} max={0.4} step={0.01} disabled={project.printSettings.mode === 'layered'} value={project.materialProfile.layerHeightMm} onFocus={commitHistory} onChange={(event) => patchMaterialProfile({ layerHeightMm: Number(event.target.value) }, true)} />
             </label>
           </div>
           <label className="switch-row">

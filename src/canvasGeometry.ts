@@ -61,9 +61,9 @@ export function ellipsePoints(x0: number, y0: number, x1: number, y1: number): A
   if (width <= 1 || height <= 1) return rectanglePoints(x0, y0, x1, y1);
   const cx = (minX + maxX) / 2;
   const cy = (minY + maxY) / 2;
-  const rx = Math.max(1, Math.round(width / 2));
-  const ry = Math.max(1, Math.round(height / 2));
-  return midpointEllipsePoints(cx, cy, rx, ry);
+  const rx = Math.max(1, width / 2);
+  const ry = Math.max(1, height / 2);
+  return ovalPoints(cx, cy, rx, ry);
 }
 
 export function circlePoints(x0: number, y0: number, x1: number, y1: number): Array<{ x: number; y: number }> {
@@ -75,88 +75,24 @@ export function circlePoints(x0: number, y0: number, x1: number, y1: number): Ar
   if (size <= 1) return rectanglePoints(x0, y0, x1, y1);
   const cx = (minX + maxX) / 2;
   const cy = (minY + maxY) / 2;
-  const radius = Math.max(1, Math.round(size / 2));
-  return midpointCirclePoints(cx, cy, radius);
+  const radius = Math.max(1, size / 2);
+  return ovalPoints(cx, cy, radius, radius);
 }
 
-function midpointCirclePoints(cx: number, cy: number, radius: number): Array<{ x: number; y: number }> {
+function ovalPoints(cx: number, cy: number, rx: number, ry: number): Array<{ x: number; y: number }> {
   const points: Array<{ x: number; y: number }> = [];
-  let x = radius;
-  let y = 0;
-  let decision = 1 - radius;
-  while (x >= y) {
-    pushSymmetricCirclePoints(points, cx, cy, x, y);
-    y += 1;
-    if (decision < 0) {
-      decision += 2 * y + 1;
-    } else {
-      x -= 1;
-      decision += 2 * (y - x) + 1;
-    }
+  const steps = Math.max(12, Math.ceil(2 * Math.PI * Math.max(rx, ry)));
+  let previous = { x: Math.round(cx + rx), y: Math.round(cy) };
+  for (let step = 1; step <= steps; step += 1) {
+    const angle = (step / steps) * Math.PI * 2;
+    const current = {
+      x: Math.round(cx + rx * Math.cos(angle)),
+      y: Math.round(cy + ry * Math.sin(angle)),
+    };
+    points.push(...linePoints(previous.x, previous.y, current.x, current.y));
+    previous = current;
   }
   return points;
-}
-
-function midpointEllipsePoints(cx: number, cy: number, rx: number, ry: number): Array<{ x: number; y: number }> {
-  const points: Array<{ x: number; y: number }> = [];
-  const rx2 = rx * rx;
-  const ry2 = ry * ry;
-  let x = 0;
-  let y = ry;
-  let px = 0;
-  let py = 2 * rx2 * y;
-  let p = ry2 - rx2 * ry + 0.25 * rx2;
-
-  while (px < py) {
-    pushSymmetricEllipsePoints(points, cx, cy, x, y);
-    x += 1;
-    px += 2 * ry2;
-    if (p < 0) {
-      p += ry2 + px;
-    } else {
-      y -= 1;
-      py -= 2 * rx2;
-      p += ry2 + px - py;
-    }
-  }
-
-  p = ry2 * (x + 0.5) * (x + 0.5) + rx2 * (y - 1) * (y - 1) - rx2 * ry2;
-  while (y >= 0) {
-    pushSymmetricEllipsePoints(points, cx, cy, x, y);
-    y -= 1;
-    py -= 2 * rx2;
-    if (p > 0) {
-      p += rx2 - py;
-    } else {
-      x += 1;
-      px += 2 * ry2;
-      p += rx2 - py + px;
-    }
-  }
-
-  return points;
-}
-
-function pushSymmetricCirclePoints(points: Array<{ x: number; y: number }>, cx: number, cy: number, x: number, y: number): void {
-  points.push(
-    { x: Math.round(cx + x), y: Math.round(cy + y) },
-    { x: Math.round(cx + y), y: Math.round(cy + x) },
-    { x: Math.round(cx - y), y: Math.round(cy + x) },
-    { x: Math.round(cx - x), y: Math.round(cy + y) },
-    { x: Math.round(cx - x), y: Math.round(cy - y) },
-    { x: Math.round(cx - y), y: Math.round(cy - x) },
-    { x: Math.round(cx + y), y: Math.round(cy - x) },
-    { x: Math.round(cx + x), y: Math.round(cy - y) },
-  );
-}
-
-function pushSymmetricEllipsePoints(points: Array<{ x: number; y: number }>, cx: number, cy: number, x: number, y: number): void {
-  points.push(
-    { x: Math.round(cx + x), y: Math.round(cy + y) },
-    { x: Math.round(cx - x), y: Math.round(cy + y) },
-    { x: Math.round(cx + x), y: Math.round(cy - y) },
-    { x: Math.round(cx - x), y: Math.round(cy - y) },
-  );
 }
 
 export function filledEllipsePoints(x0: number, y0: number, x1: number, y1: number): Array<{ x: number; y: number }> {
@@ -190,13 +126,13 @@ export function filledCirclePoints(x0: number, y0: number, x1: number, y1: numbe
   const maxY = Math.max(y0, y1);
   const size = Math.min(maxX - minX, maxY - minY);
   if (size <= 1) return filledRectanglePoints(x0, y0, x1, y1);
-  const cx = Math.round((minX + maxX) / 2);
-  const cy = Math.round((minY + maxY) / 2);
-  const radius = Math.max(1, Math.round(size / 2));
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  const radius = Math.max(1, size / 2);
   const points: Array<{ x: number; y: number }> = [];
   const limit = (radius + 0.2) * (radius + 0.2);
-  for (let y = cy - radius; y <= cy + radius; y += 1) {
-    for (let x = cx - radius; x <= cx + radius; x += 1) {
+  for (let y = minY; y <= maxY; y += 1) {
+    for (let x = minX; x <= maxX; x += 1) {
       const dx = x - cx;
       const dy = y - cy;
       if (dx * dx + dy * dy <= limit) points.push({ x, y });

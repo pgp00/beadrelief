@@ -31,6 +31,7 @@ export type PrintablePart = {
 
 export type SolidPrintableGrid = {
   mode: 'solid';
+  name: string;
   width: number;
   height: number;
   cells: string[];
@@ -42,6 +43,7 @@ export type SolidPrintableGrid = {
 
 export type LayeredPrintableGrid = {
   mode: 'layered';
+  name: string;
   width: number;
   height: number;
   stopLevels: number[];
@@ -106,6 +108,7 @@ export function composePrintableGrid(project: BeadProject): PrintableGrid {
     });
     return {
       mode: 'layered',
+      name: project.name.trim() || 'Untitled Pattern',
       width: project.width,
       height: project.height,
       stopLevels,
@@ -132,6 +135,7 @@ export function composePrintableGrid(project: BeadProject): PrintableGrid {
   });
   return {
     mode: 'solid',
+    name: project.name.trim() || 'Untitled Pattern',
     width: project.width,
     height: project.height,
     cells,
@@ -182,7 +186,7 @@ function buildSolidPrintableModel(grid: SolidPrintableGrid): PrintableModel {
   appendStructureParts(parts, grid.settings, widthMm, baseHeightMm, grid.settings.beadHeightMm);
 
   return {
-    name: 'BeadRelief',
+    name: grid.name,
     mode: 'solid',
     materials,
     parts,
@@ -271,7 +275,7 @@ function buildLayeredPrintableModel(grid: LayeredPrintableGrid): PrintableModel 
     baseColorId: grid.materials[0].id,
   };
   return {
-    name: 'BeadRelief',
+    name: grid.name,
     mode: 'layered',
     materials: grid.materials.map((material) => ({ ...material })),
     parts,

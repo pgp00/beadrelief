@@ -168,9 +168,13 @@ test("3MF nozzle metadata follows the project material profile", () => {
 
 test("3MF escapes XML names and rejects illegal XML control characters", () => {
   const project = createProject(1, 1);
+  project.name = "Bracelet & <Heart>";
   project.amsColors[0].name = "A&B";
   let model = buildPrintableModel(composePrintableGrid(project));
   const entries = readZipEntries(createThreeMf(model));
+  assert.equal(model.name, project.name);
+  assert.match(new TextDecoder().decode(entries.get("3D/3dmodel.model")), /name="Bracelet &amp; &lt;Heart&gt;"/);
+  assert.match(new TextDecoder().decode(entries.get("Metadata/model_settings.config")), /value="Bracelet &amp; &lt;Heart&gt;"/);
   assert.match(new TextDecoder().decode(entries.get("3D/3dmodel.model")), /A&amp;B/);
 
   project.amsColors[0].name = "bad\u0001name";
