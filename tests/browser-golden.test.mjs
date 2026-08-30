@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { inflateRawSync } from 'node:zlib';
 import test from 'node:test';
 import { chromium } from 'playwright-core';
 
@@ -38,10 +39,98 @@ async function downloadFrom(page, buttonName, directory) {
   return readFile(target);
 }
 
-function assertZip(buffer, entries) {
-  assert.deepEqual([...buffer.subarray(0, 2)], [0x50, 0x4b]);
-  const text = buffer.toString('latin1');
-  entries.forEach((entry) => assert.ok(text.includes(entry), `missing ZIP entry ${entry}`));
+function readZipEntries(archive) {
+  const view = new DataView(archive.buffer, archive.byteOffset, archive.byteLength);
+  const entries = [];
+  let offset = 0;
+
+  while (offset + 4 <= archive.length && view.getUint32(offset, true) === 0x04034b50) {
+    assert.ok(offset + 30 <= archive.length, 'truncated ZIP local header');
+    const method = view.getUint16(offset + 8, true);
+    assert.ok(method === 0 || method === 8, `unsupported ZIP method ${method}`);
+    const compressedSize = view.getUint32(offset + 18, true);
+    const uncompressedSize = view.getUint32(offset + 22, true);
+    const nameLength = view.getUint16(offset + 26, true);
+    const extraLength = view.getUint16(offset + 28, true);
+    const nameStart = offset + 30;
+    const dataStart = nameStart + nameLength + extraLength;
+    const dataEnd = dataStart + compressedSize;
+    assert.ok(dataEnd <= archive.length, 'truncated ZIP entry');
+    const name = new TextDecoder().decode(archive.subarray(nameStart, nameStart + nameLength));
+    const data = method === 8
+      ? inflateRawSync(archive.subarray(dataStart, dataEnd))
+      : archive.subarray(dataStart, dataEnd);
+    assert.equal(data.byteLength, uncompressedSize, `size mismatch for ZIP entry ${name}`);
+    entries.push({ name, data, method, compressedSize, localOffset: offset });
+    offset = dataEnd;
+  }
+
+  assert.ok(offset + 4 <= archive.length, 'missing ZIP central directory');
+  const centralDirectoryOffset = offset;
+  for (const entry of entries) {
+    assert.ok(offset + 46 <= archive.length, 'truncated ZIP central directory');
+    assert.equal(view.getUint32(offset, true), 0x02014b50, 'invalid ZIP central-directory signature');
+    const compressedSize = view.getUint32(offset + 20, true);
+    const uncompressedSize = view.getUint32(offset + 24, true);
+    const nameLength = view.getUint16(offset + 28, true);
+    const extraLength = view.getUint16(offset + 30, true);
+    const commentLength = view.getUint16(offset + 32, true);
+    const nameStart = offset + 46;
+    const name = new TextDecoder().decode(archive.subarray(nameStart, nameStart + nameLength));
+    assert.equal(name, entry.name);
+    assert.equal(view.getUint16(offset + 10, true), entry.method);
+    assert.equal(compressedSize, entry.compressedSize);
+    assert.equal(uncompressedSize, entry.data.byteLength);
+    assert.equal(view.getUint32(offset + 42, true), entry.localOffset);
+    offset = nameStart + nameLength + extraLength + commentLength;
+  }
+
+  assert.ok(offset + 22 <= archive.length, 'missing ZIP end-of-central-directory record');
+  assert.equal(view.getUint32(offset, true), 0x06054b50, 'invalid ZIP EOCD signature');
+  assert.equal(view.getUint16(offset + 8, true), entries.length);
+  assert.equal(view.getUint16(offset + 10, true), entries.length);
+  assert.equal(view.getUint32(offset + 12, true), offset - centralDirectoryOffset);
+  assert.equal(view.getUint32(offset + 16, true), centralDirectoryOffset);
+  assert.equal(offset + 22 + view.getUint16(offset + 20, true), archive.length);
+  return entries;
+}
+
+function zipEntry(entries, name) {
+  const entry = entries.find((candidate) => candidate.name === name);
+  assert.ok(entry, `missing ZIP entry ${name}`);
+  return entry.data;
+}
+
+async function assertExportedXml(page, threeMfEntries, xlsxEntries) {
+  const modelXml = new TextDecoder().decode(zipEntry(threeMfEntries, '3D/3dmodel.model'));
+  const workbookXml = new TextDecoder().decode(zipEntry(xlsxEntries, 'xl/workbook.xml'));
+  const workbookRelsXml = new TextDecoder().decode(zipEntry(xlsxEntries, 'xl/_rels/workbook.xml.rels'));
+  const worksheetXml = xlsxEntries
+    .filter(({ name }) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name))
+    .map(({ data }) => new TextDecoder().decode(data));
+  assert.ok(worksheetXml.length > 0, 'XLSX has no worksheets');
+
+  await page.evaluate(({ modelXml, workbookXml, workbookRelsXml, worksheetXml }) => {
+    const parse = (xml, name) => {
+      const document = new DOMParser().parseFromString(xml, 'application/xml');
+      if (document.getElementsByTagName('parsererror').length > 0) throw new Error(`${name} has a parser error`);
+      return document;
+    };
+    const model = parse(modelXml, '3MF model').documentElement;
+    if (model.localName !== 'model' || model.getAttribute('unit') !== 'millimeter') {
+      throw new Error('3MF model must use millimeter units');
+    }
+    if (model.getElementsByTagNameNS(model.namespaceURI, 'resources').length !== 1
+      || model.getElementsByTagNameNS(model.namespaceURI, 'build').length !== 1) {
+      throw new Error('3MF model must include resources and build');
+    }
+    const workbook = parse(workbookXml, 'XLSX workbook');
+    parse(workbookRelsXml, 'XLSX workbook relationships');
+    worksheetXml.forEach((xml, index) => parse(xml, `XLSX worksheet ${index + 1}`));
+    const sheetCount = workbook.documentElement
+      .getElementsByTagNameNS(workbook.documentElement.namespaceURI, 'sheet').length;
+    if (sheetCount !== worksheetXml.length) throw new Error('XLSX sheet count does not match worksheet entries');
+  }, { modelXml, workbookXml, workbookRelsXml, worksheetXml });
 }
 
 test('heart PNG golden path edits and downloads every export', { skip: !browserPath && !process.env.CI, timeout: 60_000 }, async () => {
@@ -156,10 +245,27 @@ test('heart PNG golden path edits and downloads every export', { skip: !browserP
     assert.ok(draft.width > 0 && draft.height > 0 && draft.layers.length > 0);
 
     const threeMf = await downloadFrom(page, 'Export 3MF', directory);
-    assertZip(threeMf, ['[Content_Types].xml', '_rels/.rels', '3D/3dmodel.model']);
+    const threeMfEntries = readZipEntries(threeMf);
+    assert.deepEqual(threeMfEntries.map(({ name }) => name), [
+      '[Content_Types].xml',
+      '_rels/.rels',
+      '3D/3dmodel.model',
+      'Metadata/project_settings.config',
+      'Metadata/model_settings.config',
+      'Metadata/beadrelief_recipe.config',
+    ]);
 
     const xlsx = await downloadFrom(page, 'Export usage', directory);
-    assertZip(xlsx, ['[Content_Types].xml', 'xl/workbook.xml', 'xl/worksheets/sheet1.xml']);
+    const xlsxEntries = readZipEntries(xlsx);
+    for (const name of [
+      '[Content_Types].xml',
+      '_rels/.rels',
+      'xl/workbook.xml',
+      'xl/_rels/workbook.xml.rels',
+      'xl/styles.xml',
+    ]) zipEntry(xlsxEntries, name);
+    assert.ok(xlsxEntries.some(({ name }) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name)));
+    await assertExportedXml(page, threeMfEntries, xlsxEntries);
 
     await page.getByRole('button', { name: 'Export pattern', exact: true }).click();
     await page.locator('.export-format-select').first().selectOption('png');
