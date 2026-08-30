@@ -1,14 +1,14 @@
 # BeadRelief 稳定版实施计划
 
 > 审计日期：2026-08-29
-> 当前定位：可用 Alpha。当前没有线上故障级 P0，但离“可以放心交给用户打印”的稳定版，还缺打印契约、输入边界、真实浏览器链路和实机验证。
+> 当前定位：可用 Alpha。当前没有线上故障级 P0，但离“可以放心交给用户打印”的稳定版，只剩 Bambu 切片/打印契约和实机验证。
 
 ## 当前基线
 
 已验证：
 
 - 构建通过。
-- 75/75 自动测试通过。
+- 105/105 自动测试通过。
 - `npm audit` 为 0 个已知漏洞。
 - 三个样例 SHA-256 与验证文档一致。
 - GitHub Pages 当前构建成功。
@@ -77,11 +77,11 @@
 
 处理：
 
-- [ ] 从 [`src/imageToBeads.ts`](src/imageToBeads.ts) 只提取纯 RGBA → bead grid 核心。
-- [ ] 使用微型透明、半透明和白底测试图验证转换。
-- [ ] 增加一条 Chrome E2E：上传 heart PNG → 生成 → 修改一格 → 预览 → 下载 JSON/PNG/PDF/XLSX/3MF。
-- [ ] 检查浏览器无 console error、文件 magic、ZIP 必需条目、3MF XML 和 XLSX 工作表。
-- [ ] CI 暂时只跑一个 Chrome，不增加浏览器矩阵和覆盖率平台。
+- [x] 从 [`src/imageToBeads.ts`](src/imageToBeads.ts) 只提取纯 RGBA → bead grid 核心。
+- [x] 使用微型透明、半透明和白底测试图验证转换。
+- [x] 增加一条 Chrome E2E：上传 heart PNG → 生成 → 修改一格 → 预览 → 下载 JSON/PNG/PDF/XLSX/3MF。
+- [x] 检查浏览器无 console error、文件 magic、ZIP 必需条目、3MF XML 和 XLSX 工作表。
+- [x] CI 暂时只跑一个 Chrome，不增加浏览器矩阵和覆盖率平台。
 
 ## 分阶段实施
 
@@ -126,7 +126,7 @@
 - [x] 增加一条真实 Chrome/Chromium 黄金路径。
 - [x] 对导入失败、异步生成竞争、双层 Replace、Solo 导出范围加入回归测试。
 
-完成标准：91 个测试全部通过；CI 缺少 Chrome/Chromium 时明确失败，不能静默跳过主流程。
+完成标准：105 个测试全部通过；CI 缺少 Chrome/Chromium 时明确失败，不能静默跳过主流程。
 
 ### Phase 4：性能（1.5–2 天）
 

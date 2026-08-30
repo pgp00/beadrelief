@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { chromium } from 'playwright-core';
+import { readZipEntries } from './helpers/zip.mjs';
 
 const browserCandidates = [
   process.env.CHROME_PATH,
@@ -38,10 +39,42 @@ async function downloadFrom(page, buttonName, directory) {
   return readFile(target);
 }
 
-function assertZip(buffer, entries) {
-  assert.deepEqual([...buffer.subarray(0, 2)], [0x50, 0x4b]);
-  const text = buffer.toString('latin1');
-  entries.forEach((entry) => assert.ok(text.includes(entry), `missing ZIP entry ${entry}`));
+function zipEntry(entries, name) {
+  const entry = entries.get(name);
+  assert.ok(entry, `missing ZIP entry ${name}`);
+  return entry;
+}
+
+async function assertExportedXml(page, threeMfEntries, xlsxEntries) {
+  const modelXml = new TextDecoder().decode(zipEntry(threeMfEntries, '3D/3dmodel.model'));
+  const workbookXml = new TextDecoder().decode(zipEntry(xlsxEntries, 'xl/workbook.xml'));
+  const workbookRelsXml = new TextDecoder().decode(zipEntry(xlsxEntries, 'xl/_rels/workbook.xml.rels'));
+  const worksheetXml = [...xlsxEntries]
+    .filter(([name]) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name))
+    .map(([, data]) => new TextDecoder().decode(data));
+  assert.ok(worksheetXml.length > 0, 'XLSX has no worksheets');
+
+  await page.evaluate(({ modelXml, workbookXml, workbookRelsXml, worksheetXml }) => {
+    const parse = (xml, name) => {
+      const document = new DOMParser().parseFromString(xml, 'application/xml');
+      if (document.getElementsByTagName('parsererror').length > 0) throw new Error(`${name} has a parser error`);
+      return document;
+    };
+    const model = parse(modelXml, '3MF model').documentElement;
+    if (model.localName !== 'model' || model.getAttribute('unit') !== 'millimeter') {
+      throw new Error('3MF model must use millimeter units');
+    }
+    if (model.getElementsByTagNameNS(model.namespaceURI, 'resources').length !== 1
+      || model.getElementsByTagNameNS(model.namespaceURI, 'build').length !== 1) {
+      throw new Error('3MF model must include resources and build');
+    }
+    const workbook = parse(workbookXml, 'XLSX workbook');
+    parse(workbookRelsXml, 'XLSX workbook relationships');
+    worksheetXml.forEach((xml, index) => parse(xml, `XLSX worksheet ${index + 1}`));
+    const sheetCount = workbook.documentElement
+      .getElementsByTagNameNS(workbook.documentElement.namespaceURI, 'sheet').length;
+    if (sheetCount !== worksheetXml.length) throw new Error('XLSX sheet count does not match worksheet entries');
+  }, { modelXml, workbookXml, workbookRelsXml, worksheetXml });
 }
 
 test('heart PNG golden path edits and downloads every export', { skip: !browserPath && !process.env.CI, timeout: 60_000 }, async () => {
@@ -156,10 +189,36 @@ test('heart PNG golden path edits and downloads every export', { skip: !browserP
     assert.ok(draft.width > 0 && draft.height > 0 && draft.layers.length > 0);
 
     const threeMf = await downloadFrom(page, 'Export 3MF', directory);
-    assertZip(threeMf, ['[Content_Types].xml', '_rels/.rels', '3D/3dmodel.model']);
+    const threeMfEntries = readZipEntries(threeMf);
+    assert.deepEqual([...threeMfEntries.keys()], [
+      '[Content_Types].xml',
+      '_rels/.rels',
+      '3D/3dmodel.model',
+      'Metadata/project_settings.config',
+      'Metadata/model_settings.config',
+      'Metadata/beadrelief_recipe.config',
+    ]);
+    const corruptedLocalCrc = Uint8Array.from(threeMf);
+    corruptedLocalCrc[14] ^= 0xff;
+    assert.throws(() => readZipEntries(corruptedLocalCrc), /CRC/i);
+    const archiveView = new DataView(threeMf.buffer, threeMf.byteOffset, threeMf.byteLength);
+    const eocdOffset = threeMf.byteLength - 22 - archiveView.getUint16(threeMf.byteLength - 2, true);
+    const centralDirectoryOffset = archiveView.getUint32(eocdOffset + 16, true);
+    const corruptedCentralCrc = Uint8Array.from(threeMf);
+    corruptedCentralCrc[centralDirectoryOffset + 16] ^= 0xff;
+    assert.throws(() => readZipEntries(corruptedCentralCrc), /CRC/i);
 
     const xlsx = await downloadFrom(page, 'Export usage', directory);
-    assertZip(xlsx, ['[Content_Types].xml', 'xl/workbook.xml', 'xl/worksheets/sheet1.xml']);
+    const xlsxEntries = readZipEntries(xlsx);
+    for (const name of [
+      '[Content_Types].xml',
+      '_rels/.rels',
+      'xl/workbook.xml',
+      'xl/_rels/workbook.xml.rels',
+      'xl/styles.xml',
+    ]) zipEntry(xlsxEntries, name);
+    assert.ok([...xlsxEntries.keys()].some((name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name)));
+    await assertExportedXml(page, threeMfEntries, xlsxEntries);
 
     await page.getByRole('button', { name: 'Export pattern', exact: true }).click();
     await page.locator('.export-format-select').first().selectOption('png');

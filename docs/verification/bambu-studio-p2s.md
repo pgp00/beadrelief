@@ -5,7 +5,7 @@
 | File | SHA-256 |
 | --- | --- |
 | `samples/beadrelief-heart-source.png` | `e6f8cc9cde3bebb2bce12cf8ef96dfa403c9d658702a6d4a2a9c04eeffa41d44` |
-| `samples/beadrelief-heart-project.json` | `2b5bfd13e30c2deaeb0abbf6e3a4d618379c83e7dc0a986e84565dd25d97a7b2` |
+| `samples/beadrelief-heart-project.json` | `99da9549547a3c9185a94dcb25ac862b3fab21018ef4a876862c56e9f16a550c` |
 | `samples/beadrelief-heart-p2s.3mf` | `89533c960cea8a8d4cf14773e28dfa3df4951bf2498f70b834599044c898e468` |
 | `samples/beadrelief-p2s-sample.3mf` | `b20bca9d1811a0a83bbe8f248035071f64c4555ec849fa0051bd6ebff81cfc38` |
 | `samples/beadrelief-p2s-layered-sample.3mf` | `d8150b634386b6f5211986da4532b7fed42485fb83f43c5fb3211ced01f9ee59` |
