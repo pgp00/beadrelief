@@ -88,15 +88,18 @@ async function downloadedBytes(download) {
   return new Uint8Array(await download.blob.arrayBuffer());
 }
 
-test("project JSON downloads compact output and rejects oversized output before download", async (t) => {
+test("project JSON keeps size and download failures distinct", async (t) => {
   const downloads = installDownloadEnvironment(t);
   downloadProjectJson(createProject(1, 1, "Compact project"));
   assert.equal(downloads.length, 1);
   assert.equal(decoder.decode(await downloadedBytes(downloads[0])).includes("\n"), false);
 
   const oversized = { ...createProject(1, 1), metadata: "x".repeat(MAX_PROJECT_FILE_BYTES) };
-  assert.throws(() => downloadProjectJson(oversized), /exceeds the import size limit/);
+  assert.throws(() => downloadProjectJson(oversized), RangeError);
   assert.equal(downloads.length, 1);
+
+  URL.createObjectURL = () => { throw new TypeError("Download unavailable."); };
+  assert.throws(() => downloadProjectJson(createProject(1, 1)), TypeError);
 });
 
 test("custom AMS names agree across usage, XLSX, and 3MF while sheet names remain Excel-safe", async (t) => {

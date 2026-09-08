@@ -26,7 +26,7 @@ const PRINT_EXPORT_SCALE = PRINT_EXPORT_PPI / CSS_PIXEL_PPI;
 export function serializeProject(project: BeadProject): string {
   const serialized = JSON.stringify({ ...project, printRecipe: buildPrintRecipe(project) });
   if (new Blob([serialized]).size > MAX_PROJECT_FILE_BYTES) {
-    throw new Error('Project JSON exceeds the import size limit.');
+    throw new RangeError('Project JSON exceeds the import size limit.');
   }
   return serialized;
 }
