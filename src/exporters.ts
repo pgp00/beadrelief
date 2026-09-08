@@ -5,6 +5,7 @@ import { summarizeLayeredUsage, summarizeUsage } from './usage.js';
 import { buildPrintRecipe } from './print/recipe.js';
 import { materialProfileFromProject } from './print/profile.js';
 import { createStoredZip } from './print/zip.js';
+import { MAX_PROJECT_FILE_BYTES } from './project.js';
 
 export type PrintExportOptions = {
   format?: 'png' | 'pdf';
@@ -22,8 +23,16 @@ const CSS_PIXEL_PPI = 96;
 const MAX_EXPORT_CANVAS_SIDE = 12000;
 const PRINT_EXPORT_SCALE = PRINT_EXPORT_PPI / CSS_PIXEL_PPI;
 
+export function serializeProject(project: BeadProject): string {
+  const serialized = JSON.stringify({ ...project, printRecipe: buildPrintRecipe(project) });
+  if (new Blob([serialized]).size > MAX_PROJECT_FILE_BYTES) {
+    throw new Error('Project JSON exceeds the import size limit.');
+  }
+  return serialized;
+}
+
 export function downloadProjectJson(project: BeadProject): void {
-  downloadBlob(`${safeName(project.name || '\u62fc\u8c46\u7f16\u8f91\u8bb0\u5f55')}-\u7f16\u8f91\u8bb0\u5f55_perler.json`, JSON.stringify({ ...project, printRecipe: buildPrintRecipe(project) }, null, 2), 'application/json');
+  downloadBlob(`${safeName(project.name || '\u62fc\u8c46\u7f16\u8f91\u8bb0\u5f55')}-\u7f16\u8f91\u8bb0\u5f55_perler.json`, serializeProject(project), 'application/json');
 }
 
 export function downloadUsageWorkbook(project: BeadProject, layered = project.printSettings.mode === 'layered'): void {

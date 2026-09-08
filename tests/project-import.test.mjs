@@ -7,7 +7,32 @@ import {
   MAX_PROJECT_FILE_BYTES,
   normalizeProject,
   normalizeProjectName,
+  withStackTemplate,
 } from "../generated/dist/src/project.js";
+import { serializeProject } from "../generated/dist/src/exporters.js";
+import { completePalette } from "../generated/dist/src/palette.js";
+import { buildStackPalette } from "../generated/dist/src/print/stacking.js";
+
+function maximumProject(project, colorId, secondaryColorId = colorId) {
+  const cells = Array.from({ length: 180 * 180 }, (_, index) => index === 0 ? secondaryColorId : colorId);
+  project.width = 180;
+  project.height = 180;
+  project.layers = Array.from({ length: 64 }, (_, index) => ({
+    ...project.layers[0],
+    id: `layer-${index + 1}`,
+    cells: [...cells],
+  }));
+  project.activeLayerId = project.layers.at(-1).id;
+  project.cells = [...cells];
+  return project;
+}
+
+function assertMaximumProjectRoundTrips(project) {
+  const serialized = serializeProject(project);
+  assert.ok(new Blob([serialized]).size <= MAX_PROJECT_FILE_BYTES);
+  assert.equal(isSafeProjectImport(JSON.parse(serialized), new Blob([serialized]).size), true);
+  assert.deepEqual(normalizeProject(JSON.parse(serialized)).layers, project.layers);
+}
 
 test("project names are trimmed, bounded, and never empty", () => {
   assert.equal(normalizeProjectName("   "), "Untitled Pattern");
@@ -55,6 +80,19 @@ test("project import rejects unsafe dimensions, layer counts, and file sizes", (
   }, 100), false);
   assert.equal(isSafeProjectImport(project, MAX_PROJECT_FILE_BYTES + 1), false);
   assert.equal(isSafeProjectImport(project, Number.NaN), false);
+});
+
+test("maximum MARD, AMS, and layered projects remain importable after export", () => {
+  const longestMardId = completePalette.reduce((longest, color) => color.id.length > longest.length ? color.id : longest, "");
+  const amsProject = createProject();
+  const longestAmsId = amsProject.amsColors.reduce((longest, color) => color.id.length > longest.length ? color.id : longest, "");
+  const stackProject = withStackTemplate(createProject(), "rybw");
+  const longestStackId = buildStackPalette(stackProject.amsColors)
+    .reduce((longest, color) => color.id.length > longest.length ? color.id : longest, "");
+
+  assertMaximumProjectRoundTrips(maximumProject(createProject(), longestMardId, "mard-a1"));
+  assertMaximumProjectRoundTrips(maximumProject(amsProject, longestAmsId));
+  assertMaximumProjectRoundTrips(maximumProject(stackProject, longestStackId));
 });
 
 test("project import rejects malformed nested records without throwing", () => {

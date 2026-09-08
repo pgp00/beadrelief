@@ -7,7 +7,7 @@ import type { AmsColor, BeadLayer, BeadProject, MaterialProfileMeta, PaletteColo
 export const autosaveKey = 'perler-beads-generator:draft';
 export const MAX_PROJECT_DIMENSION = 180;
 export const MAX_PROJECT_LAYERS = 64;
-export const MAX_PROJECT_FILE_BYTES = 20 * 1024 * 1024;
+export const MAX_PROJECT_FILE_BYTES = 50 * 1024 * 1024;
 
 export function normalizeProjectName(value: unknown): string {
   return typeof value === 'string' ? value.trim().slice(0, 80) || 'Untitled Pattern' : 'Untitled Pattern';

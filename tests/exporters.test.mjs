@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createProject, withStackTemplate } from "../generated/dist/src/project.js";
+import { createProject, MAX_PROJECT_FILE_BYTES, withStackTemplate } from "../generated/dist/src/project.js";
 import { buildStackPalette } from "../generated/dist/src/print/stacking.js";
 import { buildPrintableModel, composePrintableGrid } from "../generated/dist/src/print/model.js";
 import { createThreeMf } from "../generated/dist/src/print/threeMf.js";
-import { downloadPrintPdf, downloadPrintPng, downloadUsageWorkbook } from "../generated/dist/src/exporters.js";
+import { downloadPrintPdf, downloadPrintPng, downloadProjectJson, downloadUsageWorkbook } from "../generated/dist/src/exporters.js";
 import { summarizeLayeredUsage, summarizeUsage } from "../generated/dist/src/usage.js";
 import { readZipEntries } from "./helpers/zip.mjs";
 
@@ -87,6 +87,17 @@ async function downloadedBytes(download) {
   assert.ok(download?.blob instanceof Blob);
   return new Uint8Array(await download.blob.arrayBuffer());
 }
+
+test("project JSON downloads compact output and rejects oversized output before download", async (t) => {
+  const downloads = installDownloadEnvironment(t);
+  downloadProjectJson(createProject(1, 1, "Compact project"));
+  assert.equal(downloads.length, 1);
+  assert.equal(decoder.decode(await downloadedBytes(downloads[0])).includes("\n"), false);
+
+  const oversized = { ...createProject(1, 1), metadata: "x".repeat(MAX_PROJECT_FILE_BYTES) };
+  assert.throws(() => downloadProjectJson(oversized), /exceeds the import size limit/);
+  assert.equal(downloads.length, 1);
+});
 
 test("custom AMS names agree across usage, XLSX, and 3MF while sheet names remain Excel-safe", async (t) => {
   const downloads = installDownloadEnvironment(t);

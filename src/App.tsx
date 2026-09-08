@@ -804,8 +804,12 @@ export default function App() {
 
   function exportEditRecord() {
     if (blockExportWhileGenerating()) return;
-    downloadProjectJson(project);
-    setNotice(text.recordExported);
+    try {
+      downloadProjectJson(project);
+      setNotice(text.recordExported);
+    } catch {
+      setNotice(text.recordExportTooLarge);
+    }
   }
 
   function resetClipboard() {
