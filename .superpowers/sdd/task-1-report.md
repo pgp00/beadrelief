@@ -32,4 +32,4 @@ No known concerns. `nearestPaletteColor()` remains Oklab-based. Full suite was n
 
 ## Commit
 
-`ddfd86a` (`fix: restore cleanup color distance scale`)
+Implementation commit: `422f3ef` (`fix: restore cleanup color distance scale`)
