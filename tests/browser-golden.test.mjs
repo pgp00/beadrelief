@@ -6,6 +6,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { chromium } from 'playwright-core';
+import { adjustLayerCells, applyEffectToLayer, defaultAdjustments } from '../generated/dist/src/imageAdjustments.js';
+import { completePalette } from '../generated/dist/src/palette.js';
+import { createProject } from '../generated/dist/src/project.js';
 import { readZipEntries } from './helpers/zip.mjs';
 
 const browserCandidates = [
@@ -385,6 +388,175 @@ test('heart PNG golden path edits and downloads every export', { skip: !browserP
     await browser?.close();
     server.kill();
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('adjustments use the latest edited cells and one history entry per session', { skip: !browserPath && !process.env.CI, timeout: 60_000 }, async () => {
+  assert.ok(browserPath, 'Chrome or Chromium is required in CI');
+  const port = 30_000 + (process.pid % 10_000);
+  const url = `http://127.0.0.1:${port}/`;
+  const server = spawn(process.execPath, ['scripts/dev-server.cjs', String(port)], {
+    cwd: process.cwd(),
+    stdio: 'ignore',
+  });
+  let browser;
+
+  const initialCells = Array.from({ length: 64 }, (_, index) => (
+    index === 1 ? null : ['mard-f5', 'mard-c8', 'mard-b8', 'mard-g7', 'mard-h5'][index % 5]
+  ));
+  const seed = createProject(8, 8, 'Adjustment regression');
+  seed.cells = initialCells.slice();
+  seed.layers[0].cells = initialCells.slice();
+
+  async function openFixture() {
+    const context = await browser.newContext({ viewport: { width: 1366, height: 768 } });
+    const page = await context.newPage();
+    await page.addInitScript((draft) => {
+      localStorage.clear();
+      localStorage.setItem('perler-beads-generator:language', 'en');
+      localStorage.setItem('perler-beads-generator:draft', draft);
+    }, JSON.stringify(seed));
+    await page.goto(url);
+    await page.locator('.workspace canvas').waitFor();
+    return { context, page };
+  }
+
+  async function savedCells(page) {
+    return page.evaluate(() => JSON.parse(localStorage.getItem('perler-beads-generator:draft')).layers[0].cells);
+  }
+
+  async function waitForCells(page, cells) {
+    await page.waitForFunction((expected) => {
+      const draft = JSON.parse(localStorage.getItem('perler-beads-generator:draft'));
+      return JSON.stringify(draft.layers[0].cells) === JSON.stringify(expected);
+    }, cells);
+  }
+
+  async function setBrightness(page, value) {
+    const before = await page.evaluate(() => localStorage.getItem('perler-beads-generator:draft'));
+    await page.getByRole('tab', { name: 'Adjust', exact: true }).click();
+    await page.getByLabel('Brightness').fill(String(value));
+    await page.waitForFunction(
+      (saved) => localStorage.getItem('perler-beads-generator:draft') !== saved,
+      before,
+    );
+  }
+
+  async function assertNextAdjustment(page, baseline) {
+    const expected = adjustLayerCells(baseline, { ...defaultAdjustments, brightness: 2 }, completePalette);
+    await setBrightness(page, 2);
+    await waitForCells(page, expected);
+    assert.deepEqual(await savedCells(page), expected);
+  }
+
+  try {
+    await waitForServer(url);
+    browser = await chromium.launch({ executablePath: browserPath, headless: true });
+
+    {
+      const { context, page } = await openFixture();
+      await setBrightness(page, 1);
+      const canvas = page.locator('.workspace canvas');
+      await canvas.focus();
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(() => {
+        const draft = JSON.parse(localStorage.getItem('perler-beads-generator:draft'));
+        return Boolean(draft && draft.layers[0].cells[1] !== null);
+      });
+      const afterPaint = await savedCells(page);
+      await assertNextAdjustment(page, afterPaint);
+      await context.close();
+    }
+
+    {
+      const { context, page } = await openFixture();
+      await setBrightness(page, 1);
+      await page.locator('.project-action-button').filter({ hasText: /^Clear$/ }).evaluate((button) => button.click());
+      const cleared = Array(64).fill(null);
+      await waitForCells(page, cleared);
+      await assertNextAdjustment(page, cleared);
+      await context.close();
+    }
+
+    {
+      const { context, page } = await openFixture();
+      await setBrightness(page, 1);
+      const beforeInvert = await savedCells(page);
+      const inverted = applyEffectToLayer(beforeInvert, completePalette, 'invert').cells;
+      await page.getByRole('button', { name: 'Invert', exact: true }).click();
+      await waitForCells(page, inverted);
+      await assertNextAdjustment(page, inverted);
+      await context.close();
+    }
+
+    {
+      const { context, page } = await openFixture();
+      await setBrightness(page, 1);
+      await page.getByRole('button', { name: 'Undo', exact: true }).evaluate((button) => button.click());
+      await waitForCells(page, initialCells);
+      await assertNextAdjustment(page, initialCells);
+      await context.close();
+    }
+
+    {
+      const { context, page } = await openFixture();
+      await setBrightness(page, 1);
+      const adjusted = await savedCells(page);
+      await page.getByRole('button', { name: 'Undo', exact: true }).evaluate((button) => button.click());
+      await waitForCells(page, initialCells);
+      await page.getByRole('button', { name: 'Redo', exact: true }).evaluate((button) => button.click());
+      await waitForCells(page, adjusted);
+      await assertNextAdjustment(page, adjusted);
+      await context.close();
+    }
+
+    {
+      const { context, page } = await openFixture();
+      await setBrightness(page, 1);
+      await setBrightness(page, 2);
+      await page.getByRole('button', { name: 'Undo', exact: true }).evaluate((button) => button.click());
+      await waitForCells(page, initialCells);
+      assert.deepEqual(await savedCells(page), initialCells);
+      await context.close();
+    }
+
+    {
+      const { context, page } = await openFixture();
+      const canvas = page.locator('.workspace canvas');
+      await canvas.focus();
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(() => JSON.parse(localStorage.getItem('perler-beads-generator:draft')).layers[0].cells[1] !== null);
+      const afterPaint = await savedCells(page);
+      await setBrightness(page, 2);
+      await page.getByRole('button', { name: 'Reset adjustments', exact: true }).click();
+      await waitForCells(page, afterPaint);
+      assert.deepEqual(await savedCells(page), afterPaint);
+      await context.close();
+    }
+
+    {
+      const { context, page } = await openFixture();
+      await setBrightness(page, 1);
+      page.on('dialog', (dialog) => void dialog.accept());
+      await page.getByLabel('Output long side').fill('8');
+      const beforeGeneration = await savedCells(page);
+      await page.locator('input[type="file"][accept^="image/png"]').first().setInputFiles(
+        path.join(process.cwd(), 'samples/beadrelief-heart-source.png'),
+      );
+      await page.getByText(/editable pattern ready\.$/).waitFor();
+      await page.waitForFunction((before) => {
+        const draft = JSON.parse(localStorage.getItem('perler-beads-generator:draft'));
+        return JSON.stringify(draft.layers[0].cells) !== JSON.stringify(before);
+      }, beforeGeneration);
+      const generated = await savedCells(page);
+      await assertNextAdjustment(page, generated);
+      await context.close();
+    }
+  } finally {
+    await browser?.close();
+    server.kill();
   }
 });
 

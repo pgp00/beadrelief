@@ -398,7 +398,9 @@ export default function App() {
   }, [pendingFile, importSettings, autoGenerationKey, autoGenerationRestartToken, manualEditsSinceGeneration]);
 
   function commitHistory() {
-    setPast((items) => [...items.slice(-39), projectRef.current]);
+    const snapshot = projectRef.current;
+    resetAdjustments(false);
+    setPast((items) => [...items.slice(-39), snapshot]);
     setFuture([]);
   }
 
@@ -537,8 +539,8 @@ export default function App() {
     if (!ensureActiveLayerEditable()) return;
     const nextAdjustments = { ...adjustments, [key]: value };
     if (adjustmentSessionRef.current.layerId !== activeLayer.id) {
-      adjustmentSessionRef.current = { layerId: activeLayer.id, baseCells: activeLayer.cells.slice() };
       commitHistory();
+      adjustmentSessionRef.current = { layerId: activeLayer.id, baseCells: activeLayer.cells.slice() };
     }
     const baseCells = adjustmentSessionRef.current.baseCells.length > 0 ? adjustmentSessionRef.current.baseCells : activeLayer.cells;
     const adjustedCells = adjustLayerCells(baseCells, nextAdjustments, activePalette);
@@ -598,6 +600,7 @@ export default function App() {
   function undo() {
     const previous = past[past.length - 1];
     if (!previous) return;
+    resetAdjustments(false);
     suppressAutoGenerationRef.current = autoGenerationPendingRef.current
       || projectGenerationKey(previous) !== autoGenerationKey;
     invalidateGeneration();
@@ -609,6 +612,7 @@ export default function App() {
   function redo() {
     const next = future[future.length - 1];
     if (!next) return;
+    resetAdjustments(false);
     suppressAutoGenerationRef.current = autoGenerationPendingRef.current
       || projectGenerationKey(next) !== autoGenerationKey;
     invalidateGeneration();
@@ -751,6 +755,8 @@ export default function App() {
       if (options.recordHistory) {
         autoGenerateShouldCommitRef.current = false;
         commitHistory();
+      } else {
+        resetAdjustments(false);
       }
       const nextProject = replaceGeneratedProject(projectRef.current, result);
       updateProject(nextProject, 'generated');
