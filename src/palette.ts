@@ -1,5 +1,5 @@
 import type { BrandId, PaletteColor } from './types.js';
-import { hexToRgb, oklabDistance, paletteColorFromAmsId, rgbToOklab } from './print/colors.js';
+import { hexToRgb, paletteColorFromAmsId, rgbToOklab } from './print/colors.js';
 import { paletteColorFromStackId } from './print/stacking.js';
 
 const rawColorsCsv = `
@@ -375,7 +375,15 @@ export function nearestPaletteColor(
 }
 
 export function colorDistance(a: [number, number, number], b: [number, number, number]): number {
-  return oklabDistance(a, b);
+  const meanRed = (a[0] + b[0]) / 2;
+  const red = a[0] - b[0];
+  const green = a[1] - b[1];
+  const blue = a[2] - b[2];
+  return Math.sqrt(
+    (2 + meanRed / 256) * red * red
+      + 4 * green * green
+      + (2 + (255 - meanRed) / 256) * blue * blue,
+  );
 }
 
 export function mappedCode(color: PaletteColor, brand: BrandId): string {

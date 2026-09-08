@@ -77,3 +77,34 @@ test("crop planning preserves the source and supports aspect, zoom, and framing"
   });
   assert.throws(() => planImageCrop(1200, 800, { aspect: "square", zoom: 0, offsetX: 0, offsetY: 0 }), /crop/);
 });
+
+test("speckle cleanup preserves a strong black-white boundary", () => {
+  const rgba = new Uint8ClampedArray(8 * 8 * 4);
+  for (let index = 0; index < 64; index += 1) {
+    const rgb = index % 8 < 4 ? [0, 0, 0] : [255, 255, 255];
+    rgba.set([...rgb, 255], index * 4);
+  }
+  const result = rgbaToBeads(rgba, 8, 8, 8, 8, options({
+    maxColors: 2,
+    palette: [colors[0], colors[2]],
+    speckleReduction: 1,
+  }));
+  assert.deepEqual(result.cells.slice(0, 8), [
+    "black", "black", "black", "black",
+    "white", "white", "white", "white",
+  ]);
+  assert.equal(new Set(result.cells).size, 2);
+});
+
+test("limited-color conversion keeps exact candidates without cleanup", () => {
+  const rgba = new Uint8ClampedArray([
+    0, 0, 0, 255,
+    127, 127, 127, 255,
+    255, 255, 255, 255,
+  ]);
+  const result = rgbaToBeads(rgba, 3, 1, 3, 1, options({
+    maxColors: 2,
+    speckleReduction: 0,
+  }));
+  assert.deepEqual(result.cells, ["black", "gray", "gray"]);
+});
