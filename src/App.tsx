@@ -107,7 +107,10 @@ export default function App() {
   const [outputMode, setOutputMode] = useState<OutputMode>('pattern');
   const sizePresets = outputMode === 'pattern' ? patternSizePresets : printSizePresets;
   const [paletteMode, setPaletteMode] = useState<PaletteMode>('complete');
-  const [project, setProject] = useState<BeadProject>(() => loadDraft() ?? createProject());
+  const [project, setProject] = useState<BeadProject>(() => createProject());
+  const initialProjectRef = useRef(project);
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const [draftSaveFailed, setDraftSaveFailed] = useState(false);
   const [previewProject, setPreviewProject] = useState(project);
   const projectRef = useRef(project);
   projectRef.current = project;
@@ -307,17 +310,27 @@ export default function App() {
   generateFromImageRef.current = generateFromImage;
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      if (!saveDraft(project)) setNotice(text.storageUnavailable);
-    }, 400);
-    return () => window.clearTimeout(timer);
-  }, [project, text.storageUnavailable]);
+    let cancelled = false;
+    void loadDraft().then((draft) => {
+      if (cancelled) return;
+      if (draft) setProject((current) => current === initialProjectRef.current ? draft : current);
+      setDraftLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
-    const flushDraft = () => saveDraft(projectRef.current);
-    window.addEventListener('beforeunload', flushDraft);
-    return () => window.removeEventListener('beforeunload', flushDraft);
-  }, []);
+    if (!draftLoaded) return;
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      const saved = await saveDraft(project);
+      if (!cancelled && projectRef.current === project) setDraftSaveFailed(!saved);
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [project, draftLoaded]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setPreviewProject(project), 250);
@@ -2151,7 +2164,8 @@ export default function App() {
 
         <section className="panel-section status-section">
           <div>
-            <strong role="status" aria-live="polite" aria-atomic="true">{notice}</strong>
+            <strong role="status" aria-label={text.workspaceStatus} aria-live="polite" aria-atomic="true">{notice}</strong>
+            <span role="status" aria-label={text.draftSaveStatus} aria-live="polite" aria-atomic="true">{draftSaveFailed ? text.storageUnavailable : ''}</span>
             <span>
               {text.panelStatus(project.width, project.height, usage.length, totalBeads, boardCount)}
             </span>

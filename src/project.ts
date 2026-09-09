@@ -537,22 +537,78 @@ function emptyCells(width: number, height: number): Array<string | null> {
   return Array.from({ length: width * height }, () => null);
 }
 
-export function saveDraft(project: BeadProject): boolean {
+const draftDatabase = 'beadrelief';
+const draftStore = 'drafts';
+let draftConnection: Promise<IDBDatabase> | undefined;
+
+function openDraftDatabase(): Promise<IDBDatabase> {
+  if (draftConnection) return draftConnection;
+  draftConnection = new Promise<IDBDatabase>((resolve, reject) => {
+    let failed = false;
+    const request = indexedDB.open(draftDatabase, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore(draftStore);
+    request.onsuccess = () => {
+      const database = request.result;
+      if (failed) { database.close(); return; }
+      database.onversionchange = () => {
+        database.close();
+        draftConnection = undefined;
+      };
+      resolve(database);
+    };
+    request.onerror = () => {
+      failed = true;
+      reject(request.error);
+    };
+    request.onblocked = () => {
+      failed = true;
+      reject(new Error('Draft database unavailable.'));
+    };
+  }).catch((error) => {
+    draftConnection = undefined;
+    throw error;
+  });
+  return draftConnection;
+}
+
+export async function saveDraft(project: BeadProject): Promise<boolean> {
   try {
-    localStorage.setItem(autosaveKey, JSON.stringify(project));
-    return true;
+    const database = await openDraftDatabase();
+    return await new Promise<boolean>((resolve) => {
+      const transaction = database.transaction(draftStore, 'readwrite');
+      transaction.oncomplete = () => resolve(true);
+      transaction.onerror = transaction.onabort = () => resolve(false);
+      transaction.objectStore(draftStore).put(project, autosaveKey);
+    });
   } catch {
     return false;
   }
 }
 
-export function loadDraft(): BeadProject | null {
+export async function loadDraft(): Promise<BeadProject | null> {
+  try {
+    const database = await openDraftDatabase();
+    const record = await new Promise<unknown>((resolve, reject) => {
+      const transaction = database.transaction(draftStore, 'readonly');
+      const request = transaction.objectStore(draftStore).get(autosaveKey);
+      transaction.oncomplete = () => resolve(request.result);
+      transaction.onerror = transaction.onabort = () => reject(transaction.error);
+    });
+    // Database records are structured clones, not size-limited JSON imports.
+    if (isSafeProjectImport(record, 0)) return normalizeProject(record);
+  } catch {
+    // Older drafts remain recoverable when the database is unavailable.
+  }
   try {
     const raw = localStorage.getItem(autosaveKey);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as BeadProject;
-    if (!parsed.width || !parsed.height || !Array.isArray(parsed.cells)) return null;
-    return normalizeProject(parsed);
+    const parsed: unknown = JSON.parse(raw);
+    if (!isSafeProjectImport(parsed, new Blob([raw]).size)) return null;
+    const project = normalizeProject(parsed);
+    if (await saveDraft(project)) {
+      try { localStorage.removeItem(autosaveKey); } catch { /* The database copy is durable. */ }
+    }
+    return project;
   } catch {
     return null;
   }
