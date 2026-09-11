@@ -231,6 +231,26 @@ test('heart PNG golden path edits and downloads every export', { skip: !browserP
     assert.equal(await page.getByLabel('Background tolerance').count(), 0);
     assert.equal(await page.getByLabel('Reference opacity').inputValue(), '0.35');
 
+    let downloadCount = 0;
+    page.on('download', () => { downloadCount += 1; });
+    await page.getByLabel('AMS layered', { exact: true }).check();
+    await page.getByLabel('Border (mm)', { exact: true }).fill('1');
+    const layeredBorderText = 'Layered mode does not support borders yet. Set border width to 0 mm.';
+    const layeredBorderMessage = page.locator('#print-export-errors').getByText(layeredBorderText, { exact: true });
+    await layeredBorderMessage.waitFor();
+    const layeredExport = page.getByRole('button', { name: 'Export AMS multi-part 3MF', exact: true });
+    assert.equal(await layeredExport.isDisabled(), true);
+    await page.getByRole('button', { name: 'Export 3MF', exact: true }).click();
+    await status.getByText(layeredBorderText, { exact: true }).waitFor();
+    await page.waitForTimeout(100);
+    assert.equal(downloadCount, 0);
+    await page.getByLabel('Border (mm)', { exact: true }).fill('0');
+    await layeredBorderMessage.waitFor({ state: 'detached' });
+    assert.equal(await layeredExport.isEnabled(), true);
+    await downloadFrom(page, 'Export AMS multi-part 3MF', directory);
+    assert.equal(downloadCount, 1);
+    await page.getByLabel('Solid colors', { exact: true }).check();
+
     await page.waitForTimeout(450);
     await canvas.focus();
     const coordinateBefore = await page.locator('.canvas-coordinate-status').textContent();

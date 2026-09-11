@@ -4,6 +4,7 @@ import { createProject, normalizeProject, withMaterials, withPrintMode } from ".
 import { applyMaterialProfile, calibrationProject, materialProfileFromProject, parseMaterialProfile } from "../generated/dist/src/print/profile.js";
 import { applyMeasuredStackColors, buildStackPalette } from "../generated/dist/src/print/stacking.js";
 import { buildPrintableModel, composePrintableGrid } from "../generated/dist/src/print/model.js";
+import { createThreeMf } from "../generated/dist/src/print/threeMf.js";
 import { validatePrintableModel } from "../generated/dist/src/print/validation.js";
 
 test("material profiles round-trip and apply an immutable project snapshot", () => {
@@ -45,7 +46,10 @@ test("calibration swatches cover every stop and measured colors replace preview 
   const estimated = buildStackPalette(project.amsColors);
   assert.equal(swatch.width, estimated.length);
   assert.deepEqual(swatch.layers[0].cells, estimated.map((color) => color.id));
-  assert.deepEqual(validatePrintableModel(buildPrintableModel(composePrintableGrid(swatch))), []);
+  assert.equal(swatch.printSettings.borderWidthMm, 0);
+  const model = buildPrintableModel(composePrintableGrid(swatch));
+  assert.deepEqual(validatePrintableModel(model), []);
+  assert.ok(createThreeMf(model).byteLength > 0);
 
   const measured = applyMeasuredStackColors(estimated, [{ stopLevel: estimated[1].stopLevel, hex: "#123456" }]);
   assert.equal(measured[1].id, estimated[1].id);

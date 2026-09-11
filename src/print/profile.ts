@@ -20,7 +20,7 @@ export function calibrationProject(project: BeadProject): BeadProject {
       ...project.printSettings,
       mode: 'layered',
       baseColorId: project.amsColors[0].id,
-      borderWidthMm: 1,
+      borderWidthMm: 0,
       separateBase: false,
       hangingHoleDiameterMm: 0,
       backText: 'CAL',

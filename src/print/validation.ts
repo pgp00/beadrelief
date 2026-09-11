@@ -3,6 +3,7 @@ import { PRINT_SETTING_LIMITS, type NumericPrintSetting } from './settings.js';
 import { STACK_LAYER_HEIGHT_MM } from './stacking.js';
 
 export const MAX_EXPORT_GRID_DIMENSION = 32;
+export const LAYERED_BORDER_ERROR = 'Layered mode does not support a full-height border yet. Set border width to 0 mm.';
 
 export function closedEdgeErrors(part: PrintablePart): string[] {
   const counts = new Map<string, number>();
@@ -73,6 +74,9 @@ export function validatePrintableModel(model: PrintableModel, checkTopology = tr
   }
 
   if (model.mode === 'layered') {
+    if (settings.borderWidthMm > 0) {
+      errors.push(LAYERED_BORDER_ERROR);
+    }
     if (Math.abs(model.materialProfile.layerHeightMm - STACK_LAYER_HEIGHT_MM) >= 1e-6) {
       errors.push('Layered profiles currently require a 0.08 mm layer height.');
     }

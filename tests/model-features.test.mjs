@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createProject, normalizeProject, withStackTemplate } from "../generated/dist/src/project.js";
 import { buildPrintableModel, composePrintableGrid, meshBounds } from "../generated/dist/src/print/model.js";
+import { buildStackPalette } from "../generated/dist/src/print/stacking.js";
 import { closedEdgeErrors, validatePrintableModel } from "../generated/dist/src/print/validation.js";
 
 test("border, hanging loop, and recessed back text export as closed printable parts", () => {
@@ -22,12 +23,21 @@ test("border, hanging loop, and recessed back text export as closed printable pa
 test("layered backplates can be detached from every material stack", () => {
   const project = withStackTemplate(createProject(1, 1), "cmyw");
   project.printSettings.separateBase = true;
+  project.printSettings.hangingHoleDiameterMm = 4;
   const model = buildPrintableModel(composePrintableGrid(project));
   assert.equal(model.parts[0].name, "Base");
   assert.match(model.parts[1].name, /^Stack_/);
   assert.equal(meshBounds(model.parts[0]).max[2], project.printSettings.baseThicknessMm);
   assert.equal(meshBounds(model.parts[1]).min[2], project.printSettings.baseThicknessMm);
   assert.deepEqual(validatePrintableModel(model), []);
+});
+
+test("layered export rejects a full-height base-material border", () => {
+  const project = withStackTemplate(createProject(1, 1), "cmyw");
+  project.layers[0].cells = [buildStackPalette(project.amsColors).at(-1).id];
+  project.printSettings.borderWidthMm = 1;
+  const errors = validatePrintableModel(buildPrintableModel(composePrintableGrid(project)), false);
+  assert.ok(errors.some((error) => /layered.*border/i.test(error)));
 });
 
 test("legacy projects receive safe structure defaults and sanitize back text", () => {

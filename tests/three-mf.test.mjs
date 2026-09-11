@@ -5,7 +5,7 @@ import { createProject, withStackTemplate } from "../generated/dist/src/project.
 import { DEFAULT_AMS_COLORS } from "../generated/dist/src/print/colors.js";
 import { composePrintableGrid, buildPrintableModel, meshBounds } from "../generated/dist/src/print/model.js";
 import { buildStackPalette } from "../generated/dist/src/print/stacking.js";
-import { createThreeMf } from "../generated/dist/src/print/threeMf.js";
+import { createCompressedThreeMf, createThreeMf } from "../generated/dist/src/print/threeMf.js";
 import { readZipEntries } from "./helpers/zip.mjs";
 
 function parseModelSettings(settings) {
@@ -211,6 +211,15 @@ test("layered 3MF exports only physical material bands", () => {
   assert.match(xml, /Stack_Bambu_PLA_Basic_White/);
   assert.equal(recipe.mode, "layered");
   assert.deepEqual(recipe.layers.map(({ slot }) => slot), [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4]);
+});
+
+test("public 3MF exporters reject layered borders", () => {
+  const project = withStackTemplate(createProject(1, 1), "cmyw");
+  project.layers[0].cells = [buildStackPalette(project.amsColors).at(-1).id];
+  project.printSettings.borderWidthMm = 1;
+  const model = buildPrintableModel(composePrintableGrid(project));
+  assert.throws(() => createThreeMf(model), /layered.*border/i);
+  assert.throws(() => createCompressedThreeMf(model), /layered.*border/i);
 });
 
 test("heart sample keeps its deterministic 10 by 10 three-color footprint", async () => {

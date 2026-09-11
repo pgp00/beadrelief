@@ -16,7 +16,7 @@ import { applyMeasuredStackColors, buildStackPalette, hasCompleteStackCalibratio
 import { buildPrintRecipe } from './print/recipe.js';
 import { applyMaterialProfile, calibrationProject, MAX_PROFILE_FILE_BYTES } from './print/profile.js';
 import { downloadThreeMf } from './print/threeMf.js';
-import { validatePrintableModel } from './print/validation.js';
+import { LAYERED_BORDER_ERROR, validatePrintableModel } from './print/validation.js';
 import { basicPalette, completePalette, getColor } from './palette.js';
 import { MAX_PROJECT_DIMENSION, MAX_PROJECT_FILE_BYTES, composeVisibleCells, createLayer, createProject, hasEditableWork, isSafeProjectImport, loadDraft, normalizeProject, projectGridChanged, saveDraft, withCells, withLayers } from './project.js';
 import { findIsolatedBeads, summarizeLayeredUsage, summarizeUsage } from './usage.js';
@@ -76,6 +76,13 @@ type OutputMode = 'pattern' | 'three-d';
 type PaletteMode = 'basic' | 'complete';
 
 const MAX_PRINT_WORKSPACE_DIMENSION = 50;
+
+function printableUiErrors(errors: string[], generic: string, layeredBorder: string): string[] {
+  return [
+    ...(errors.includes(LAYERED_BORDER_ERROR) ? [layeredBorder] : []),
+    ...(errors.some((error) => error !== LAYERED_BORDER_ERROR) ? [codedUiError('EXPORT_INVALID', generic)] : []),
+  ];
+}
 
 export default function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -1017,8 +1024,8 @@ export default function App() {
   const printErrors = useMemo(() => {
     if (!printableModel) return [];
     const errors = validatePrintableModel(printableModel, false);
-    return errors.length ? [codedUiError('EXPORT_INVALID', text.exportValidationFailed)] : [];
-  }, [printableModel, text.exportValidationFailed]);
+    return printableUiErrors(errors, text.exportValidationFailed, text.layeredBorderUnsupported);
+  }, [printableModel, text.exportValidationFailed, text.layeredBorderUnsupported]);
 
   async function exportThreeMf() {
     if (blockExportWhileGenerating()) return;
@@ -1030,7 +1037,7 @@ export default function App() {
       const exportModel = buildPrintableModel(composePrintableGrid(projectRef.current));
       const exportErrors = validatePrintableModel(exportModel, false);
       if (exportErrors.length > 0) {
-        setNotice(codedUiError('EXPORT_INVALID', text.exportValidationFailed));
+        setNotice(printableUiErrors(exportErrors, text.exportValidationFailed, text.layeredBorderUnsupported).join(' '));
         const errorRegion = document.getElementById('print-export-errors');
         errorRegion?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         errorRegion?.focus({ preventScroll: true });
