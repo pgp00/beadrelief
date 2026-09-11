@@ -821,7 +821,7 @@ export default function App() {
       downloadProjectJson(project);
       setNotice(text.recordExported);
     } catch (error) {
-      setNotice(error instanceof RangeError ? text.recordExportTooLarge : text.exportFailed);
+      setNotice(error instanceof RangeError ? text.recordExportTooLarge : text.recordExportFailed);
     }
   }
 

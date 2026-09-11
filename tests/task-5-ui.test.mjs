@@ -9,9 +9,11 @@ const { ui } = await import("../generated/dist/src/i18n.js");
 const { imageLaunchState, loadHeartSample } = await import("../generated/dist/src/appLogic.js");
 
 test("first-use launch and export copy stay localized", () => {
-  for (const key of ["threeMfDownloaded", "trySample", "uploadYourImage", "exportThreeMf"]) {
+  for (const key of ["threeMfDownloaded", "trySample", "uploadYourImage", "exportThreeMf", "recordExportFailed"]) {
     assert.notEqual(ui.en[key], ui.zh[key]);
   }
+  assert.match(ui.en.recordExportFailed, /JSON/);
+  assert.match(ui.zh.recordExportFailed, /JSON/);
   const empty = createProject(10, 10);
   assert.deepEqual(imageLaunchState(false, empty), {
     showActions: true,
