@@ -23,6 +23,8 @@ Automated verification currently covers:
 - closed topology for borders, hanging loops, detached backplates, and recessed text;
 - calibration swatch coverage and measured-color preview overrides.
 
+The complete automated gate was rerun on 2026-09-14 in the optimization worktree with `npm run check`, `npm run verify`, a no-diff sample check, and checksum verification. It passed with 149 tests, including the real Chrome browser suite, with no skips; generated sample bytes remained unchanged.
+
 Run the same checks locally with:
 
 ```bash
@@ -32,7 +34,7 @@ npm run verify
 
 ## Current manual status
 
-The exact current heart bytes have not yet been recorded through a fresh Bambu Studio GUI import, slice, and physical print. No print-time or physical-result claim is made. Before printing, review the imported project-filament mapping, map it to the physical AMS slots, and inspect the slice preview.
+The exact current sample bytes have not yet been recorded through a fresh Bambu Studio GUI import and slice, and no physical print has been completed. No print-time or physical-result claim is made. Before printing, review the imported project-filament mapping, map it to the physical AMS slots, and inspect the slice preview.
 
 Layered mode is experimental until a current Bambu Studio import confirms that the embedded `layer_height` and `initial_layer_print_height` values of `0.08` are honored and each material band slices into exactly four layers.
 

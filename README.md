@@ -98,7 +98,7 @@ No. Image conversion and exports run locally in your browser.
 <details>
 <summary><strong>How should I back up a project?</strong></summary>
 
-The current draft is stored in this browser. Export the edit-record JSON for any project you need to keep or move to another device.
+The current draft is saved to this browser's IndexedDB after a 400 ms idle delay and a completed database transaction. Closing the tab before completion may lose recent edits. Export the edit-record JSON for any project you need to keep or move to another device.
 
 </details>
 
