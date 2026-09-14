@@ -8,7 +8,7 @@ import type { BeadProject, PrintMode, PrintSettings } from './types.js';
 
 type Props = {
   project: BeadProject;
-  model: PrintableModel;
+  model: PrintableModel | null;
   errors: string[];
   language: 'zh' | 'en';
   onChange: (project: BeadProject) => void;
@@ -93,7 +93,7 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
           <strong>{panel.title}</strong>
           <span>{panel.subtitle}</span>
         </div>
-        <small>{model.materials.length}/4 {panel.materials}</small>
+        <small>{project.amsColors.length}/4 {panel.materials}</small>
       </div>
 
       <div className="print-mode-row" aria-label={panel.mode}>
@@ -251,13 +251,13 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
         </label>
       )}
 
-      <div className="print-size-line">
+      {model && <div className="print-size-line">
         <span>{model.gridSize.width * model.gridSize.height} {panel.cells}</span>
         <strong>{model.sizeMm.x.toFixed(1)} × {model.sizeMm.y.toFixed(1)} × {model.sizeMm.z.toFixed(1)} mm</strong>
-      </div>
+      </div>}
       <p className="stack-mode-note">{panel.sizeLimit}</p>
 
-      {model.layered && (
+      {model?.layered && (
         <div className="stack-print-summary">
           <span>{model.layered.perceivedColorCount} {panel.estimatedColors}</span>
           <span>0.08 mm/{panel.layer}</span>
@@ -271,7 +271,7 @@ export default function PrintSettingsPanel({ project, model, errors, language, o
         </ul>
       )}
 
-      <button type="button" className="primary print-export-button" disabled={errors.length > 0 || exportDisabled} onClick={onExport}>
+      <button type="button" className="primary print-export-button" disabled={!model || errors.length > 0 || exportDisabled} onClick={onExport}>
         {panel.export}
       </button>
     </section>

@@ -7,6 +7,18 @@ import { createProject } from "../generated/dist/src/project.js";
 globalThis.React = React;
 const { ui } = await import("../generated/dist/src/i18n.js");
 const { imageLaunchState, loadHeartSample } = await import("../generated/dist/src/appLogic.js");
+const { renderToStaticMarkup } = await import('react-dom/server');
+const { default: PrintSettingsPanel } = await import('../generated/dist/src/PrintSettingsPanel.js');
+
+test('print settings remain editable without geometry and block export', () => {
+  const html = renderToStaticMarkup(React.createElement(PrintSettingsPanel, {
+    project: createProject(50, 50), model: null, errors: [ui.en.printPanel.sizeLimit], language: 'en',
+    onChange() {}, onCommit() {}, onExport() {},
+  }));
+  assert.ok(html.includes(ui.en.printPanel.sizeLimit));
+  assert.match(html, /print-export-button" disabled/);
+  assert.ok(html.includes(`${createProject(50, 50).amsColors.length}/4`));
+});
 
 test("first-use launch and export copy stay localized", () => {
   for (const key of ["threeMfDownloaded", "trySample", "uploadYourImage", "exportThreeMf", "recordExportFailed"]) {

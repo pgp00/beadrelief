@@ -16,7 +16,7 @@ import { applyMeasuredStackColors, buildStackPalette, hasCompleteStackCalibratio
 import { buildPrintRecipe } from './print/recipe.js';
 import { applyMaterialProfile, calibrationProject, MAX_PROFILE_FILE_BYTES } from './print/profile.js';
 import { downloadThreeMf } from './print/threeMf.js';
-import { LAYERED_BORDER_ERROR, validatePrintableModel } from './print/validation.js';
+import { LAYERED_BORDER_ERROR, MAX_EXPORT_GRID_DIMENSION, validatePrintableModel } from './print/validation.js';
 import { basicPalette, completePalette, getColor } from './palette.js';
 import { MAX_PROJECT_DIMENSION, MAX_PROJECT_FILE_BYTES, composeVisibleCells, createLayer, createProject, hasEditableWork, isSafeProjectImport, loadDraft, normalizeProject, projectGridChanged, saveDraft, withCells, withLayers } from './project.js';
 import { findIsolatedBeads, summarizeLayeredUsage, summarizeUsage } from './usage.js';
@@ -44,7 +44,6 @@ const printSizePresets = [
   { label: '16 × 16', width: 16, height: 16 },
   { label: '24 × 24', width: 24, height: 24 },
   { label: '32 × 32', width: 32, height: 32 },
-  { label: '50 × 50', width: 50, height: 50 },
 ];
 
 const patternSizePresets = [15, 29, 52, 78, 104].map((size) => ({
@@ -74,8 +73,6 @@ type FloatingHelp = { text: string; left: number; top: number };
 type ReferencePlacement = 'below' | 'above';
 type OutputMode = 'pattern' | 'three-d';
 type PaletteMode = 'basic' | 'complete';
-
-const MAX_PRINT_WORKSPACE_DIMENSION = 50;
 
 function printableUiErrors(errors: string[], generic: string, layeredBorder: string): string[] {
   return [
@@ -475,8 +472,12 @@ export default function App() {
     if (next === outputMode) return;
     setOutputMode(next);
     if (next === 'three-d') {
+      if (projectRef.current.width > MAX_EXPORT_GRID_DIMENSION || projectRef.current.height > MAX_EXPORT_GRID_DIMENSION) {
+        suppressAutoGenerationRef.current = true;
+        invalidateGeneration();
+      }
       setPreviewProject(projectRef.current);
-      setImportSettings((current) => ({ ...current, width: Math.min(current.width, MAX_PRINT_WORKSPACE_DIMENSION) }));
+      setImportSettings((current) => ({ ...current, width: Math.min(current.width, MAX_EXPORT_GRID_DIMENSION) }));
     }
     setShowPrintExportPanel(false);
     setNotice(next === 'pattern' ? text.patternModeSelected : text.threeDModeSelected);
@@ -675,7 +676,7 @@ export default function App() {
   }
 
   function resizeCanvas() {
-    const maximum = outputMode === 'pattern' ? MAX_PROJECT_DIMENSION : MAX_PRINT_WORKSPACE_DIMENSION;
+    const maximum = outputMode === 'pattern' ? MAX_PROJECT_DIMENSION : MAX_EXPORT_GRID_DIMENSION;
     const width = clampInteger(canvasWidth, 8, maximum);
     const height = clampInteger(canvasHeight, 8, maximum);
     if (width === project.width && height === project.height) return;
@@ -761,7 +762,7 @@ export default function App() {
     setNotice(text.updatingPattern);
     try {
       const result = await imageFileToBeads(pendingFile, {
-        width: convertWidth,
+        width: clampInteger(convertWidth, 8, outputMode === 'pattern' ? MAX_PROJECT_DIMENSION : MAX_EXPORT_GRID_DIMENSION),
         maxColors: outputMode === 'pattern' ? patternColorLimit : activePalette.length,
         palette: activePalette,
         generationStyle,
@@ -1017,15 +1018,19 @@ export default function App() {
   }, [activeLayer.id, project.width, project.height]);
   const displayProject = useMemo(() => projectForDisplay(project), [project]);
   const previewDisplayProject = useMemo(() => projectForDisplay(previewProject), [previewProject]);
+  const printGridTooLarge = project.width > MAX_EXPORT_GRID_DIMENSION || project.height > MAX_EXPORT_GRID_DIMENSION;
   const printableModel = useMemo(
-    () => outputMode === 'three-d' ? buildPrintableModel(composePrintableGrid(previewProject)) : null,
-    [outputMode, previewProject],
+    () => outputMode === 'three-d' && !printGridTooLarge
+      && previewProject.width <= MAX_EXPORT_GRID_DIMENSION && previewProject.height <= MAX_EXPORT_GRID_DIMENSION
+      ? buildPrintableModel(composePrintableGrid(previewProject)) : null,
+    [outputMode, previewProject, printGridTooLarge],
   );
   const printErrors = useMemo(() => {
+    if (printGridTooLarge) return [text.printPanel.sizeLimit];
     if (!printableModel) return [];
     const errors = validatePrintableModel(printableModel, false);
     return printableUiErrors(errors, text.exportValidationFailed, text.layeredBorderUnsupported);
-  }, [printableModel, text.exportValidationFailed, text.layeredBorderUnsupported]);
+  }, [printableModel, printGridTooLarge, text.printPanel.sizeLimit, text.exportValidationFailed, text.layeredBorderUnsupported]);
 
   async function exportThreeMf() {
     if (blockExportWhileGenerating()) return;
@@ -1034,7 +1039,12 @@ export default function App() {
     setNotice(text.buildingThreeMf);
     try {
       await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
-      const exportModel = buildPrintableModel(composePrintableGrid(projectRef.current));
+      const exportProject = projectRef.current;
+      if (exportProject.width > MAX_EXPORT_GRID_DIMENSION || exportProject.height > MAX_EXPORT_GRID_DIMENSION) {
+        setNotice(text.printPanel.sizeLimit);
+        return;
+      }
+      const exportModel = buildPrintableModel(composePrintableGrid(exportProject));
       const exportErrors = validatePrintableModel(exportModel, false);
       if (exportErrors.length > 0) {
         setNotice(printableUiErrors(exportErrors, text.exportValidationFailed, text.layeredBorderUnsupported).join(' '));
@@ -1043,7 +1053,7 @@ export default function App() {
         errorRegion?.focus({ preventScroll: true });
         return;
       }
-      const stem = project.name
+      const stem = exportProject.name
         .trim()
         .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, '-')
         .replace(/\s+/g, '-')
@@ -1217,9 +1227,9 @@ export default function App() {
           <div className="topbar-params canvas-params" aria-label={text.canvasControls}>
             <span className="topbar-control-label">{text.board}</span>
             <div className="topbar-dimension-group">
-              <input aria-label={text.canvasWidth} type="number" min={8} max={outputMode === 'pattern' ? MAX_PROJECT_DIMENSION : MAX_PRINT_WORKSPACE_DIMENSION} value={canvasWidth} onChange={(event) => setCanvasWidth(Number(event.target.value))} />
+              <input aria-label={text.canvasWidth} type="number" min={8} max={outputMode === 'pattern' ? MAX_PROJECT_DIMENSION : MAX_EXPORT_GRID_DIMENSION} value={canvasWidth} onChange={(event) => setCanvasWidth(Number(event.target.value))} />
               <span className="size-times">×</span>
-              <input aria-label={text.canvasHeight} type="number" min={8} max={outputMode === 'pattern' ? MAX_PROJECT_DIMENSION : MAX_PRINT_WORKSPACE_DIMENSION} value={canvasHeight} onChange={(event) => setCanvasHeight(Number(event.target.value))} />
+              <input aria-label={text.canvasHeight} type="number" min={8} max={outputMode === 'pattern' ? MAX_PROJECT_DIMENSION : MAX_EXPORT_GRID_DIMENSION} value={canvasHeight} onChange={(event) => setCanvasHeight(Number(event.target.value))} />
             </div>
             <select className="canvas-preset-select" aria-label={text.canvasPreset} value={selectedSizePreset || ''} onChange={(event) => applyPreset(event.target.value)}>
               <option value="" disabled hidden>{text.commonSizes}</option>
@@ -1243,7 +1253,7 @@ export default function App() {
                   type="button"
                   className="export-action-button primary-action"
                   title={text.exportThreeMf}
-                  disabled={exportDisabled}
+                  disabled={exportDisabled || !printableModel}
                   onClick={exportThreeMf}
                 >
                   <ExportIcon />
@@ -1452,7 +1462,7 @@ export default function App() {
                 {text.width}
                 <span className="help-dot image-help-dot" {...imageHelpProps(text.heightFromRatio)}>?</span>
               </span>
-              <input aria-label={text.outputLongSide} type="number" min={8} max={outputMode === 'pattern' ? MAX_PROJECT_DIMENSION : MAX_PRINT_WORKSPACE_DIMENSION} value={convertWidth} onChange={(event) => updateImportSetting('width', Number(event.target.value))} />
+              <input aria-label={text.outputLongSide} type="number" min={8} max={outputMode === 'pattern' ? MAX_PROJECT_DIMENSION : MAX_EXPORT_GRID_DIMENSION} value={convertWidth} onChange={(event) => updateImportSetting('width', Number(event.target.value))} />
             </label>
             {outputMode === 'pattern' && <label className="image-range-field">
               <span>
@@ -1607,7 +1617,7 @@ export default function App() {
 
         {outputMode === 'three-d' && <PrintSettingsPanel
           project={project}
-          model={printableModel!}
+          model={printableModel}
           errors={printErrors}
           language={language}
           onChange={updatePrintProject}
@@ -2200,9 +2210,9 @@ export default function App() {
               singleLayerLabel={text.singleLayer}
               explodedLabel={text.explodedView}
             />
-          ) : (
+          ) : printableModel ? (
             <ThreePreview
-              model={printableModel!}
+              model={printableModel}
               title={text.preview3d}
               emptyLabel={text.previewEmpty}
               closeLabel={text.close}
@@ -2212,7 +2222,7 @@ export default function App() {
               singleLayerLabel={text.singleLayer}
               explodedLabel={text.explodedView}
             />
-          )}
+          ) : <p>{printGridTooLarge ? text.printPanel.sizeLimit : text.previewEmpty}</p>}
         </section>
 
         {rightTab === 'palette' && (

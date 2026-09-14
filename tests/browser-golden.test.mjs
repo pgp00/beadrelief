@@ -51,6 +51,104 @@ async function downloadFrom(page, buttonName, directory) {
   return readFile(target);
 }
 
+test('3MF preflight preserves oversized projects and clamps print controls', { skip: !browserPath && !process.env.CI, timeout: 60_000 }, async () => {
+  const port = 30_000 + (process.pid % 10_000);
+  const url = `http://127.0.0.1:${port}/`;
+  const server = spawn(process.execPath, ['scripts/dev-server.cjs', String(port)], { stdio: 'ignore' });
+  const directory = await mkdtemp(path.join(tmpdir(), 'beadrelief-preflight-'));
+  let browser;
+  try {
+    await waitForServer(url);
+    browser = await chromium.launch({ executablePath: browserPath, headless: true });
+    const page = await browser.newPage();
+    const errors = [];
+    let downloads = 0;
+    page.on('download', () => downloads++);
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.addInitScript(() => localStorage.setItem('perler-beads-generator:language', 'en'));
+    await page.route('**/src/App.js', async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({ response, body: (await response.text())
+        .replace('setPreviewProject(project), 250)', 'setPreviewProject(project), 1500)')
+        .replace('window.requestAnimationFrame(() => resolve())', 'window.requestAnimationFrame(() => window.exportFrameGate ? window.exportFrameGate.then(resolve) : resolve())') });
+    });
+    await page.route('**/src/print/model.js', async (route) => {
+      const response = await route.fetch();
+      const source = (await response.text()).replace('export function buildPrintableModel(', 'function originalBuildPrintableModel(');
+      await route.fulfill({ response, body: `${source}\nexport function buildPrintableModel(grid) { if (grid.width > 32 || grid.height > 32) { window.oversizedBuilds = (window.oversizedBuilds || 0) + 1; throw new Error('Oversized geometry built'); } return originalBuildPrintableModel(grid); }` });
+    });
+    await page.goto(url);
+    page.on('dialog', (dialog) => dialog.accept());
+    for (const [width, height] of [[50, 50], [32, 33], [33, 32]]) {
+      await page.getByRole('button', { name: 'Bead pattern', exact: true }).click();
+      const imported = createProject(width, height);
+      imported.layers[0].cells[0] = imported.amsColors[0].id;
+      await page.locator('input[type="file"][accept="application/json,.json"]').first().setInputFiles({ name: 'oversized.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(imported)) });
+      await page.waitForFunction((width) => document.querySelector('input[aria-label="Canvas width"]').value === String(width), width);
+      await page.getByRole('button', { name: '3D print', exact: true }).click();
+      assert.equal(await page.getByLabel('Canvas width').inputValue(), String(width));
+      assert.equal(await page.getByLabel('Canvas height').inputValue(), String(height));
+      await page.locator('#print-export-errors').getByText('3MF supports up to 32 × 32 cells; larger projects can still use 2D exports.', { exact: true }).waitFor();
+      assert.equal(await page.getByRole('button', { name: 'Export 3MF', exact: true }).isDisabled(), true);
+      const before = downloads;
+      await page.getByRole('button', { name: 'Export 3MF', exact: true }).evaluate((button) => button.click());
+      assert.equal(downloads, before);
+      await page.getByRole('button', { name: '中', exact: true }).click();
+      assert.match(await page.locator('#print-export-errors').textContent(), /3MF 最多支持 32 × 32 格/);
+      await page.getByRole('button', { name: 'EN', exact: true }).click();
+      for (const label of ['Canvas width', 'Canvas height', 'Output long side']) assert.equal(await page.getByLabel(label).getAttribute('max'), '32');
+      assert.equal(await page.getByRole('option', { name: '50 × 50', exact: true }).count(), 0);
+      await page.getByLabel('Canvas width').fill('50');
+      await page.getByLabel('Canvas height').fill('50');
+      await page.getByRole('button', { name: 'Apply', exact: true }).evaluate((button) => button.click());
+      assert.equal(await page.getByLabel('Canvas width').inputValue(), '32');
+      assert.equal(await page.getByLabel('Canvas height').inputValue(), '32');
+      assert.equal(await page.getByRole('button', { name: 'Export 3MF', exact: true }).isDisabled(), true);
+      await page.waitForTimeout(1600);
+      assert.equal(await page.getByRole('button', { name: 'Export 3MF', exact: true }).isEnabled(), true);
+      const archive = readZipEntries(await downloadFrom(page, 'Export 3MF', directory));
+      const xml = new TextDecoder().decode(zipEntry(archive, '3D/3dmodel.model'));
+      const bounds = await page.evaluate((xml) => {
+        const vertices = [...new DOMParser().parseFromString(xml, 'application/xml').querySelectorAll('vertex')];
+        return ['x', 'y'].map((axis) => {
+          let min = Infinity, max = -Infinity;
+          for (const vertex of vertices) { const value = Number(vertex.getAttribute(axis)); min = Math.min(min, value); max = Math.max(max, value); }
+          return max - min;
+        });
+      }, xml);
+      assert.deepEqual(bounds, [32 * imported.printSettings.cellPitchMm, 32 * imported.printSettings.cellPitchMm]);
+    }
+    await page.getByRole('button', { name: 'Bead pattern', exact: true }).click();
+    await page.getByLabel('Output long side').fill('50');
+    await page.locator('input[type="file"][accept^="image/png"]').first().setInputFiles(path.join(process.cwd(), 'samples/beadrelief-heart-source.png'));
+    await waitForAsync(page, async () => (await (await import('/src/project.js')).loadDraft())?.width === 50);
+    await page.getByRole('button', { name: '3D print', exact: true }).click();
+    await page.waitForTimeout(800);
+    assert.equal(await page.getByLabel('Canvas width').inputValue(), '50');
+    assert.equal(await page.getByRole('button', { name: 'Export 3MF', exact: true }).isDisabled(), true);
+    await page.getByLabel('Output long side').fill('60');
+    await waitForAsync(page, async () => (await (await import('/src/project.js')).loadDraft())?.width === 32);
+    assert.equal(await page.getByLabel('Canvas height').inputValue(), '32');
+    await page.waitForTimeout(1600);
+    // Hold the export's animation-frame yield while replacing its input snapshot.
+    await page.evaluate(() => { window.exportFrameGate = new Promise((resolve) => { window.releaseExport = resolve; }); });
+    const before = downloads;
+    await page.getByRole('button', { name: 'Export 3MF', exact: true }).click();
+    const oversized = createProject(50, 50);
+    await page.locator('input[type="file"][accept="application/json,.json"]').first().setInputFiles({ name: 'oversized.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(oversized)) });
+    await page.waitForFunction(() => document.querySelector('input[aria-label="Canvas width"]').value === '50');
+    await page.evaluate(() => window.releaseExport());
+    await page.getByRole('status', { name: 'Workspace status' }).getByText('3MF supports up to 32 × 32 cells; larger projects can still use 2D exports.', { exact: true }).waitFor();
+    assert.equal(downloads, before);
+    assert.equal(await page.evaluate(() => window.oversizedBuilds || 0), 0);
+    assert.deepEqual(errors, []);
+  } finally {
+    await browser?.close();
+    server.kill();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 function zipEntry(entries, name) {
   const entry = entries.get(name);
   assert.ok(entry, `missing ZIP entry ${name}`);
@@ -337,8 +435,8 @@ test('heart PNG golden path edits and downloads every export', { skip: !browserP
     assert.equal(await page.locator('.layer-select-button').count(), 2);
     await page.locator('button[aria-label="Move layer down"]:not(:disabled)').click();
 
-    await page.getByLabel('Canvas width').fill('50');
-    await page.getByLabel('Canvas height').fill('50');
+    await page.getByLabel('Canvas width').fill('32');
+    await page.getByLabel('Canvas height').fill('32');
     await page.getByRole('button', { name: 'Apply', exact: true }).evaluate((button) => button.click());
     await page.waitForTimeout(350);
     const editLongTasks = await page.locator('.workspace canvas').evaluate(async (element) => {
