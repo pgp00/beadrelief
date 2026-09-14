@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync, readdirSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import { MAX_IMAGE_FILE_BYTES, planImageConversion, rgbaToBeads, validateImageFileSize } from '../generated/dist/src/imageToBeads.js';
 import { palette } from '../generated/dist/src/palette.js';
@@ -45,7 +48,7 @@ test('production build uses minified Three and emits no source maps', () => {
   assert.equal(existsSync('generated/dist/beadrelief-social-preview.jpg'), true);
 });
 
-test('image conversion cache timings are informational', (t) => {
+test('image conversion cache timings compare post-Task-1 baseline', async (t) => {
   const width = 104;
   const repeated = new Uint8ClampedArray(width * width * 4);
   const gradient = new Uint8ClampedArray(width * width * 4);
@@ -64,18 +67,35 @@ test('image conversion cache timings are informational', (t) => {
     speckleReduction: 0,
     generationStyle: 'realistic',
   };
-  const measure = (data) => {
-    rgbaToBeads(data, width, width, width, width, options);
+  const measure = (convert, data) => {
+    convert(data, width, width, width, width, options);
     const durations = [];
     for (let run = 0; run < 3; run += 1) {
       const start = performance.now();
-      rgbaToBeads(data, width, width, width, width, options);
+      convert(data, width, width, width, width, options);
       durations.push(performance.now() - start);
     }
     return durations.sort((a, b) => a - b)[1];
   };
-  const repeatedMedian = measure(repeated);
-  const gradientMedian = measure(gradient);
-  t.diagnostic(`104x104 realistic median: repeated=${repeatedMedian.toFixed(1)}ms, mostly-unique=${gradientMedian.toFixed(1)}ms`);
-  assert.ok(Number.isFinite(repeatedMedian) && Number.isFinite(gradientMedian));
+  const uncachedDir = await mkdtemp(join(tmpdir(), 'beadrelief-baseline-'));
+  try {
+    const imageModule = await readFile('generated/dist/src/imageToBeads.js', 'utf8');
+    const uncachedModule = imageModule
+      .replace('const activeMatcher = cachedMatcher(activePalette);', 'const activeMatcher = (rgb) => nearestPaletteColor(rgb, activePalette);')
+      .replace('const candidateMatcher = cachedMatcher(candidates);', 'const candidateMatcher = (rgb) => nearestPaletteColor(rgb, candidates);');
+    await writeFile(join(uncachedDir, 'imageToBeads.js'), uncachedModule);
+    await copyFile('generated/dist/src/palette.js', join(uncachedDir, 'palette.js'));
+    await mkdir(join(uncachedDir, 'print'), { recursive: true });
+    await copyFile('generated/dist/src/print/colors.js', join(uncachedDir, 'print/colors.js'));
+    await copyFile('generated/dist/src/print/stacking.js', join(uncachedDir, 'print/stacking.js'));
+    const { rgbaToBeads: uncachedRgbaToBeads } = await import(`file://${join(uncachedDir, 'imageToBeads.js')}?baseline`);
+    const beforeRepeated = measure(uncachedRgbaToBeads, repeated);
+    const afterRepeated = measure(rgbaToBeads, repeated);
+    const beforeGradient = measure(uncachedRgbaToBeads, gradient);
+    const afterGradient = measure(rgbaToBeads, gradient);
+    t.diagnostic(`104x104 realistic median (post-Task-1 baseline -> cached): repeated=${beforeRepeated.toFixed(1)}ms -> ${afterRepeated.toFixed(1)}ms, mostly-unique=${beforeGradient.toFixed(1)}ms -> ${afterGradient.toFixed(1)}ms`);
+    assert.ok([beforeRepeated, afterRepeated, beforeGradient, afterGradient].every(Number.isFinite));
+  } finally {
+    await rm(uncachedDir, { recursive: true, force: true });
+  }
 });

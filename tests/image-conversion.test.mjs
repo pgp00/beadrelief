@@ -130,13 +130,40 @@ test("repeated, gradient, and partial-alpha pixels keep exact conversion output"
     ["gray", "black", "black", "black", "gray", "black", "black", "black", "gray", "black", "black", "black", "gray", "black", "black", "black"],
   ];
   [repeated, gradient, partialAlpha].forEach((pixels, index) => {
-    [0, 1].forEach((speckleReduction) => {
+    [0, 2].forEach((speckleReduction) => {
       const result = rgbaToBeads(pixels, 4, 4, 4, 4, options({ generationStyle: "realistic", speckleReduction }));
       assert.deepEqual(result.cells, expected[index]);
       assert.equal(result.colorsUsed, index === 1 ? 3 : 2);
       assert.equal(result.totalBeads, 16);
       assert.ok(result.cells.every((id) => id === null || colors.some((color) => color.id === id)));
     });
+  });
+});
+
+test("realistic mixed samples use the exact average fallback", () => {
+  const mixedPalette = [
+    ...colors,
+    { id: "red", primaryBrand: "MARD", primaryCode: "R", hex: "#ff0000", rgb: [255, 0, 0], codes: {}, group: "test", name: "Red" },
+    { id: "blue", primaryBrand: "MARD", primaryCode: "U", hex: "#0000ff", rgb: [0, 0, 255], codes: {}, group: "test", name: "Blue" },
+  ];
+  const mixed = new Uint8ClampedArray([
+    ...Array(5).fill([0, 0, 0, 255]).flat(),
+    ...Array(5).fill([127, 127, 127, 255]).flat(),
+    ...Array(5).fill([255, 255, 255, 255]).flat(),
+    ...Array(5).fill([255, 0, 0, 255]).flat(),
+    ...Array(5).fill([0, 0, 255, 255]).flat(),
+  ]);
+  const result = rgbaToBeads(mixed, 5, 5, 1, 1, options({
+    maxColors: 5,
+    palette: mixedPalette,
+    generationStyle: "realistic",
+  }));
+  assert.deepEqual(result, {
+    width: 1,
+    height: 1,
+    cells: ["gray"],
+    colorsUsed: 1,
+    totalBeads: 1,
   });
 });
 
