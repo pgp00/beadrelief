@@ -12,7 +12,7 @@
 
 RED: the new out-of-range background regression failed against the pre-change build with `Missing expected exception`.
 
-GREEN: `npm run build && node --test tests/image-conversion.test.mjs tests/performance.test.mjs` passed 15/15 tests.
+GREEN: `npm run build && node --test tests/image-conversion.test.mjs tests/performance.test.mjs` passed 16/16 tests.
 
 ## Benchmark
 
