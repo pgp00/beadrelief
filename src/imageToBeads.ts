@@ -176,8 +176,8 @@ export function rgbaToBeads(
   if (!Number.isFinite(options.width) || !Number.isSafeInteger(options.maxColors)
     || !Number.isFinite(options.tolerance) || !Number.isFinite(options.speckleReduction)
     || options.maxColors < 1 || options.maxColors > activePalette.length || options.maxColors > MAX_OUTPUT_COLORS
-    || options.backgroundColor.some((channel) => !Number.isFinite(channel))) {
-    throw new Error('Image conversion options must be finite.');
+    || options.backgroundColor.some((channel) => !Number.isFinite(channel) || channel < 0 || channel > 255)) {
+    throw new Error('Image conversion options must be finite and use background channels between 0 and 255.');
   }
   const profile = styleProfiles[options.generationStyle ?? 'cartoon'];
   if (!profile) throw new Error('Unsupported generation style.');
@@ -185,9 +185,11 @@ export function rgbaToBeads(
   const speckleStrength = requestedSpeckleStrength > 0 ? clampStrength(requestedSpeckleStrength + profile.postStrengthBias) : 0;
   const backgroundColor = estimateBackgroundColor(data, sourceWidth, sourceHeight, options.backgroundColor);
   const sampledCells = sampleGridCells(data, sourceWidth, sourceHeight, width, height, options, backgroundColor, profile, speckleStrength);
-  const ranked = rankPaletteColors(sampledCells, options, activePalette, profile);
+  const activeMatcher = cachedMatcher(activePalette);
+  const ranked = rankPaletteColors(sampledCells, options, activeMatcher, activePalette, profile);
   const candidates = selectCandidateColors(ranked, options.maxColors, activePalette, speckleStrength, profile);
-  const cells = sampledCells.map((cell) => chooseCellColor(cell, candidates, profile));
+  const candidateMatcher = cachedMatcher(candidates);
+  const cells = sampledCells.map((cell) => chooseCellColor(cell, candidateMatcher, profile));
 
   const mergedCells = mergeSimilarColors(cells, speckleStrength, candidates);
   const compactCells = reduceTinyRegions(mergedCells, width, height, speckleStrength, candidates);
@@ -279,6 +281,7 @@ function sampleGridCells(
 function rankPaletteColors(
   sampledCells: SampledCell[],
   options: ConvertOptions,
+  matchColor: (rgb: [number, number, number]) => PaletteColor,
   activePalette: PaletteColor[],
   profile: StyleProfile,
 ): Array<{ color: PaletteColor; count: number; score: number }> {
@@ -288,7 +291,7 @@ function rankPaletteColors(
     if (cell.backgroundShare >= profile.backgroundThreshold || cell.samples.length === 0) return;
     cell.samples.forEach((rgb) => {
       total += 1;
-      const color = nearestPaletteColor(rgb, activePalette);
+      const color = matchColor(rgb);
       const bucket = counts.get(color.id) ?? { color, count: 0 };
       bucket.count += 1;
       counts.set(color.id, bucket);
@@ -312,6 +315,19 @@ function rankPaletteColors(
   return rows.length > 0
     ? rows
     : activePalette.slice(0, options.maxColors).map((color) => ({ color, count: 1, score: 1 }));
+}
+
+function cachedMatcher(candidates: PaletteColor[]): (rgb: [number, number, number]) => PaletteColor {
+  // ponytail: cache up to 65,536 RGB matches per candidate set; profile misses before increasing it.
+  const cache = new Map<number, PaletteColor>();
+  return (rgb) => {
+    const key = (rgb[0] << 16) | (rgb[1] << 8) | rgb[2];
+    const cached = cache.get(key);
+    if (cached) return cached;
+    const color = nearestPaletteColor(rgb, candidates);
+    if (cache.size < 65_536) cache.set(key, color);
+    return color;
+  };
 }
 
 function selectCandidateColors(
@@ -437,11 +453,15 @@ function candidateDiversityScore(
   return countSignal * distinctBoost * featureBoost;
 }
 
-function chooseCellColor(cell: SampledCell, candidates: PaletteColor[], profile: StyleProfile): string | null {
+function chooseCellColor(
+  cell: SampledCell,
+  matchColor: (rgb: [number, number, number]) => PaletteColor,
+  profile: StyleProfile,
+): string | null {
   if (cell.backgroundShare >= profile.backgroundThreshold || cell.samples.length === 0) return null;
   const counts = new Map<string, { color: PaletteColor; count: number }>();
   cell.samples.forEach((rgb) => {
-    const color = nearestPaletteColor(rgb, candidates);
+    const color = matchColor(rgb);
     const bucket = counts.get(color.id) ?? { color, count: 0 };
     bucket.count += 1;
     counts.set(color.id, bucket);
@@ -453,7 +473,7 @@ function chooseCellColor(cell: SampledCell, candidates: PaletteColor[], profile:
   if (primaryShare >= profile.dominanceThreshold || !profile.useAverageFallback || !cell.average) {
     return primary.color.id;
   }
-  return nearestPaletteColor(cell.average, candidates).id;
+  return matchColor(cell.average).id;
 }
 
 function reduceSpeckles(

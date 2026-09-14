@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import test from 'node:test';
-import { MAX_IMAGE_FILE_BYTES, planImageConversion, validateImageFileSize } from '../generated/dist/src/imageToBeads.js';
+import { MAX_IMAGE_FILE_BYTES, planImageConversion, rgbaToBeads, validateImageFileSize } from '../generated/dist/src/imageToBeads.js';
+import { palette } from '../generated/dist/src/palette.js';
 import { buildPrintableModel, composePrintableGrid } from '../generated/dist/src/print/model.js';
 import { buildStackPalette } from '../generated/dist/src/print/stacking.js';
 import { createCompressedThreeMf } from '../generated/dist/src/print/threeMf.js';
@@ -42,4 +43,39 @@ test('production build uses minified Three and emits no source maps', () => {
   assert.equal(readdirSync('generated/dist/src', { recursive: true }).some((file) => String(file).endsWith('.map')), false);
   assert.equal(existsSync('generated/dist/src/main.js'), true);
   assert.equal(existsSync('generated/dist/beadrelief-social-preview.jpg'), true);
+});
+
+test('image conversion cache timings are informational', (t) => {
+  const width = 104;
+  const repeated = new Uint8ClampedArray(width * width * 4);
+  const gradient = new Uint8ClampedArray(width * width * 4);
+  for (let i = 0; i < width * width; i += 1) {
+    const offset = i * 4;
+    repeated.set([32, 128, 224, 255], offset);
+    gradient.set([i % 256, Math.floor(i / width) % 256, (i * 37) % 256, 255], offset);
+  }
+  const options = {
+    width,
+    maxColors: 32,
+    palette,
+    backgroundMode: 'keep',
+    backgroundColor: [255, 255, 255],
+    tolerance: 0,
+    speckleReduction: 0,
+    generationStyle: 'realistic',
+  };
+  const measure = (data) => {
+    rgbaToBeads(data, width, width, width, width, options);
+    const durations = [];
+    for (let run = 0; run < 3; run += 1) {
+      const start = performance.now();
+      rgbaToBeads(data, width, width, width, width, options);
+      durations.push(performance.now() - start);
+    }
+    return durations.sort((a, b) => a - b)[1];
+  };
+  const repeatedMedian = measure(repeated);
+  const gradientMedian = measure(gradient);
+  t.diagnostic(`104x104 realistic median: repeated=${repeatedMedian.toFixed(1)}ms, mostly-unique=${gradientMedian.toFixed(1)}ms`);
+  assert.ok(Number.isFinite(repeatedMedian) && Number.isFinite(gradientMedian));
 });

@@ -54,6 +54,17 @@ test("conversion rejects non-finite numeric inputs", () => {
   );
 });
 
+test("conversion rejects background channels outside byte range", () => {
+  assert.throws(
+    () => rgbaToBeads(new Uint8ClampedArray([0, 0, 0, 128]), 1, 1, 1, 1, options({ backgroundColor: [256, 0, 0] })),
+    /finite|between 0 and 255/,
+  );
+  assert.throws(
+    () => rgbaToBeads(new Uint8ClampedArray([0, 0, 0, 128]), 1, 1, 1, 1, options({ backgroundColor: [-1, 0, 0] })),
+    /finite|between 0 and 255/,
+  );
+});
+
 test("image/jpg normalizes to JPEG and unsupported MIME types fail", () => {
   assert.equal(normalizeImageMimeType("image/jpg"), "image/jpeg");
   assert.equal(normalizeImageMimeType("IMAGE/JPEG"), "image/jpeg");
@@ -107,4 +118,32 @@ test("limited-color conversion keeps exact candidates without cleanup", () => {
     speckleReduction: 0,
   }));
   assert.deepEqual(result.cells, ["black", "gray", "gray"]);
+});
+
+test("repeated, gradient, and partial-alpha pixels keep exact conversion output", () => {
+  const repeated = new Uint8ClampedArray([...Array(16)].flatMap((_, i) => (i % 2 ? [127, 127, 127, 255] : [0, 0, 0, 255])));
+  const gradient = new Uint8ClampedArray([...Array(16)].flatMap((_, i) => [i * 17, i * 17, i * 17, 255]));
+  const partialAlpha = new Uint8ClampedArray([...Array(16)].flatMap((_, i) => [0, 0, 0, i % 4 === 0 ? 128 : 255]));
+  const expected = [
+    ["black", "gray", "black", "gray", "black", "gray", "black", "gray", "black", "gray", "black", "gray", "black", "gray", "black", "gray"],
+    ["black", "black", "black", "gray", "gray", "gray", "gray", "gray", "gray", "gray", "gray", "gray", "white", "white", "white", "white"],
+    ["gray", "black", "black", "black", "gray", "black", "black", "black", "gray", "black", "black", "black", "gray", "black", "black", "black"],
+  ];
+  [repeated, gradient, partialAlpha].forEach((pixels, index) => {
+    [0, 1].forEach((speckleReduction) => {
+      const result = rgbaToBeads(pixels, 4, 4, 4, 4, options({ generationStyle: "realistic", speckleReduction }));
+      assert.deepEqual(result.cells, expected[index]);
+      assert.equal(result.colorsUsed, index === 1 ? 3 : 2);
+      assert.equal(result.totalBeads, 16);
+      assert.ok(result.cells.every((id) => id === null || colors.some((color) => color.id === id)));
+    });
+  });
+});
+
+test("conversion-local matching does not mix palette or candidate sets", () => {
+  const pixels = new Uint8ClampedArray([...Array(4)].flatMap((_, i) => (i % 2 ? [255, 255, 255, 255] : [0, 0, 0, 255])));
+  const alternate = [colors[2], colors[0]];
+  assert.deepEqual(rgbaToBeads(pixels, 2, 2, 2, 2, options({ maxColors: 2 })).cells, ["black", "white", "black", "white"]);
+  assert.deepEqual(rgbaToBeads(pixels, 2, 2, 2, 2, options({ palette: alternate, maxColors: 1 })).cells, ["black", "black", "black", "black"]);
+  assert.deepEqual(rgbaToBeads(pixels, 2, 2, 2, 2, options({ maxColors: 1 })).cells, ["black", "black", "black", "black"]);
 });
