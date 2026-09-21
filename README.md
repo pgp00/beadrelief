@@ -71,7 +71,7 @@ Follow the full editable-project path with the same tiny heart:
 |:---:|:---:|:---:|
 | [PNG](samples/beadrelief-heart-source.png) | [Project JSON](samples/beadrelief-heart-project.json) | [Grouped 3MF](samples/beadrelief-heart-p2s.3mf) |
 
-## Canvas shortcuts
+## Keyboard editing
 
 | Input | Action |
 |---|---|
@@ -81,6 +81,8 @@ Follow the full editable-project path with the same tiny heart:
 | Hold Space and drag | Temporarily pan the canvas |
 | Mouse wheel | Zoom the canvas |
 | Right-click drag | Pan or erase, based on the right-click setting |
+
+Use the Undo and Redo buttons in the top toolbar to move backward or forward through edits.
 
 ## Browser support
 

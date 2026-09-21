@@ -71,7 +71,7 @@
 |:---:|:---:|:---:|
 | [PNG](samples/beadrelief-heart-source.png) | [项目 JSON](samples/beadrelief-heart-project.json) | [分组 3MF](samples/beadrelief-heart-p2s.3mf) |
 
-## 画布快捷操作
+## 键盘编辑
 
 | 操作 | 功能 |
 |---|---|
@@ -81,6 +81,8 @@
 | 按住空格并拖动 | 临时平移画布 |
 | 鼠标滚轮 | 缩放画布 |
 | 右键拖动 | 按右键设置执行平移或擦除 |
+
+使用顶部工具栏中的“撤销”和“重做”按钮，可在编辑历史中后退或前进。
 
 ## 浏览器支持
 
