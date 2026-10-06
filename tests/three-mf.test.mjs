@@ -46,7 +46,7 @@ function expectedPartAssignments(model, componentObjectIds) {
   });
 }
 
-test("3MF contains one assembly, named parts, and four or fewer base materials", () => {
+test("3MF contains one assembly, named parts, and four or fewer base materials", async () => {
   const project = createProject(2, 2);
   project.amsColors = DEFAULT_AMS_COLORS.map((material) => ({ ...material }));
   project.layers[0].cells = project.amsColors.map((material) => material.id);
@@ -73,6 +73,8 @@ test("3MF contains one assembly, named parts, and four or fewer base materials",
   const relationships = decoder.decode(entries.get("_rels/.rels"));
   assert.match(relationships, /Target="\/3D\/3dmodel\.model"/);
   const xml = decoder.decode(entries.get("3D/3dmodel.model"));
+  const { version } = JSON.parse(await readFile('package.json', 'utf8'));
+  assert.equal(xml.match(/<metadata name="Application">([^<]+)<\/metadata>/)?.[1], `BeadRelief-${version}`);
   assert.deepEqual(parseModelSettings(modelSettings), expectedPartAssignments(model, parseComponentObjectIds(xml)));
   assert.match(xml, /unit="millimeter"/);
   assert.match(xml, /name="Base"/);

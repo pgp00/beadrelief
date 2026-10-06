@@ -183,6 +183,15 @@ test("image generation replaces the project with one fresh layer", () => {
       ? { ...color, name: "Accepted AMS", tdMm: 2 }
       : color),
     settings: { ...started.settings, showGrid: false, showActiveLayerOnly: true },
+    materialProfile: {
+      ...started.materialProfile,
+      name: "Calibrated PLA",
+      printer: "Custom printer",
+      nozzleDiameterMm: 0.6,
+      layerHeightMm: 0.12,
+      verified: true,
+      measuredColors: buildStackPalette(started.amsColors).map(({ stopLevel, hex }) => ({ stopLevel, hex })),
+    },
     layers: withLayers(started, [started.layers[0], oldTopLayer], oldTopLayer.id).layers.map((layer) => ({ ...layer, locked: true })),
   };
   const replaced = replaceGeneratedProject(latest, {
@@ -200,6 +209,11 @@ test("image generation replaces the project with one fresh layer", () => {
   assert.equal(replaced.settings.showGrid, false);
   assert.equal(replaced.settings.showActiveLayerOnly, false);
   assert.deepEqual(replaced.layers[0].cells, [latest.amsColors[0].id, latest.amsColors[1].id]);
+  assert.deepEqual(replaced.materialProfile, latest.materialProfile);
+  replaced.materialProfile.measuredColors[0].hex = "#123456";
+  replaced.materialProfile.nozzleDiameterMm = 0.8;
+  assert.notEqual(latest.materialProfile.measuredColors[0].hex, "#123456");
+  assert.equal(latest.materialProfile.nozzleDiameterMm, 0.6);
 });
 
 test("hidden or locked layers cannot be edited", () => {

@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { getColor } from './palette.js';
 import type { PrintableModel } from './print/model.js';
+import { STACK_LAYERS_PER_FILAMENT } from './print/stacking.js';
 import type { BeadProject } from './types.js';
 
 const { useEffect, useRef, useState } = React;
 const PREVIEW_BACKGROUND = 0x242422;
+const PREVIEW_SURFACE_OFFSET_MM = 0.002; // Matches appendFusedBeadTop's offset above the print surface.
 
 type PreviewRefs = {
   scene: THREE.Scene;
@@ -317,23 +319,29 @@ export function createPreviewGroup(
     const color = model.materials.find((material) => material.id === part.materialId);
     if (!color) continue;
     const materialIndex = model.materials.findIndex((material) => material.id === part.materialId);
-    const clippingPlanes = previewClippingPlanes(model, options.layer, options.singleLayer);
+    const zOffset = options.exploded ? materialIndex * model.settings.cellPitchMm * 0.18 : 0;
+    const clippingPlanes = previewClippingPlanes(model, options.layer, options.singleLayer, zOffset);
     const mesh = new THREE.Mesh(
       toBufferGeometry(part),
       new THREE.MeshStandardMaterial({ color: color.hex, roughness: 0.72, metalness: 0, clippingPlanes }),
     );
     mesh.name = part.name;
-    if (options.exploded) mesh.position.z = materialIndex * model.settings.cellPitchMm * 0.18;
+    mesh.position.z = zOffset;
     group.add(mesh);
   }
   for (const part of model.previewParts) {
     const stopLevel = Number(/L(\d+)$/.exec(part.name)?.[1]);
-    if (options.layer && Number.isFinite(stopLevel) && stopLevel > options.layer) continue;
+    if (options.layer && Number.isFinite(stopLevel)
+      && (stopLevel > options.layer || (options.singleLayer && stopLevel !== options.layer))) continue;
+    const materialIndex = Math.ceil(stopLevel / STACK_LAYERS_PER_FILAMENT) - 1;
+    const zOffset = options.exploded ? materialIndex * model.settings.cellPitchMm * 0.18 : 0;
+    const clippingPlanes = previewClippingPlanes(model, options.layer, options.singleLayer, zOffset + PREVIEW_SURFACE_OFFSET_MM);
     const mesh = new THREE.Mesh(
       toBufferGeometry(part),
-      new THREE.MeshStandardMaterial({ color: part.color, roughness: 0.72, metalness: 0 }),
+      new THREE.MeshStandardMaterial({ color: part.color, roughness: 0.72, metalness: 0, clippingPlanes }),
     );
     mesh.name = part.name;
+    mesh.position.z = zOffset;
     mesh.userData.previewOverlay = true;
     mesh.renderOrder = 1;
     group.add(mesh);
@@ -388,13 +396,14 @@ export function createPatternPreviewGroup(project: BeadProject): THREE.Group {
   return group;
 }
 
-function previewClippingPlanes(model: PrintableModel, layer?: number, singleLayer?: boolean): THREE.Plane[] {
+function previewClippingPlanes(model: PrintableModel, layer?: number, singleLayer?: boolean, zOffset = 0): THREE.Plane[] {
   if (model.mode !== 'layered' || !model.recipe.layerHeightMm || !layer) return [];
-  const upper = model.recipe.baseThicknessMm + layer * model.recipe.layerHeightMm;
-  const result = [new THREE.Plane(new THREE.Vector3(0, -1, 0), upper)];
+  const upper = model.recipe.baseThicknessMm + layer * model.recipe.layerHeightMm + zOffset;
+  // Float32 mesh coordinates can lie just outside an exact layer boundary.
+  const result = [new THREE.Plane(new THREE.Vector3(0, -1, 0), upper + 1e-6)];
   if (singleLayer) {
-    const lower = model.recipe.baseThicknessMm + (layer - 1) * model.recipe.layerHeightMm;
-    result.push(new THREE.Plane(new THREE.Vector3(0, 1, 0), -lower));
+    const lower = model.recipe.baseThicknessMm + (layer - 1) * model.recipe.layerHeightMm + zOffset;
+    result.push(new THREE.Plane(new THREE.Vector3(0, 1, 0), -lower + 1e-6));
   }
   return result;
 }

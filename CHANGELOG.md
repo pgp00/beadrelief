@@ -4,6 +4,20 @@ Notable user-facing changes are recorded here. BeadRelief follows semantic versi
 
 ## Unreleased
 
+### Fixed
+
+- Image regeneration preserves the printer, nozzle, material profile and measured color calibration.
+- PNG layers export sequentially and release their Canvas buffers on success or failure; download errors reject the export.
+- Estimated layered colors follow single-layer inspection and exploded parts, including their clipping planes.
+- Adjustment sessions no longer overwrite subsequent edits or history; cleanup keeps its weighted-RGB distance scale.
+- Project JSON imports and exports share the same 50 MiB limit; oversized 3MF grids are rejected before modeling and unsupported layered borders are blocked.
+
+### Changed
+
+- Large drafts use IndexedDB with legacy migration and show bilingual saving, saved and persistent failure states.
+- Image conversions reuse bounded color matches within each conversion.
+- 3MF Application metadata matches version 0.2.0; regenerated samples and checksums reflect this metadata-only change.
+
 ## 0.2.0 - 2026-08-30
 
 ### Added

@@ -62,7 +62,7 @@ function modelXml(model: PrintableModel): string {
   ).join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>
 <model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:BambuStudio="http://schemas.bambulab.com/package/2021">
-  <metadata name="Application">BeadRelief-0.1.0</metadata>
+  <metadata name="Application">BeadRelief-0.2.0</metadata>
   <metadata name="BambuStudio:3mfVersion">1</metadata>
   <resources>
     <basematerials id="1">

@@ -209,3 +209,52 @@ test("PNG export rejects a browser encoding failure", async (t) => {
   installDownloadEnvironment(t, null);
   await assert.rejects(downloadPrintPng(createProject(1, 1)), /encode the PNG/);
 });
+
+test("PNG exports release each canvas before rendering another, including failures", async (t) => {
+  for (const failure of [null, "encoding", "download"]) {
+    await t.test(failure ?? "success", async (t) => {
+      const pngBlob = new Blob([pngBytes], { type: "image/png" });
+      const downloads = installDownloadEnvironment(t, pngBlob);
+      const createElement = document.createElement;
+      const canvases = [];
+      const sizesBeforeCreation = [];
+      let maxLiveCanvases = 0;
+      document.createElement = (tag) => {
+        const element = createElement(tag);
+        if (tag !== "canvas") return element;
+        sizesBeforeCreation.push(canvases.map(({ width, height }) => [width, height]));
+        const index = canvases.length;
+        canvases.push(element);
+        element.toBlob = (callback) => {
+          maxLiveCanvases = Math.max(maxLiveCanvases, canvases.filter(({ width, height }) => width > 0 && height > 0).length);
+          setImmediate(() => callback(failure === "encoding" && index === 1 ? null : pngBlob));
+        };
+        return element;
+      };
+      if (failure === "download") {
+        const createObjectURL = URL.createObjectURL;
+        URL.createObjectURL = (blob) => {
+          if (downloads.length === 1) throw new Error("Download unavailable.");
+          return createObjectURL(blob);
+        };
+      }
+      const project = createProject(1, 1, "Sequential PNG");
+      project.layers = Array.from({ length: 3 }, (_, index) => ({
+        ...project.layers[0],
+        id: `layer-${index + 1}`,
+        cells: [project.amsColors[0].id],
+      }));
+      const exporting = downloadPrintPng(project, { showColorCodes: true, showGuideLines: false, projectName: project.name });
+      if (failure) await assert.rejects(exporting, failure === "encoding" ? /encode the PNG/ : /Download unavailable/);
+      else await exporting;
+
+      assert.equal(maxLiveCanvases, 1);
+      assert.equal(canvases.length, failure ? 2 : 3);
+      assert.ok(sizesBeforeCreation.flat().every(([width, height]) => width === 0 && height === 0));
+      assert.ok(canvases.every(({ width, height }) => width === 0 && height === 0));
+      assert.deepEqual(downloads.map(({ name }) => name), failure
+        ? ["Sequential-PNG_图层1.png"]
+        : ["Sequential-PNG_图层1.png", "Sequential-PNG_图层2.png", "Sequential-PNG_图层3.png"]);
+    });
+  }
+});

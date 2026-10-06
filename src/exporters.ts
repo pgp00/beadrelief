@@ -54,18 +54,22 @@ export function downloadUsageWorkbook(project: BeadProject, layered = project.pr
 }
 
 export async function downloadPrintPng(project: BeadProject, options: PrintExportOptions = { showColorCodes: true, showGuideLines: true }): Promise<void> {
-  await Promise.all(printLayerProjects(project, options).map((item) => new Promise<void>((resolve, reject) => {
+  for (const item of printLayerProjects(project, options)) {
     const layerOptions = { ...options, layerName: item.layerName };
     const canvas = renderPrintCanvas(item.project, layerOptions);
-    canvas.toBlob((blob) => {
-      if (!blob) {
-        reject(new Error('Could not encode the PNG pattern.'));
-        return;
-      }
+    try {
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error('Could not encode the PNG pattern.'));
+        });
+      });
       downloadBlob(`${printFileName(layerOptions)}.png`, blob, 'image/png');
-      resolve();
-    });
-  })));
+    } finally {
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+  }
 }
 
 export async function downloadPrintPdf(project: BeadProject, options: PrintExportOptions = { showColorCodes: true, showGuideLines: true }): Promise<void> {

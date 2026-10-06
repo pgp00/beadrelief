@@ -114,7 +114,9 @@ export default function App() {
   const [project, setProject] = useState<BeadProject>(() => createProject());
   const initialProjectRef = useRef(project);
   const [draftLoaded, setDraftLoaded] = useState(false);
-  const [draftSaveFailed, setDraftSaveFailed] = useState(false);
+  const [draftSaveResult, setDraftSaveResult] = useState<{ project: BeadProject; saved: boolean } | null>(null);
+  const draftSaveStatus = !draftLoaded ? '' : draftSaveResult?.saved === false ? text.storageUnavailable
+    : draftSaveResult?.project === project ? text.draftSaved : text.draftSaving;
   const [previewProject, setPreviewProject] = useState(project);
   const projectRef = useRef(project);
   projectRef.current = project;
@@ -328,7 +330,7 @@ export default function App() {
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       const saved = await saveDraft(project);
-      if (!cancelled && projectRef.current === project) setDraftSaveFailed(!saved);
+      if (!cancelled && projectRef.current === project) setDraftSaveResult({ project, saved });
     }, 400);
     return () => {
       cancelled = true;
@@ -2182,7 +2184,7 @@ export default function App() {
         <section className="panel-section status-section">
           <div>
             <strong role="status" aria-label={text.workspaceStatus} aria-live="polite" aria-atomic="true">{notice}</strong>
-            <span role="status" aria-label={text.draftSaveStatus} aria-live="polite" aria-atomic="true">{draftSaveFailed ? text.storageUnavailable : ''}</span>
+            <span role="status" aria-label={text.draftSaveStatus} aria-live="polite" aria-atomic="true">{draftSaveStatus}</span>
             <span>
               {text.panelStatus(project.width, project.height, usage.length, totalBeads, boardCount)}
             </span>

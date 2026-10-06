@@ -89,6 +89,10 @@ export function replaceGeneratedProject(
     settings: { ...project.settings, showActiveLayerOnly: false },
     boardSettings: { ...project.boardSettings },
     amsColors: project.amsColors.map((color) => ({ ...color })),
+    materialProfile: {
+      ...project.materialProfile,
+      measuredColors: project.materialProfile.measuredColors.map((color) => ({ ...color })),
+    },
     printSettings: { ...project.printSettings },
   }, result.cells, result.width, result.height);
 }

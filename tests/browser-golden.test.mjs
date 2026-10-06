@@ -101,6 +101,7 @@ test('3MF preflight preserves oversized projects and clamps print controls', { s
       await page.getByLabel('Canvas width').fill('50');
       await page.getByLabel('Canvas height').fill('50');
       await page.getByRole('button', { name: 'Apply', exact: true }).evaluate((button) => button.click());
+      await page.waitForFunction(() => ['Canvas width', 'Canvas height'].every((label) => document.querySelector(`input[aria-label="${label}"]`).value === '32'));
       assert.equal(await page.getByLabel('Canvas width').inputValue(), '32');
       assert.equal(await page.getByLabel('Canvas height').inputValue(), '32');
       assert.equal(await page.getByRole('button', { name: 'Export 3MF', exact: true }).isDisabled(), true);
@@ -945,7 +946,7 @@ test('restoration gates autosave and protects early edits during StrictMode repl
       await page.getByRole('status', { name: '草稿保存状态' }).getByText('浏览器存储不可用；本次会话不会保存。', { exact: true }).waitFor();
       await context.close();
     });
-    await t.test('only the current save completion can change failure status', async () => {
+    await t.test('draft status tracks saving, saved and failed current transactions', async () => {
       const context = await browser.newContext();
       const page = await context.newPage();
       await page.addInitScript(() => {
@@ -959,8 +960,9 @@ test('restoration gates autosave and protects early edits during StrictMode repl
       });
       await page.goto(url);
       await page.waitForFunction(() => window.pendingSaves.length === 1);
-      await page.evaluate(() => window.pendingSaves[0](false));
       const status = page.getByRole('status', { name: 'Draft save status' });
+      assert.equal(await status.textContent(), 'Saving…');
+      await page.evaluate(() => window.pendingSaves[0](false));
       await status.getByText('Browser storage is unavailable; this session will not be saved.', { exact: true }).waitFor();
       for (const width of [12, 13]) {
         await page.getByLabel('Canvas width').fill(String(width));
@@ -975,7 +977,24 @@ test('restoration gates autosave and protects early edits during StrictMode repl
       await page.getByRole('button', { name: 'Apply', exact: true }).evaluate((button) => button.click());
       await page.waitForFunction(() => window.pendingSaves.length === 4);
       await page.evaluate(() => window.pendingSaves[3](true));
-      await page.waitForFunction(() => document.querySelector('[aria-label="Draft save status"]').textContent === '');
+      await status.getByText('Saved', { exact: true }).waitFor();
+      await page.getByRole('button', { name: '中', exact: true }).click();
+      await page.getByRole('status', { name: '草稿保存状态' }).getByText('已保存', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'EN', exact: true }).click();
+      for (const width of [15, 16]) {
+        await page.getByLabel('Canvas width').fill(String(width));
+        await page.getByRole('button', { name: 'Apply', exact: true }).evaluate((button) => button.click());
+        await status.getByText('Saving…', { exact: true }).waitFor();
+        await page.waitForFunction((count) => window.pendingSaves.length === count, width - 10);
+      }
+      await page.getByRole('button', { name: '中', exact: true }).click();
+      await page.getByRole('status', { name: '草稿保存状态' }).getByText('保存中…', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'EN', exact: true }).click();
+      await page.evaluate(() => window.pendingSaves[5](true));
+      await status.getByText('Saved', { exact: true }).waitFor();
+      await page.evaluate(() => window.pendingSaves[4](false));
+      await page.waitForTimeout(100);
+      assert.equal(await status.textContent(), 'Saved');
       await context.close();
     });
   } finally {
