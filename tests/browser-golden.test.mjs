@@ -51,6 +51,79 @@ async function downloadFrom(page, buttonName, directory) {
   return readFile(target);
 }
 
+test('pattern palette search finds codes and HEX without editing the project', { skip: !browserPath && !process.env.CI, timeout: 60_000 }, async () => {
+  assert.ok(browserPath, 'Chrome or Chromium is required in CI');
+  const port = 31_000 + (process.pid % 10_000);
+  const url = `http://127.0.0.1:${port}/`;
+  const server = spawn(process.execPath, ['scripts/dev-server.cjs', String(port)], { stdio: 'ignore' });
+  let browser;
+  try {
+    await waitForServer(url);
+    browser = await chromium.launch({ executablePath: browserPath, headless: true });
+    const page = await browser.newPage({ viewport: { width: 980, height: 768 } });
+    page.setDefaultTimeout(5_000);
+    const errors = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.addInitScript(() => localStorage.setItem('perler-beads-generator:language', 'en'));
+    await page.goto(url);
+    await page.getByText('Saved', { exact: true }).waitFor();
+    const before = await page.evaluate(async () => (await import('/src/project.js')).loadDraft());
+    const search = page.getByRole('searchbox', { name: 'Search palette' });
+    const swatches = page.locator('.palette-grid .swatch');
+    const results = page.locator('#palette-search-results');
+    assert.equal(await swatches.count(), 291);
+    await search.fill(' a1 ');
+    assert.deepEqual(await swatches.allTextContents(), ['A1', 'A10', 'A11', 'A12', 'A13', 'A14', 'A15', 'A16', 'A17', 'A18', 'A19']);
+    assert.equal(await results.textContent(), '11 colors found');
+    await swatches.filter({ hasText: /^A10$/ }).press('Enter');
+    assert.equal(await page.locator('.palette-selected-main strong').textContent(), 'A10');
+    await search.fill('#faf4c8');
+    assert.deepEqual(await swatches.allTextContents(), ['A1']);
+    assert.equal(await results.textContent(), '1 color found');
+    await search.fill('FAF4C8');
+    assert.deepEqual(await swatches.allTextContents(), ['A1']);
+    await swatches.getByText('A1', { exact: true }).click();
+    assert.equal(await page.locator('.palette-selected-main strong').textContent(), 'A1');
+    await page.locator('.palette-filter').getByRole('button', { name: 'B', exact: true }).click();
+    assert.equal(await swatches.count(), 0);
+    assert.equal(await results.textContent(), 'No matching colors. Clear the search or choose another group.');
+    assert.equal(await page.locator('.palette-selected-main strong').textContent(), 'A1');
+    await page.getByRole('button', { name: '中', exact: true }).click();
+    assert.equal(await page.getByRole('searchbox', { name: '搜索色号' }).inputValue(), 'FAF4C8');
+    assert.equal(await results.textContent(), '没有匹配的颜色，请清空搜索或切换分组。');
+    await page.getByRole('button', { name: '清空搜索', exact: true }).click();
+    assert.equal(await page.getByRole('searchbox', { name: '搜索色号' }).evaluate((input) => input === document.activeElement), true);
+    assert.equal(await swatches.count(), completePalette.filter((color) => color.group === 'B').length);
+    assert.match(await results.textContent(), /^找到 \d+ 种颜色$/);
+    await page.getByRole('button', { name: 'EN', exact: true }).click();
+    await page.locator('.palette-filter').getByRole('button', { name: 'All', exact: true }).click();
+    await search.fill('zg1');
+    assert.equal(await swatches.count(), 1);
+    await page.locator('.readonly-brand-field select').selectOption('basic');
+    assert.equal(await swatches.count(), 0);
+    await page.locator('.readonly-brand-field select').selectOption('complete');
+    assert.deepEqual(await swatches.allTextContents(), ['ZG1']);
+    await search.fill('no-such-color');
+    assert.equal(await swatches.count(), 0);
+    await page.getByRole('button', { name: 'Clear search', exact: true }).click();
+    assert.equal(await swatches.count(), 291);
+    await search.fill('   ');
+    assert.equal(await swatches.count(), 291);
+    assert.equal(await page.getByRole('button', { name: 'Undo', exact: true }).isDisabled(), true);
+    assert.deepEqual(await page.evaluate(async () => (await import('/src/project.js')).loadDraft()), before);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    // A retained pattern query must never filter the separate print palette.
+    await search.fill('no-such-color');
+    await page.getByRole('button', { name: '3D print', exact: true }).click();
+    assert.equal(await page.getByRole('searchbox', { name: 'Search palette' }).count(), 0);
+    assert.equal(await swatches.count(), before.amsColors.length);
+    assert.deepEqual(errors, []);
+  } finally {
+    await browser?.close();
+    server.kill();
+  }
+});
+
 test('3MF preflight preserves oversized projects and clamps print controls', { skip: !browserPath && !process.env.CI, timeout: 60_000 }, async () => {
   const port = 30_000 + (process.pid % 10_000);
   const url = `http://127.0.0.1:${port}/`;

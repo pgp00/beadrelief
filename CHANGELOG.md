@@ -4,6 +4,10 @@ Notable user-facing changes are recorded here. BeadRelief follows semantic versi
 
 ## Unreleased
 
+### Added
+
+- Bead-pattern palette search by MARD code or HEX, with group filtering, bilingual result counts and one-click clearing.
+
 ### Fixed
 
 - Image regeneration preserves the printer, nozzle, material profile and measured color calibration.

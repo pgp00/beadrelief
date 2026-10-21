@@ -86,6 +86,7 @@ export default function App() {
   const referenceInputRef = useRef<HTMLInputElement | null>(null);
   const jsonInputRef = useRef<HTMLInputElement | null>(null);
   const profileInputRef = useRef<HTMLInputElement | null>(null);
+  const paletteSearchRef = useRef<HTMLInputElement | null>(null);
   const printExportButtonRef = useRef<HTMLButtonElement | null>(null);
   const helpDialogRef = useRef<HTMLDialogElement | null>(null);
   const autoGenerateShouldCommitRef = useRef(false);
@@ -181,6 +182,7 @@ export default function App() {
   const [draggingLayerId, setDraggingLayerId] = useState<string | null>(null);
   const [dragTarget, setDragTarget] = useState<DragTarget | null>(null);
   const [paletteGroup, setPaletteGroup] = useState('all');
+  const [paletteQuery, setPaletteQuery] = useState('');
   const [adjustments, setAdjustments] = useState<AdjustmentSettings>(defaultAdjustments);
   const [colorCleanupStrength, setColorCleanupStrength] = useState(2);
   const [layerColorLimit, setLayerColorLimit] = useState(16);
@@ -236,8 +238,13 @@ export default function App() {
     [activePalette],
   );
   const visiblePalette = useMemo(
-    () => (paletteGroup === 'all' ? activePalette : activePalette.filter((color) => color.group === paletteGroup)),
-    [activePalette, paletteGroup],
+    () => {
+      const query = (outputMode === 'pattern' ? paletteQuery : '').trim().toLowerCase();
+      const hex = query.startsWith('#') ? query : `#${query}`;
+      return activePalette.filter((color) => (paletteGroup === 'all' || color.group === paletteGroup)
+        && (color.primaryCode.toLowerCase().includes(query) || color.hex.toLowerCase() === hex));
+    },
+    [activePalette, paletteGroup, paletteQuery, outputMode],
   );
 
   function displayCode(color: NonNullable<typeof selectedColor>): string {
@@ -2269,17 +2276,39 @@ export default function App() {
                 ))}
               </div>
             </div>
+            {outputMode === 'pattern' && <div className="palette-search">
+              <label htmlFor="palette-search">{text.paletteSearch}</label>
+              <div className="palette-search-controls">
+                <input
+                  ref={paletteSearchRef}
+                  id="palette-search"
+                  type="search"
+                  value={paletteQuery}
+                  placeholder={text.paletteSearchPlaceholder}
+                  aria-describedby="palette-search-results"
+                  onChange={(event) => setPaletteQuery(event.target.value)}
+                />
+                <button type="button" disabled={!paletteQuery} onClick={() => {
+                  setPaletteQuery('');
+                  paletteSearchRef.current?.focus();
+                }}>{text.clearPaletteSearch}</button>
+              </div>
+            </div>}
             <div className="palette-filter" aria-label={text.paletteGroups}>
               {paletteGroups.map((group) => (
                 <button
                   key={group.id}
                   className={paletteGroup === group.id ? 'active' : ''}
+                  aria-pressed={paletteGroup === group.id}
                   onClick={() => setPaletteGroup(group.id)}
                 >
                   {group.label}
                 </button>
               ))}
             </div>
+            {outputMode === 'pattern' && <p id="palette-search-results" className="palette-search-results" role="status" aria-atomic="true">
+              {visiblePalette.length ? text.paletteSearchCount(visiblePalette.length) : text.paletteSearchEmpty}
+            </p>}
             <div className="palette-grid">
               <PaletteGrid colors={visiblePalette} selectedColorId={selectedColorId} onSelect={selectColor} />
             </div>

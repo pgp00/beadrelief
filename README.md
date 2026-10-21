@@ -33,6 +33,8 @@ Turn any image into an editable bead pattern or a multicolor 3MF relief — enti
 
 The **Help** button in the app keeps this workflow, keyboard controls, FAQ, and browser support in one place.
 
+To find a specific bead color, use **Search palette** in bead-pattern mode: enter a MARD code such as `A1` or a HEX value such as `#FAF4C8`. Search works within the selected group and Basic/Complete palette; **Clear search** restores that group's colors without changing your pattern.
+
 ## Choose an output
 
 The live demo has two explicit workflows that share the same editable canvas:

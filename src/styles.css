@@ -2954,6 +2954,39 @@ button:focus-visible {
   white-space: nowrap;
 }
 
+.palette-search {
+  display: grid;
+  gap: 6px;
+  font-size: var(--font-size-small);
+}
+
+.palette-search-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.palette-search-controls input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  padding: 6px 8px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.palette-search-controls button {
+  flex-shrink: 0;
+  padding: 0 8px;
+  font-size: var(--font-size-small);
+}
+
+.palette-search-results {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+}
+
 .palette-filter {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(48px, 1fr));
