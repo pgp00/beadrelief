@@ -532,6 +532,8 @@ button:focus-visible {
 }
 
 .print-export-popover {
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
   position: absolute;
   top: calc(100% + 8px);
   right: 0;

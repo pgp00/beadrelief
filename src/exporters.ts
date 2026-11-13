@@ -1,3 +1,7 @@
+import { createImagePdf } from './pdfWriter.js';
+import type { PdfImagePage } from './pdfWriter.js';
+import { paginateGrid, patternBounds, pdfPaperSize } from './pdfLayout.js';
+import { renderPdfPage } from './pdfPages.js';
 import { getColor, mappedCode } from './palette.js';
 import { downloadBlob } from './download.js';
 import type { BeadLayer, BeadProject, UsageRow } from './types.js';
@@ -9,6 +13,8 @@ import { MAX_PROJECT_FILE_BYTES } from './project.js';
 
 export type PrintExportOptions = {
   format?: 'png' | 'pdf';
+  pdfLayout?: 'whole' | 'a4' | 'letter';
+  language?: 'zh' | 'en';
   exportBounds?: 'pattern' | 'canvas';
   showColorCodes: boolean;
   showGuideLines: boolean;
@@ -72,15 +78,42 @@ export async function downloadPrintPng(project: BeadProject, options: PrintExpor
   }
 }
 
-export async function downloadPrintPdf(project: BeadProject, options: PrintExportOptions = { showColorCodes: true, showGuideLines: true }): Promise<void> {
-  printLayerProjects(project, options).forEach((item) => {
-    const layerOptions = { ...options, layerName: item.layerName };
-    const canvas = renderPrintCanvas(item.project, layerOptions);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.98);
-    const jpegBytes = dataUrlToBytes(dataUrl);
-    const pdf = createSingleImagePdf(jpegBytes, canvas.width, canvas.height, PRINT_EXPORT_PPI);
-    downloadBlob(`${printFileName(layerOptions)}.pdf`, pdf, 'application/pdf');
-  });
+export type PdfExportProgress = { layerIndex: number; layerCount: number; pageIndex: number; pageCount: number };
+export async function downloadPrintPdf(project: BeadProject, options: PrintExportOptions = { showColorCodes: true, showGuideLines: true }, onProgress?: (p: PdfExportProgress) => void): Promise<void> {
+  const layers = printLayerProjects(project, options);
+  for (let index = 0; index < layers.length; index++) {
+    const item = layers[index];
+    const settings = { ...options, layerName: item.layerName ?? options.layerName };
+    const paged = options.pdfLayout === 'a4' || options.pdfLayout === 'letter';
+    const bounds = options.exportBounds === 'canvas'
+      ? { x: 0, y: 0, width: item.project.width, height: item.project.height }
+      : patternBounds(item.project.cells, item.project.width, item.project.height);
+    const tiles = bounds && item.project.cells.some(Boolean) ? paginateGrid(bounds) : [];
+    const usage = summarizeProjectUsage(item.project);
+    if (item.project.cells.some(id => id && !getColor(id))) throw new Error('Unknown PDF color');
+    const legendPages = Math.max(1, Math.ceil(usage.length / 60));
+    const count = paged ? 1 + legendPages + tiles.length : 1;
+    const images: PdfImagePage[] = [];
+    let encodedBytes = 0;
+    for (let page = 0; page < count; page++) {
+      let canvas: HTMLCanvasElement | undefined;
+      try {
+        const size = paged ? pdfPaperSize(options.pdfLayout as 'a4' | 'letter') : null;
+        canvas = paged ? renderPdfPage(item.project, settings, size!, page, count, legendPages, tiles, usage) : renderPrintCanvas(item.project, settings);
+        const jpeg = await new Promise<Blob>((resolve, reject) => {
+          canvas!.toBlob(blob => blob ? resolve(blob) : reject(new Error('PDF image encoding failed')), 'image/jpeg', 0.98);
+        });
+        const bytes = new Uint8Array(await jpeg.arrayBuffer());
+        encodedBytes += bytes.length;
+        if (encodedBytes > 64 * 1024 * 1024) throw new RangeError('PDF exceeds 64 MiB. Export a smaller area or PNG.');
+        const widthPt = size?.widthPt ?? Math.max(480, canvas.width / PRINT_EXPORT_PPI * 72);
+        images.push({ jpeg: bytes, pixelWidth: canvas.width, pixelHeight: canvas.height, widthPt, heightPt: size?.heightPt ?? widthPt * canvas.height / canvas.width });
+      } finally { if (canvas) canvas.width = canvas.height = 0; }
+      onProgress?.({ layerIndex: index + 1, layerCount: layers.length, pageIndex: page + 1, pageCount: count });
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    downloadBlob(`${printFileName(settings)}.pdf`, createImagePdf(images), 'application/pdf');
+  }
 }
 
 function renderPrintCanvas(project: BeadProject, options: PrintExportOptions): HTMLCanvasElement {
@@ -105,6 +138,7 @@ function renderPrintCanvas(project: BeadProject, options: PrintExportOptions): H
   const canvas = document.createElement('canvas');
   canvas.width = Math.ceil(width * scale);
   canvas.height = Math.ceil(height * scale);
+  try {
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Canvas is not available.');
   context.scale(scale, scale);
@@ -159,6 +193,7 @@ function renderPrintCanvas(project: BeadProject, options: PrintExportOptions): H
   drawUsageLegend(context, usage, margin + labelBand, gridTop + gridHeight + labelBand + 24, contentWidth, chipWidth, chipHeight, chipGap);
 
   return canvas;
+  } catch (error) { canvas.width = canvas.height = 0; throw error; }
 }
 
 function resolvePrintScale(width: number, height: number): number {
@@ -581,60 +616,6 @@ function defaultPrintName(): string {
   return `\u62fc\u8c46\u56fe\u7eb8_${stamp}`;
 }
 
-function dataUrlToBytes(dataUrl: string): Uint8Array {
-  const base64 = dataUrl.split(',')[1] ?? '';
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return bytes;
-}
-
-function createSingleImagePdf(jpegBytes: Uint8Array, imageWidth: number, imageHeight: number, ppi: number): Blob {
-  const encoder = new TextEncoder();
-  const parts: BlobPart[] = [];
-  const offsets: number[] = [];
-  let length = 0;
-  const pushText = (text: string) => {
-    const bytes = encoder.encode(text);
-    parts.push(toArrayBuffer(bytes));
-    length += bytes.length;
-  };
-  const pushBytes = (bytes: Uint8Array) => {
-    parts.push(toArrayBuffer(bytes));
-    length += bytes.length;
-  };
-  const object = (id: number, chunks: Array<string | Uint8Array>) => {
-    offsets[id] = length;
-    pushText(`${id} 0 obj\n`);
-    chunks.forEach((chunk) => (typeof chunk === 'string' ? pushText(chunk) : pushBytes(chunk)));
-    pushText('\nendobj\n');
-  };
-
-  const pageWidth = Math.max(480, (imageWidth / ppi) * 72);
-  const pageHeight = pageWidth * (imageHeight / imageWidth);
-  const content = `q\n${pageWidth.toFixed(2)} 0 0 ${pageHeight.toFixed(2)} 0 0 cm\n/Im0 Do\nQ`;
-
-  pushText('%PDF-1.4\n');
-  object(1, ['<< /Type /Catalog /Pages 2 0 R >>']);
-  object(2, ['<< /Type /Pages /Kids [3 0 R] /Count 1 >>']);
-  object(3, [`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth.toFixed(2)} ${pageHeight.toFixed(2)}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`]);
-  object(4, [
-    `<< /Type /XObject /Subtype /Image /Width ${imageWidth} /Height ${imageHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`,
-    jpegBytes,
-    '\nendstream',
-  ]);
-  object(5, [`<< /Length ${encoder.encode(content).length} >>\nstream\n${content}\nendstream`]);
-
-  const xrefStart = length;
-  pushText('xref\n0 6\n0000000000 65535 f \n');
-  for (let id = 1; id <= 5; id += 1) {
-    pushText(`${String(offsets[id]).padStart(10, '0')} 00000 n \n`);
-  }
-  pushText(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`);
-  return new Blob(parts, { type: 'application/pdf' });
-}
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;

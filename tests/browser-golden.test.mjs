@@ -780,6 +780,8 @@ test('large IndexedDB drafts survive reload intact', { skip: !browserPath && !pr
     const page = await browser.newPage();
     await page.goto(url);
     await waitForAsync(page, async () => (await (await import('/src/project.js')).loadDraft())?.width === 32);
+    await page.route(url, route => route.fulfill({contentType:'text/html', body:'<html></html>'}));
+    await page.goto(url);
     const result = await page.evaluate(async () => {
       const { createProject, saveDraft } = await import('/src/project.js');
       const project = createProject(180, 180, 'Large draft');
@@ -793,6 +795,7 @@ test('large IndexedDB drafts survive reload intact', { skip: !browserPath && !pr
     });
     assert.ok(result.bytes > 5 * 1024 * 1024, `${result.bytes} bytes`);
     assert.equal(result.saved, true);
+    await page.unroute(url);
     await page.reload();
     await page.waitForFunction(() => document.querySelector('[aria-label="Canvas width"]')?.value === '180');
     assert.equal(await page.getByLabel('Canvas height').inputValue(), '180');
@@ -886,7 +889,10 @@ test('draft storage handles migration, failures and ordered transactions', { ski
             };
           }
           if (scenario === 'ordered') {
-            const saved = await Promise.all(Array.from({ length: 12 }, (_, index) => saveDraft({ ...project, name: `Write ${index}` })));
+            const lease = await (await import('/src/draftSession.js')).acquireDraftWriter();
+            if (lease.status !== 'owned') throw new Error('Expected writer');
+            const saved = await Promise.all(Array.from({ length: 12 }, (_, index) => saveDraft({ ...project, name: `Write ${index}` }, lease.writer)));
+            await lease.writer.release();
             return { saved, name: (await loadDraft()).name };
           }
           if (scenario === 'versionchange') {
@@ -978,7 +984,7 @@ test('restoration gates autosave and protects early edits during StrictMode repl
       });
       await page.goto(url);
       await page.locator('.workspace canvas').waitFor();
-      await page.waitForFunction(() => window.loadCalls === 2);
+      await page.waitForFunction(() => window.loadCalls >= 1);
       if (earlyEdit) {
         await page.getByLabel('Canvas width').fill('12');
         await page.getByRole('button', { name: 'Apply', exact: true }).evaluate((button) => button.click());
@@ -1029,7 +1035,7 @@ test('restoration gates autosave and protects early edits during StrictMode repl
       await page.route('**/src/project.js', async (route) => {
         const response = await route.fetch();
         const source = (await response.text()).replace('export async function saveDraft(', 'async function originalSaveDraft(');
-        await route.fulfill({ response, body: `${source}\nexport async function saveDraft(project) { await originalSaveDraft(project); return new Promise(resolve => window.pendingSaves.push(resolve)); }` });
+        await route.fulfill({ response, body: `${source}\nexport async function saveDraft(project, writer) { await originalSaveDraft(project, writer); return new Promise(resolve => window.pendingSaves.push(resolve)); }` });
       });
       await page.goto(url);
       await page.waitForFunction(() => window.pendingSaves.length === 1);

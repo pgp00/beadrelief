@@ -1,3 +1,5 @@
+import { acquireDraftWriter } from './draftSession.js';
+import type { DraftWriter } from './draftSession.js';
 ﻿import WorkspaceCanvas from './WorkspaceCanvas.js';
 import ThreePreview from './ThreePreview.js';
 import PrintSettingsPanel from './PrintSettingsPanel.js';
@@ -115,8 +117,12 @@ export default function App() {
   const [project, setProject] = useState<BeadProject>(() => createProject());
   const initialProjectRef = useRef(project);
   const [draftLoaded, setDraftLoaded] = useState(false);
+  const writerRef = useRef<DraftWriter | null>(null);
+  const lifecycleRef = useRef<Promise<void>>(Promise.resolve());
+  const durableRef = useRef(project);
+  const [writerStatus, setWriterStatus] = useState<'loading' | 'owned' | 'busy' | 'unavailable'>('loading');
   const [draftSaveResult, setDraftSaveResult] = useState<{ project: BeadProject; saved: boolean } | null>(null);
-  const draftSaveStatus = !draftLoaded ? '' : draftSaveResult?.saved === false ? text.storageUnavailable
+  const draftSaveStatus = writerStatus === 'busy' ? text.draftBusy : writerStatus === 'unavailable' ? text.draftUnavailable : !draftLoaded ? '' : draftSaveResult?.saved === false ? text.storageUnavailable
     : draftSaveResult?.project === project ? text.draftSaved : text.draftSaving;
   const [previewProject, setPreviewProject] = useState(project);
   const projectRef = useRef(project);
@@ -324,26 +330,52 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    void loadDraft().then((draft) => {
+    let writer: DraftWriter | null = null;
+    const ready = lifecycleRef.current.then(async () => {
       if (cancelled) return;
-      if (draft) setProject((current) => current === initialProjectRef.current ? draft : current);
-      setDraftLoaded(true);
+      const result = await acquireDraftWriter();
+      if (result.status === 'owned') writer = result.writer;
+      if (cancelled) { await writer?.release(); return; }
+      writerRef.current = writer;
+      setWriterStatus(result.status);
+      void loadDraft(writer ?? undefined).then(draft => {
+        if (cancelled) return;
+        if (draft && projectRef.current === initialProjectRef.current) {
+          durableRef.current = draft;
+          setProject(draft);
+        }
+        setDraftLoaded(true);
+      });
     });
-    return () => { cancelled = true; };
+    lifecycleRef.current = ready;
+    return () => {
+      cancelled = true;
+      writerRef.current = null;
+      lifecycleRef.current = ready.then(async () => { await writer?.release(); });
+    };
   }, []);
 
   useEffect(() => {
-    if (!draftLoaded) return;
+    if (!draftLoaded || writerStatus !== 'owned') return;
     let cancelled = false;
     const timer = window.setTimeout(async () => {
-      const saved = await saveDraft(project);
-      if (!cancelled && projectRef.current === project) setDraftSaveResult({ project, saved });
+      const writer = writerRef.current;
+      if (!writer) return;
+      const saved = await saveDraft(project, writer);
+      if (!cancelled && projectRef.current === project) {
+        if (saved) durableRef.current = project;
+        setDraftSaveResult({ project, saved });
+      }
     }, 400);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [project, draftLoaded]);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [project, draftLoaded, writerStatus]);
+
+  useEffect(() => {
+    if (project === durableRef.current) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [project, draftSaveResult]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setPreviewProject(project), 250);
@@ -1136,20 +1168,20 @@ export default function App() {
   async function exportPrintPattern() {
     if (blockExportWhileGenerating()) return;
     if (isExporting) return;
-    const exportOptions = printOptionsForProject(project, printExportOptions, text.layer);
+    const exportOptions = { ...printOptionsForProject(project, printExportOptions, text.layer), language };
     const format = (printExportOptions.format ?? 'png').toUpperCase();
     setIsExporting(true);
     setNotice(text.patternExporting(format));
     try {
       if (printExportOptions.format === 'pdf') {
-        await downloadPrintPdf(project, exportOptions);
+        await downloadPrintPdf(project, exportOptions, p => setNotice(text.pdfProgress(p.layerIndex, p.layerCount, p.pageIndex, p.pageCount)));
       } else {
         await downloadPrintPng(project, exportOptions);
       }
       closePrintExportPanel();
       setNotice(text.patternExported(format));
-    } catch {
-      setNotice(codedUiError('PATTERN_EXPORT_FAILED', text.patternExportFailed));
+    } catch (error) {
+      setNotice(codedUiError('PATTERN_EXPORT_FAILED', error instanceof RangeError ? text.pdfTooLarge : text.pdfPartial));
     } finally {
       setIsExporting(false);
     }
@@ -1313,6 +1345,7 @@ export default function App() {
                       <select
                         autoFocus
                         className="export-format-select"
+                        aria-label={text.exportFormat}
                         value={printExportOptions.format ?? 'png'}
                         onChange={(event) => setPrintExportOptions((current) => ({ ...current, format: event.target.value as 'png' | 'pdf' }))}
                       >
@@ -1320,6 +1353,13 @@ export default function App() {
                         <option value="pdf">PDF</option>
                       </select>
                     </label>
+                    {printExportOptions.format === 'pdf' && <>
+                      <label className="export-text-field"><span>{text.pdfLayout}</span>
+                        <select aria-label={text.pdfLayout} value={printExportOptions.pdfLayout ?? 'whole'} onChange={e => setPrintExportOptions(current => ({...current, pdfLayout: e.target.value as 'whole' | 'a4' | 'letter'}))}>
+                          <option value="whole">{text.pdfWhole}</option><option value="a4">A4</option><option value="letter">Letter</option>
+                        </select>
+                      </label><p>{text.pdfReading}</p>
+                    </>}
                     <label className="export-text-field">
                       <span>{text.exportBounds}</span>
                       <select
@@ -2192,6 +2232,10 @@ export default function App() {
           <div>
             <strong role="status" aria-label={text.workspaceStatus} aria-live="polite" aria-atomic="true">{notice}</strong>
             <span role="status" aria-label={text.draftSaveStatus} aria-live="polite" aria-atomic="true">{draftSaveStatus}</span>
+            {(writerStatus === 'busy' || writerStatus === 'unavailable' || draftSaveResult?.saved === false) && <div>
+              <button type="button" onClick={exportEditRecord}>{text.draftBackup}</button>
+              <button type="button" onClick={() => { if (window.confirm(text.draftReloadConfirm)) window.location.reload(); }}>{text.draftReload}</button>
+            </div>}
             <span>
               {text.panelStatus(project.width, project.height, usage.length, totalBeads, boardCount)}
             </span>

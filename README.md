@@ -152,3 +152,9 @@ Image processing and generated files stay in the browser; the app does not uploa
 BeadRelief is based on the MIT-licensed [Jett-Wu/Perler_Beads_Generator](https://github.com/Jett-Wu/Perler_Beads_Generator). See [UPSTREAM.md](UPSTREAM.md) for the imported commit and project-specific changes. This repository is released under the [MIT License](LICENSE).
 
 If BeadRelief helped you make something, a GitHub star helps other makers find it. Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Draft protection and paged PDF
+
+Only one tab can autosave the shared browser draft. Other tabs can edit and export project JSON, but their changes are not saved automatically. Use **Export project backup** before reloading the latest saved draft. Close or refresh older app tabs after updating: older versions do not participate in the new lock protocol. Autosave requires Web Locks; when unavailable, use JSON backups. Unsaved changes trigger a browser leave warning when supported; it cannot protect against every crash or forced shutdown.
+
+Choose PDF and then **Whole image**, **A4**, or **Letter**. Paged charts contain an overview, color counts and up to 29 × 29 cells per detail page, using original canvas coordinates and neighboring PDF page numbers. They are reading charts, not 1:1 pegboard templates. Long custom color codes use bracketed legend indexes. Existing layer export rules apply: multiple nonempty layers export separately, including hidden layers; a single nonempty layer uses the composed canvas. Each layer produces a separate file. Allow multiple downloads if prompted. Large colorful patterns can produce large files; each document is limited to 64 MiB of encoded page images. Partial downloads may remain after a later failure.

@@ -4,6 +4,13 @@ Notable user-facing changes are recorded here. BeadRelief follows semantic versi
 
 ## Unreleased
 
+### Draft safety and PDF charts
+
+- Single-writer browser draft ownership, persistent backup/reload actions and unsaved-change leave warnings.
+- A4 and Letter PDF charts with overview, paginated color counts, original coordinates and neighboring page references.
+- Sequential PDF page encoding with deterministic Canvas cleanup and a 64 MiB encoded-image budget.
+
+
 ### Added
 
 - Bead-pattern palette search by MARD code or HEX, with group filtering, bilingual result counts and one-click clearing.

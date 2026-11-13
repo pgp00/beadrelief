@@ -29,3 +29,11 @@ test('downloads are attached, removed, and revoked after the click', async (t) =
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(events, ['append', 'click', 'remove', 'revoke']);
 });
+
+test('failed download clicks still remove the link and revoke the URL',async t=>{
+ const doc=globalThis.document,create=URL.createObjectURL,revoke=URL.revokeObjectURL;const events=[];
+ globalThis.document={body:{appendChild(){}},createElement:()=>({click(){throw new Error('blocked');},remove(){events.push('remove');}})};
+ URL.createObjectURL=()=> 'blob:failed';URL.revokeObjectURL=()=>events.push('revoke');
+ t.after(()=>{if(doc===undefined)delete globalThis.document;else globalThis.document=doc;URL.createObjectURL=create;URL.revokeObjectURL=revoke;});
+ assert.throws(()=>downloadBlob('test.pdf',new Blob(),'application/pdf'),/blocked/);await new Promise(r=>setTimeout(r,0));assert.deepEqual(events,['remove','revoke']);
+});

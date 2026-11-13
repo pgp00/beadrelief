@@ -1,3 +1,5 @@
+import { acquireDraftWriter } from './draftSession.js';
+import type { DraftWriter } from './draftSession.js';
 import { getColor, paletteVersion } from './palette.js';
 import { DEFAULT_ACTIVE_AMS_COLORS, DEFAULT_AMS_COLORS, amsColorToPaletteColor, makeAmsColorId, nearestPaletteColorOklab, normalizeHex } from './print/colors.js';
 import { DEFAULT_PRINT_SETTINGS, PRINT_SETTING_LIMITS, normalizeLayeredBaseThickness, normalizePrintSetting, type NumericPrintSetting } from './print/settings.js';
@@ -571,7 +573,17 @@ function openDraftDatabase(): Promise<IDBDatabase> {
   return draftConnection;
 }
 
-export async function saveDraft(project: BeadProject): Promise<boolean> {
+export async function saveDraft(project: BeadProject, writer?: DraftWriter): Promise<boolean> {
+  if (!writer) {
+    const result = await acquireDraftWriter();
+    if (result.status !== 'owned') return false;
+    try { return await saveDraft(project, result.writer); }
+    finally { await result.writer.release(); }
+  }
+  try { return await writer.run(() => writeDraft(project)); } catch { return false; }
+}
+
+async function writeDraft(project: BeadProject): Promise<boolean> {
   try {
     const database = await openDraftDatabase();
     return await new Promise<boolean>((resolve) => {
@@ -585,7 +597,7 @@ export async function saveDraft(project: BeadProject): Promise<boolean> {
   }
 }
 
-export async function loadDraft(): Promise<BeadProject | null> {
+export async function loadDraft(writer?: DraftWriter): Promise<BeadProject | null> {
   try {
     const database = await openDraftDatabase();
     const record = await new Promise<unknown>((resolve, reject) => {
@@ -605,7 +617,7 @@ export async function loadDraft(): Promise<BeadProject | null> {
     const parsed: unknown = JSON.parse(raw);
     if (!isSafeProjectImport(parsed, new Blob([raw]).size)) return null;
     const project = normalizeProject(parsed);
-    if (await saveDraft(project)) {
+    if (await saveDraft(project, writer)) {
       try { localStorage.removeItem(autosaveKey); } catch { /* The database copy is durable. */ }
     }
     return project;
